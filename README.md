@@ -1,5 +1,8 @@
+
+
 <p align="center">
-  <img src="docs/logo.png" alt="OpenReq Logo" width="120" />
+<img width="200" height="200" alt="logo" src="https://github.com/user-attachments/assets/a9f36cb1-898d-4b4c-97cf-a6e41cecbb30" />
+
 </p>
 
 <h1 align="center">OpenReq</h1>
@@ -20,7 +23,7 @@
 
 ---
 
-![Animation.gif](../../Desktop/Animation.gif)
+![Animation](https://github.com/user-attachments/assets/d0875d5d-12f1-4286-aaac-a61de5f72bc3)
 
 ## Features
 
@@ -46,17 +49,12 @@
 
 ## Screenshots
 
-<!-- TODO: Add screenshot - Main request builder interface -->
-![Request Builder](docs/screenshots/request-builder.png)
 
-<!-- TODO: Add screenshot - Response viewer with Pretty/Tree/Preview modes -->
-![Response Viewer](docs/screenshots/response-viewer.png)
+<img width="2559" height="1387" alt="Screenshot 2026-02-14 235023" src="https://github.com/user-attachments/assets/fcc133ef-a131-4c17-abb0-d816ee962ffe" />
 
-<!-- TODO: Add screenshot - Collection runner with streaming results -->
-![Collection Runner](docs/screenshots/collection-runner.png)
 
-<!-- TODO: Add screenshot - Dashboard overview -->
-![Dashboard](docs/screenshots/dashboard.png)
+<img width="895" height="582" alt="Screenshot 2026-02-14 235146" src="https://github.com/user-attachments/assets/7a216f19-9b21-4d4f-948a-ec719ae81983" />
+
 
 ## Getting Started
 
