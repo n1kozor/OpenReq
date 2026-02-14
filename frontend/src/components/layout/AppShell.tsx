@@ -853,7 +853,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     const nextSort = maxSort + 1;
 
     try {
-      await collectionsApi.updateItem(itemId, { parent_id: parentId ?? null, sort_order: nextSort });
+      await collectionsApi.updateItem(itemId, { parent_id: parentId ?? undefined, sort_order: nextSort });
       await loadCollectionTree(collectionId);
     } catch {
       setSnack({ msg: t("common.error"), severity: "error" });
