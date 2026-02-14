@@ -1,0 +1,22 @@
+{
+  "name": "OpenReq - API Orchestration Platform",
+  "short_name": "OpenReq",
+  "description": "Open-source API testing and orchestration platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0e14",
+  "theme_color": "#818cf8",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

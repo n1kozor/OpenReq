@@ -1,0 +1,65 @@
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: #0b0e14;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ── Top Drag Bar ── */
+#titlebar {
+  height: 28px;
+  background: #0b0e14;
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 14px;
+  position: relative;
+  z-index: 10;
+}
+
+/* ── Window Control Dots (mac-style, right side) ── */
+#window-controls {
+  display: flex;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+
+.dot-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  opacity: 0.85;
+  padding: 0;
+  outline: none;
+}
+
+.dot-btn:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+.dot-close    { background-color: #ff5f57; }
+.dot-minimize { background-color: #febc2e; }
+.dot-maximize { background-color: #28c840; }
+
+.dot-close:hover    { box-shadow: 0 0 8px rgba(255, 95, 87, 0.6); }
+.dot-minimize:hover { box-shadow: 0 0 8px rgba(254, 188, 46, 0.6); }
+.dot-maximize:hover { box-shadow: 0 0 8px rgba(40, 200, 64, 0.6); }
+
+/* ── Webview fills remaining space ── */
+#app-view {
+  width: 100%;
+  height: calc(100% - 28px);
+  border: none;
+  display: flex;
+}

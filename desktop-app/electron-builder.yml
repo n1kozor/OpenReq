@@ -1,0 +1,34 @@
+appId: com.openreq.desktop
+productName: OpenReq
+copyright: Copyright 2026 OpenReq
+
+afterPack: scripts/afterPack.js
+
+directories:
+  output: dist
+  buildResources: assets
+
+files:
+  - src/**/*
+  - assets/**/*
+  - node_modules/**/*
+
+win:
+  target: nsis
+  icon: assets/icon.ico
+  sign: false
+  signAndEditExecutable: false
+
+mac:
+  target: dmg
+  icon: assets/icon.png
+  category: public.app-category.developer-tools
+
+linux:
+  target: AppImage
+  icon: assets/icon.png
+  category: Development
+
+nsis:
+  oneClick: true
+  allowToChangeInstallationDirectory: false

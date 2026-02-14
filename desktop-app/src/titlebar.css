@@ -1,0 +1,73 @@
+/* ── Injected Electron Titlebar (overlays the web app) ── */
+
+#openreq-titlebar {
+  position: fixed;
+  top: 2px;
+  right: 14px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  z-index: 99999;
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
+
+#openreq-titlebar .otb-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  opacity: 0.85;
+  padding: 0;
+  outline: none;
+}
+
+#openreq-titlebar .otb-dot:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+#openreq-titlebar .otb-close    { background-color: #ff5f57; }
+#openreq-titlebar .otb-minimize { background-color: #febc2e; }
+#openreq-titlebar .otb-maximize { background-color: #28c840; }
+
+#openreq-titlebar .otb-close:hover    { box-shadow: 0 0 8px rgba(255, 95, 87, 0.6); }
+#openreq-titlebar .otb-minimize:hover { box-shadow: 0 0 8px rgba(254, 188, 46, 0.6); }
+#openreq-titlebar .otb-maximize:hover { box-shadow: 0 0 8px rgba(40, 200, 64, 0.6); }
+
+/* Thin drag strip at the very top edge — only 6px so it doesn't block navbar items */
+#openreq-titlebar-drag-strip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 60px;
+  height: 6px;
+  -webkit-app-region: drag;
+  z-index: 99998;
+}
+
+/* Ensure MUI AppBar content remains clickable (no-drag) */
+.MuiAppBar-root,
+.MuiAppBar-root * {
+  -webkit-app-region: no-drag;
+}
+
+/* Add right padding to toolbar so items don't overlap dot buttons */
+.MuiAppBar-root .MuiToolbar-root {
+  padding-right: 72px !important;
+}
+
+/* Inject rounded corners on the page root for transparent window */
+html {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+body {
+  border-radius: 12px !important;
+  overflow: hidden;
+}

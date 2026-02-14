@@ -1,0 +1,73 @@
+/* ── react-grid-layout base styles ── */
+@import "react-grid-layout/css/styles.css";
+@import "react-resizable/css/styles.css";
+
+/* ── OpenReq Grid Layout Overrides ── */
+
+.openreq-grid-layout {
+  min-height: 100%;
+}
+
+/* Smooth transitions for layout changes (except during drag) */
+.openreq-grid-layout .react-grid-item {
+  transition: transform 200ms ease, width 200ms ease, height 200ms ease;
+}
+
+.openreq-grid-layout .react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 100;
+}
+
+.openreq-grid-layout .react-grid-item.resizing {
+  transition: none;
+}
+
+/* ── Resize handle: bottom-right corner ── */
+.openreq-grid-layout .react-resizable-handle {
+  width: 16px;
+  height: 16px;
+  bottom: 2px;
+  right: 2px;
+  cursor: nwse-resize;
+  background: none;
+  z-index: 10;
+}
+
+.openreq-grid-layout .react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(139, 148, 158, 0.3);
+  border-bottom: 2px solid rgba(139, 148, 158, 0.3);
+  border-radius: 0 0 2px 0;
+  transition: border-color 0.15s ease;
+}
+
+.openreq-grid-layout .react-resizable-handle:hover::after {
+  border-color: rgba(129, 140, 248, 0.6);
+}
+
+/* ── Placeholder (drop target indicator) ── */
+.openreq-grid-layout .react-grid-placeholder {
+  border-radius: 10px;
+  border: 2px dashed rgba(129, 140, 248, 0.4) !important;
+  background: rgba(129, 140, 248, 0.08) !important;
+  opacity: 1 !important;
+}
+
+/* ── Light mode overrides ── */
+[data-theme="light"] .openreq-grid-layout .react-resizable-handle::after {
+  border-color: rgba(100, 116, 139, 0.25);
+}
+
+[data-theme="light"] .openreq-grid-layout .react-resizable-handle:hover::after {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+[data-theme="light"] .openreq-grid-layout .react-grid-placeholder {
+  border-color: rgba(99, 102, 241, 0.3) !important;
+  background: rgba(99, 102, 241, 0.06) !important;
+}
