@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_current_user
 from app.config import settings
 from app.core.security import hash_password, verify_password, create_access_token
 from app.database import get_db
@@ -40,4 +41,11 @@ def login(payload: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=403, detail="Account disabled")
 
     token = create_access_token(subject=user.id)
+    return Token(access_token=token)
+
+
+@router.post("/refresh", response_model=Token)
+def refresh_token(current_user: User = Depends(get_current_user)):
+    """Issue a fresh token for an authenticated user."""
+    token = create_access_token(subject=current_user.id)
     return Token(access_token=token)

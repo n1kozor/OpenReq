@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "super-secret-change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
     # Set to 0 or a negative value to disable expiration (tokens never expire)
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
 
     CORS_ORIGINS: str = "http://localhost:5173"
 
