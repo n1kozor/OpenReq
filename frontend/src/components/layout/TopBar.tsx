@@ -107,6 +107,20 @@ export default function TopBar({
           >
             OpenReq
           </Typography>
+          <Chip
+            label={`v${__APP_VERSION__}`}
+            size="small"
+            sx={{
+              height: 18,
+              fontSize: "0.6rem",
+              fontWeight: 600,
+              borderRadius: 1,
+              backgroundColor: alpha(theme.palette.primary.main, isDark ? 0.15 : 0.1),
+              color: theme.palette.primary.main,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+              "& .MuiChip-label": { px: 0.75 },
+            }}
+          />
 
           {workspaceName && (
             <>
