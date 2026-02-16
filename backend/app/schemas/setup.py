@@ -18,6 +18,9 @@ class SetupInitializeRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     full_name: str | None = None
     openai_api_key: str | None = None
+    ai_provider: str | None = None  # "openai" | "ollama"
+    ollama_base_url: str | None = None
+    ollama_model: str | None = None
     workspace_name: str = Field(min_length=1, max_length=200)
     environments: list[SetupEnvironment] = Field(min_length=1)
 

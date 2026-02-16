@@ -1,9 +1,37 @@
 import json
 import logging
+from dataclasses import dataclass
 
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AIProviderConfig:
+    provider: str  # "openai" | "ollama"
+    api_key: str | None = None
+    base_url: str | None = None  # Ollama base URL (e.g. http://localhost:11434)
+    model: str | None = None  # Ollama model name
+
+
+def _create_client(config: AIProviderConfig) -> OpenAI:
+    """Create an OpenAI-compatible client for either OpenAI or Ollama."""
+    if config.provider == "ollama":
+        return OpenAI(
+            api_key="ollama",
+            base_url=f"{(config.base_url or 'http://localhost:11434').rstrip('/')}/v1",
+            timeout=300.0,
+        )
+    return OpenAI(api_key=config.api_key, timeout=300.0)
+
+
+def _get_model(config: AIProviderConfig) -> str:
+    """Return the model name based on provider config."""
+    if config.provider == "ollama":
+        return config.model or "llama3.1"
+    return "gpt-5-mini"
+
 
 SYSTEM_PROMPT = """You are an API documentation parser. Given API documentation text, extract all API endpoints and return them as structured JSON.
 
@@ -134,7 +162,10 @@ Format as structured text:
 
 
 def fetch_api_docs_from_url(api_key: str, url: str) -> str:
-    """Use gpt-5-chat-latest with web search to research a URL and extract all API endpoint documentation."""
+    """Use gpt-5-mini with web search to research a URL and extract all API endpoint documentation.
+
+    This function is OpenAI-only — Ollama does not support web_search.
+    """
     client = OpenAI(api_key=api_key, timeout=300.0)
 
     response = client.responses.create(
@@ -152,13 +183,17 @@ def fetch_api_docs_from_url(api_key: str, url: str) -> str:
 
 
 def generate_collection_from_docs(
-    api_key: str,
+    config: AIProviderConfig,
     documentation: str,
     custom_instructions: str | None = None,
     collection_names: list[str] | None = None,
 ) -> list[dict]:
-    """Call OpenAI to parse API docs and return structured endpoints."""
-    client = OpenAI(api_key=api_key)
+    """Call AI provider to parse API docs and return structured endpoints.
+
+    Supports both OpenAI and Ollama via the OpenAI-compatible API.
+    """
+    client = _create_client(config)
+    model = _get_model(config)
 
     extra_parts = []
     if custom_instructions and custom_instructions.strip():
@@ -178,7 +213,7 @@ def generate_collection_from_docs(
     extra_text = "\n\n" + "\n\n".join(extra_parts) if extra_parts else ""
 
     response = client.chat.completions.create(
-        model="gpt-5-mini",
+        model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {
@@ -192,7 +227,7 @@ def generate_collection_from_docs(
         ],
         tools=TOOLS,
         tool_choice={"type": "function", "function": {"name": "create_api_collection"}},
-        temperature=1,
+        temperature=0.7 if config.provider == "ollama" else 1,
     )
 
     message = response.choices[0].message
@@ -208,7 +243,7 @@ def generate_collection_from_docs(
             if url and not url.startswith(("http://", "https://")):
                 ep["url"] = f"https://api.example.com{url if url.startswith('/') else '/' + url}"
 
-        logger.info("AI generated %d endpoints from documentation", len(endpoints))
+        logger.info("AI (%s/%s) generated %d endpoints from documentation", config.provider, model, len(endpoints))
         return endpoints
 
-    raise ValueError("OpenAI did not return a function call response")
+    raise ValueError(f"AI provider ({config.provider}/{model}) did not return a function call response")

@@ -15,8 +15,11 @@ import type {
   PostmanImportPreview,
   PostmanImportResult,
   AppSettings,
+  OllamaModel,
   CollectionRunSummary,
   CollectionRunDetail,
+  AIConversation,
+  AIChatMessage,
 } from "@/types";
 
 // ── Auth ──
@@ -36,6 +39,9 @@ export const setupApi = {
     password: string;
     full_name?: string;
     openai_api_key?: string;
+    ai_provider?: string;
+    ollama_base_url?: string;
+    ollama_model?: string;
     workspace_name: string;
     environments: { name: string; env_type: string }[];
   }) =>
@@ -61,8 +67,16 @@ export const usersApi = {
 // ── App Settings (global) ──
 export const appSettingsApi = {
   get: () => client.get<AppSettings>("/settings/"),
-  update: (data: { openai_api_key?: string }) =>
-    client.patch<AppSettings>("/settings/", data),
+  update: (data: {
+    openai_api_key?: string;
+    ai_provider?: string;
+    ollama_base_url?: string;
+    ollama_model?: string;
+  }) => client.patch<AppSettings>("/settings/", data),
+  getOllamaModels: (baseUrl?: string) =>
+    client.get<OllamaModel[]>("/settings/ollama-models", {
+      params: baseUrl ? { base_url: baseUrl } : undefined,
+    }),
 };
 
 // ── Workspaces ──
@@ -538,4 +552,108 @@ export const oauthApi = {
     refresh_token?: string;
   }) => client.post("/oauth/token", data),
   generatePkce: () => client.post("/oauth/pkce"),
+};
+
+// ── AI Agent Chat ──
+export const aiChatApi = {
+  listConversations: (workspaceId?: string | null) =>
+    client.get<AIConversation[]>("/ai/chat/conversations", {
+      params: workspaceId ? { workspace_id: workspaceId } : undefined,
+    }),
+
+  createConversation: (data: { title: string; provider?: string; model?: string; workspace_id?: string | null }) =>
+    client.post<AIConversation>("/ai/chat/conversations", data),
+
+  updateConversation: (id: string, data: { title?: string; is_shared?: boolean }) =>
+    client.patch<AIConversation>(`/ai/chat/conversations/${id}`, data),
+
+  deleteConversation: (id: string) =>
+    client.delete(`/ai/chat/conversations/${id}`),
+
+  listMessages: (conversationId: string) =>
+    client.get<AIChatMessage[]>(`/ai/chat/conversations/${conversationId}/messages`),
+
+  sendMessage: (
+    conversationId: string,
+    data: {
+      content: string;
+      context_type?: string | null;
+      context_id?: string | null;
+      context_name?: string | null;
+      provider?: string;
+      model?: string;
+    },
+    callbacks: {
+      onDelta: (text: string) => void;
+      onDone: () => void;
+      onError: (message: string) => void;
+    },
+  ): AbortController => {
+    const ctrl = new AbortController();
+    const token = localStorage.getItem("openreq-token");
+
+    fetch(`${API_URL}/api/v1/ai/chat/conversations/${conversationId}/messages`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+      signal: ctrl.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ detail: "Stream failed" }));
+          callbacks.onError(err.detail || "Request failed");
+          return;
+        }
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let doneCalled = false;
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+
+          for (const part of parts) {
+            if (!part.trim()) continue;
+            const dataLine = part.split("\n").find((l) => l.startsWith("data: "));
+            if (!dataLine) continue;
+
+            try {
+              const parsed = JSON.parse(dataLine.slice(6));
+              if (parsed.error) {
+                callbacks.onError(parsed.error);
+              } else if (parsed.done) {
+                if (!doneCalled) {
+                  doneCalled = true;
+                  callbacks.onDone();
+                }
+              } else if (parsed.text) {
+                callbacks.onDelta(parsed.text);
+              }
+            } catch {
+              /* skip malformed */
+            }
+          }
+        }
+        // If stream ended without explicit done event
+        if (!doneCalled) {
+          callbacks.onDone();
+        }
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") {
+          callbacks.onError(err.message || "Connection failed");
+        }
+      });
+
+    return ctrl;
+  },
 };

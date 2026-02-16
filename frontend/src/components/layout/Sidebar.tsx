@@ -36,6 +36,7 @@ import {
   Code,
   Search,
   SwapHoriz,
+  SmartToy,
 } from "@mui/icons-material";
 import { List as VirtualList } from "react-window";
 import { useTranslation } from "react-i18next";
@@ -90,6 +91,7 @@ interface SidebarProps {
   onMoveItem: (collectionId: string, itemId: string, parentId: string | null) => void;
   onOpenCodeGen: () => void;
   onOpenSDK: () => void;
+  onOpenAIAgent: () => void;
 }
 
 type SidebarRow =
@@ -128,6 +130,7 @@ export default function Sidebar({
   onMoveItem,
   onOpenCodeGen,
   onOpenSDK,
+  onOpenAIAgent,
 }: SidebarProps) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -221,6 +224,7 @@ export default function Sidebar({
     { icon: <Code sx={{ fontSize: 17 }} />, label: t("codegen.generateCode"), onClick: onOpenCodeGen },
     { icon: <SwapHoriz sx={{ fontSize: 17 }} />, label: t("importExport.title"), onClick: onOpenImport },
     { icon: <FileDownload sx={{ fontSize: 17 }} />, label: t("sdk.title"), onClick: onOpenSDK },
+    { icon: <SmartToy sx={{ fontSize: 17 }} />, label: t("nav.aiAgent"), onClick: onOpenAIAgent },
     { icon: <Settings sx={{ fontSize: 17 }} />, label: t("nav.settings"), onClick: onOpenSettings },
   ];
 
@@ -289,7 +293,7 @@ export default function Sidebar({
           position: "relative",
           display: "flex",
           flexDirection: "column",
-          height: "100vh",
+          height: "100%",
           overflow: "hidden",
           boxSizing: "border-box",
           borderRight: `1px solid ${alpha(

@@ -1,20 +1,44 @@
-import { Box, ToggleButtonGroup, ToggleButton, Tooltip, IconButton, Typography } from "@mui/material";
+import { useState } from "react";
+import {
+  Box,
+  ToggleButtonGroup,
+  ToggleButton,
+  Tooltip,
+  IconButton,
+  Typography,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+} from "@mui/material";
 import {
   ViewColumn,
   ViewStream,
   ViewQuilt,
   GridView,
   RestartAlt,
+  Save,
+  BookmarkBorder,
+  Close,
 } from "@mui/icons-material";
 import { alpha, useTheme } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
-import type { PanelLayout } from "@/types";
+import type { PanelLayout, CustomPreset } from "@/types";
+import { MAX_CUSTOM_PRESETS } from "@/config/panelLayouts";
 
 interface LayoutToolbarProps {
   presets: PanelLayout[];
   activePresetId: string;
+  customPresets: CustomPreset[];
   onSelectPreset: (presetId: string) => void;
   onResetLayout: () => void;
+  onSaveCustomPreset: (name: string) => void;
+  onDeleteCustomPreset: (presetId: string) => void;
+  onSelectCustomPreset: (presetId: string) => void;
+  canSavePreset: boolean;
 }
 
 const PRESET_ICONS: Record<string, React.ReactNode> = {
@@ -27,12 +51,32 @@ const PRESET_ICONS: Record<string, React.ReactNode> = {
 export default function LayoutToolbar({
   presets,
   activePresetId,
+  customPresets,
   onSelectPreset,
   onResetLayout,
+  onSaveCustomPreset,
+  onDeleteCustomPreset,
+  onSelectCustomPreset,
+  canSavePreset,
 }: LayoutToolbarProps) {
   const { t } = useTranslation();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
+
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [presetName, setPresetName] = useState("");
+
+  const handleOpenSaveDialog = () => {
+    setPresetName("");
+    setSaveDialogOpen(true);
+  };
+
+  const handleSave = () => {
+    if (presetName.trim()) {
+      onSaveCustomPreset(presetName.trim());
+      setSaveDialogOpen(false);
+    }
+  };
 
   return (
     <Box
@@ -45,6 +89,7 @@ export default function LayoutToolbar({
         borderBottom: `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.06)}`,
         backgroundColor: alpha(isDark ? "#0d1117" : "#f8fafc", isDark ? 0.3 : 0.5),
         minHeight: 36,
+        flexWrap: "wrap",
       }}
     >
       <Typography
@@ -91,6 +136,36 @@ export default function LayoutToolbar({
         ))}
       </ToggleButtonGroup>
 
+      {/* Custom presets as chips */}
+      {customPresets.map((cp) => (
+        <Chip
+          key={cp.id}
+          icon={<BookmarkBorder sx={{ fontSize: 14 }} />}
+          label={cp.name}
+          onClick={() => onSelectCustomPreset(cp.id)}
+          onDelete={() => onDeleteCustomPreset(cp.id)}
+          deleteIcon={
+            <Tooltip title={t("layout.deletePreset")}>
+              <Close sx={{ fontSize: 12 }} />
+            </Tooltip>
+          }
+          variant={activePresetId === cp.id ? "filled" : "outlined"}
+          size="small"
+          color={activePresetId === cp.id ? "primary" : "default"}
+          sx={{
+            height: 26,
+            fontSize: "0.7rem",
+            "& .MuiChip-icon": { fontSize: 14, ml: 0.5 },
+            "& .MuiChip-deleteIcon": {
+              fontSize: 12,
+              opacity: 0.6,
+              "&:hover": { opacity: 1 },
+            },
+          }}
+        />
+      ))}
+
+      {/* "Customized" label when layout is modified but not saved */}
       {activePresetId === "custom" && (
         <Typography
           variant="caption"
@@ -102,6 +177,28 @@ export default function LayoutToolbar({
         >
           {t("layout.customized")}
         </Typography>
+      )}
+
+      {/* Save button — shown when custom and under limit */}
+      {canSavePreset && customPresets.length < MAX_CUSTOM_PRESETS && (
+        <Tooltip title={t("layout.savePreset")}>
+          <IconButton
+            size="small"
+            onClick={handleOpenSaveDialog}
+            sx={{
+              width: 26,
+              height: 26,
+              borderRadius: 1.5,
+              color: theme.palette.warning.main,
+              "&:hover": {
+                color: theme.palette.primary.main,
+                backgroundColor: alpha(theme.palette.primary.main, 0.08),
+              },
+            }}
+          >
+            <Save sx={{ fontSize: 16 }} />
+          </IconButton>
+        </Tooltip>
       )}
 
       <Box sx={{ flexGrow: 1 }} />
@@ -124,6 +221,43 @@ export default function LayoutToolbar({
           <RestartAlt sx={{ fontSize: 16 }} />
         </IconButton>
       </Tooltip>
+
+      {/* Save preset dialog */}
+      <Dialog
+        open={saveDialogOpen}
+        onClose={() => setSaveDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ pb: 1 }}>{t("layout.savePresetTitle")}</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            label={t("layout.presetName")}
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value.slice(0, 20))}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSave();
+            }}
+            sx={{ mt: 1 }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSaveDialogOpen(false)} size="small">
+            {t("common.cancel")}
+          </Button>
+          <Button
+            variant="contained"
+            disabled={!presetName.trim()}
+            onClick={handleSave}
+            size="small"
+          >
+            {t("common.save")}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

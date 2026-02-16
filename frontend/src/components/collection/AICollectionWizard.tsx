@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -43,7 +43,7 @@ import {
   Deselect,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
-import { aiApi, proxyApi } from "@/api/endpoints";
+import { aiApi, proxyApi, appSettingsApi } from "@/api/endpoints";
 import type { GeneratedEndpointFull, ProxyResponse, HttpMethod } from "@/types";
 
 const METHOD_COLORS: Record<string, string> = {
@@ -73,6 +73,21 @@ export default function AICollectionWizard({
   workspaceId,
 }: AICollectionWizardProps) {
   const { t } = useTranslation();
+
+  // ── AI Provider state ──
+  const [aiProvider, setAiProvider] = useState<"openai" | "ollama">("openai");
+
+  // Load AI provider on mount
+  useEffect(() => {
+    appSettingsApi
+      .get()
+      .then(({ data }) => {
+        setAiProvider(data.ai_provider || "openai");
+      })
+      .catch(() => {});
+  }, []);
+
+  const isOllama = aiProvider === "ollama";
 
   // ── Core state ──
   const [step, setStep] = useState<Step>("input");
@@ -133,8 +148,9 @@ export default function AICollectionWizard({
     onClose();
   };
 
+  const effectiveSourceMode = isOllama ? "docs" : sourceMode;
   const isInputValid =
-    (sourceMode === "docs" ? documentation.trim() : sourceUrl.trim());
+    (effectiveSourceMode === "docs" ? documentation.trim() : sourceUrl.trim());
 
   // ── Start generation with SSE streaming ──
   const handleGenerate = useCallback(() => {
@@ -163,7 +179,7 @@ export default function AICollectionWizard({
         collection_names: collectionNames,
         custom_instructions: instructions,
         workspace_id: workspaceId ?? undefined,
-        ...(sourceMode === "docs"
+        ...(effectiveSourceMode === "docs"
           ? { documentation: documentation.trim() }
           : { source_url: sourceUrl.trim() }),
       },
@@ -212,7 +228,7 @@ export default function AICollectionWizard({
     collectionNameInput,
     customInstructions,
     workspaceId,
-    sourceMode,
+    effectiveSourceMode,
     documentation,
     sourceUrl,
   ]);
@@ -236,7 +252,7 @@ export default function AICollectionWizard({
         collection_names: collectionNames,
         use_folders: useFolders,
         workspace_id: workspaceId ?? undefined,
-        source_url: sourceMode === "url" ? sourceUrl.trim() : undefined,
+        source_url: effectiveSourceMode === "url" ? sourceUrl.trim() : undefined,
         endpoints: selectedEps,
       });
       setStep("done");
@@ -364,9 +380,9 @@ export default function AICollectionWizard({
             />
 
             <ToggleButtonGroup
-              value={sourceMode}
+              value={isOllama ? "docs" : sourceMode}
               exclusive
-              onChange={(_, v) => v && setSourceMode(v)}
+              onChange={(_, v) => v && !isOllama && setSourceMode(v)}
               size="small"
               sx={{ alignSelf: "flex-start" }}
             >
@@ -374,13 +390,19 @@ export default function AICollectionWizard({
                 <Description fontSize="small" />
                 {t("ai.sourceDocs")}
               </ToggleButton>
-              <ToggleButton value="url" sx={{ gap: 0.5, textTransform: "none", px: 2 }}>
+              <ToggleButton value="url" disabled={isOllama} sx={{ gap: 0.5, textTransform: "none", px: 2 }}>
                 <Language fontSize="small" />
                 {t("ai.sourceUrl")}
               </ToggleButton>
             </ToggleButtonGroup>
 
-            {sourceMode === "docs" ? (
+            {isOllama && (
+              <Alert severity="info" variant="outlined" sx={{ fontSize: 13 }}>
+                {t("ai.urlDisabledOllama")}
+              </Alert>
+            )}
+
+            {effectiveSourceMode === "docs" ? (
               <TextField
                 multiline
                 minRows={12}
@@ -415,7 +437,7 @@ export default function AICollectionWizard({
             {/* Stepper */}
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
               {/* Step 1: Research */}
-              {sourceMode === "url" && (
+              {effectiveSourceMode === "url" && (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                   <StepIcon active={researchActive} done={researchDone} />
                   <Box sx={{ flex: 1 }}>

@@ -27,6 +27,7 @@ import CollectionRunnerDialog from "@/components/collection/CollectionRunnerDial
 import ScriptEditor from "@/components/request/ScriptEditor";
 import WebSocketPanel from "@/components/websocket/WebSocketPanel";
 import PanelGridLayout from "./PanelGridLayout";
+import AIAgentDrawer, { DRAWER_WIDTH, type ApplyScriptPayload } from "@/components/ai/AIAgentDrawer";
 import SettingsPage from "@/pages/Settings";
 import { newPair } from "@/components/common/KeyValueEditor";
 import {
@@ -201,6 +202,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const [showCodeGen, setShowCodeGen] = useState(false);
   const [showWebSocket, setShowWebSocket] = useState(false);
   const [showSDK, setShowSDK] = useState(false);
+  const [showAIAgent, setShowAIAgent] = useState(false);
   const [showRunner, setShowRunner] = useState<{ id: string; name: string } | null>(null);
   const didInitCollections = useRef(false);
   const didInitWorkspaces = useRef(false);
@@ -981,7 +983,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       <TopBar
         mode={mode}
         onToggleTheme={onToggleTheme}
@@ -1066,9 +1068,17 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onMoveItem={handleMoveItem}
         onOpenCodeGen={() => setShowCodeGen(true)}
         onOpenSDK={() => setShowSDK(true)}
+        onOpenAIAgent={() => setShowAIAgent(true)}
       />
 
-      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <Box sx={{
+        flexGrow: 1,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        transition: "margin-right 225ms cubic-bezier(0, 0, 0.2, 1)",
+        marginRight: showAIAgent ? `${DRAWER_WIDTH}px` : 0,
+      }}>
         <Toolbar sx={{ minHeight: "52px !important" }} />
 
         {view === "request" && (
@@ -1360,6 +1370,44 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           selectedEnvId={selectedEnvId}
         />
       )}
+
+      {/* AI Agent Chat Drawer */}
+      <AIAgentDrawer
+        open={showAIAgent}
+        onClose={() => setShowAIAgent(false)}
+        collections={collections}
+        activeTab={activeTab}
+        currentWorkspaceId={currentWorkspaceId}
+        currentUserId={user.id}
+        onApplyScript={(payload: ApplyScriptPayload) => {
+          if (payload.scope === "collection") {
+            // Apply to collection
+            const collectionId = activeTab?.collectionId;
+            if (!collectionId) {
+              setSnack({ msg: t("aiAgent.noCollectionContext"), severity: "error" });
+              return;
+            }
+            const field = payload.target === "pre-request" ? "pre_request_script" : "post_response_script";
+            collectionsApi.update(collectionId, { [field]: payload.script })
+              .then(() => {
+                loadCollections();
+                setSnack({ msg: t("aiAgent.scriptAppliedToCollection"), severity: "success" });
+              })
+              .catch(() => {
+                setSnack({ msg: t("common.error"), severity: "error" });
+              });
+          } else {
+            // Apply to current request tab
+            if (!activeTabId) return;
+            if (payload.target === "pre-request") {
+              updateTab(activeTabId, { preRequestScript: payload.script });
+            } else {
+              updateTab(activeTabId, { postResponseScript: payload.script });
+            }
+            setSnack({ msg: t("aiAgent.scriptAppliedToRequest"), severity: "success" });
+          }
+        }}
+      />
 
       {/* Snackbar */}
       <Snackbar

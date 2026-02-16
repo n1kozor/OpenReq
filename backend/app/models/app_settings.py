@@ -12,6 +12,9 @@ class AppSettings(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     openai_api_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ai_provider: Mapped[str] = mapped_column(String(20), default="openai")  # "openai" | "ollama"
+    ollama_base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    ollama_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

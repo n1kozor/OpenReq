@@ -16,6 +16,7 @@ from app.models.request import Request, HttpMethod, AuthType
 from app.models.user import User
 from app.models.app_settings import get_or_create_settings
 from app.services.ai_generator import (
+    AIProviderConfig,
     generate_collection_from_docs,
     fetch_api_docs_from_url,
     URL_RESEARCH_PROMPT,
@@ -119,6 +120,28 @@ def _resolve_collection_name(
     return "Generated Collection"
 
 
+def _build_ai_config(db: Session) -> AIProviderConfig:
+    """Build an AIProviderConfig from app_settings + env fallback."""
+    app_settings = get_or_create_settings(db)
+    provider = app_settings.ai_provider or "openai"
+
+    if provider == "ollama":
+        return AIProviderConfig(
+            provider="ollama",
+            base_url=app_settings.ollama_base_url or "http://localhost:11434",
+            model=app_settings.ollama_model,
+        )
+
+    # OpenAI
+    api_key = (app_settings.openai_api_key if app_settings else None) or settings.OPENAI_API_KEY
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OpenAI API key not configured. Set it in Settings or environment variables.",
+        )
+    return AIProviderConfig(provider="openai", api_key=api_key)
+
+
 # ── SSE helpers ──────────────────────────────────────────────────────────────
 
 def _sse(event: str, data: dict) -> str:
@@ -133,18 +156,17 @@ async def generate_stream(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Use global API key, fall back to environment variable
-    app_settings = get_or_create_settings(db)
-    api_key = (app_settings.openai_api_key if app_settings else None) or settings.OPENAI_API_KEY
-
-    if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OpenAI API key not configured. Set it in Settings or environment variables.",
-        )
+    config = _build_ai_config(db)
 
     has_docs = payload.documentation and payload.documentation.strip()
     has_url = payload.source_url and payload.source_url.strip()
+
+    # Ollama does not support URL-based web search
+    if config.provider == "ollama" and has_url and not has_docs:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL research is not available with Ollama. Paste documentation instead.",
+        )
 
     if not has_docs and not has_url:
         raise HTTPException(
@@ -154,10 +176,10 @@ async def generate_stream(
 
     return StreamingResponse(
         _stream_generation(
-            api_key=api_key,
+            config=config,
             documentation=payload.documentation,
             source_url=payload.source_url,
-            has_url=bool(has_url),
+            has_url=bool(has_url) and config.provider != "ollama",
             custom_instructions=payload.custom_instructions,
             collection_names=payload.collection_names,
         ),
@@ -167,7 +189,7 @@ async def generate_stream(
 
 
 async def _stream_generation(
-    api_key: str,
+    config: AIProviderConfig,
     documentation: str | None,
     source_url: str | None,
     has_url: bool,
@@ -177,10 +199,10 @@ async def _stream_generation(
     """Async generator yielding SSE events during AI collection generation."""
     try:
         # ── Step 1: Research URL or analyze docs ──
-        if has_url:
+        if has_url and config.provider == "openai":
             yield _sse("step", {"phase": "research", "status": "active"})
 
-            client = AsyncOpenAI(api_key=api_key, timeout=300.0)
+            client = AsyncOpenAI(api_key=config.api_key, timeout=300.0)
             collected_text = ""
             buffer = ""
 
@@ -255,7 +277,7 @@ async def _stream_generation(
         try:
             endpoints = await asyncio.to_thread(
                 generate_collection_from_docs,
-                api_key,
+                config,
                 documentation,
                 custom_instructions,
                 collection_names,
@@ -421,15 +443,7 @@ def generate_collection(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Use global API key, fall back to environment variable
-    app_settings = get_or_create_settings(db)
-    api_key = (app_settings.openai_api_key if app_settings else None) or settings.OPENAI_API_KEY
-
-    if not api_key:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="OpenAI API key not configured. Set it in Settings or environment variables.",
-        )
+    config = _build_ai_config(db)
 
     has_docs = payload.documentation and payload.documentation.strip()
     has_url = payload.source_url and payload.source_url.strip()
@@ -441,10 +455,12 @@ def generate_collection(
         )
 
     documentation = payload.documentation or ""
-    if has_url:
+
+    # URL research is OpenAI-only
+    if has_url and config.provider == "openai":
         try:
             documentation = fetch_api_docs_from_url(
-                api_key=api_key,
+                api_key=config.api_key,
                 url=payload.source_url.strip(),
             )
         except Exception as e:
@@ -453,10 +469,15 @@ def generate_collection(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"Failed to extract API documentation from URL: {str(e)}",
             )
+    elif has_url and config.provider == "ollama":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL research is not available with Ollama. Paste documentation instead.",
+        )
 
     try:
         endpoints = generate_collection_from_docs(
-            api_key=api_key,
+            config=config,
             documentation=documentation,
             custom_instructions=payload.custom_instructions,
             collection_names=payload.collection_names,

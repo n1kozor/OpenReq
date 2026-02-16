@@ -18,6 +18,8 @@ import {
   FormControl,
   InputLabel,
   Chip,
+  ToggleButtonGroup,
+  ToggleButton,
 } from "@mui/material";
 import {
   Visibility,
@@ -35,10 +37,13 @@ import {
   Delete,
   FolderSpecial,
   Dns,
+  Refresh,
+  SmartToy,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
-import { setupApi } from "@/api/endpoints";
+import { setupApi, appSettingsApi } from "@/api/endpoints";
+import type { OllamaModel } from "@/types";
 import NeuralGrid from "@/components/NeuralGrid";
 
 interface SetupWizardProps {
@@ -89,9 +94,15 @@ export default function SetupWizard({ onComplete, mode, setMode }: SetupWizardPr
     { name: "Development", env_type: "DEV" },
   ]);
 
-  // API Key
+  // AI Configuration
+  const [aiProvider, setAiProvider] = useState<"openai" | "ollama">("openai");
   const [openaiKey, setOpenaiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
+  const [ollamaModel, setOllamaModel] = useState("");
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [ollamaModelsLoading, setOllamaModelsLoading] = useState(false);
+  const [ollamaFetchError, setOllamaFetchError] = useState<string | null>(null);
 
   // Status
   const [loading, setLoading] = useState(false);
@@ -105,7 +116,7 @@ export default function SetupWizard({ onComplete, mode, setMode }: SetupWizardPr
     t("setup.stepAccount"),
     t("setup.stepWorkspace"),
     t("setup.stepEnvironment"),
-    t("setup.stepApiKey"),
+    t("setup.aiConfigTitle"),
   ];
 
   const handleLanguageChange = (lang: string) => {
@@ -167,7 +178,10 @@ export default function SetupWizard({ onComplete, mode, setMode }: SetupWizardPr
         username,
         password,
         full_name: fullName || undefined,
-        openai_api_key: openaiKey || undefined,
+        openai_api_key: aiProvider === "openai" ? openaiKey || undefined : undefined,
+        ai_provider: aiProvider,
+        ollama_base_url: aiProvider === "ollama" ? ollamaBaseUrl || undefined : undefined,
+        ollama_model: aiProvider === "ollama" ? ollamaModel || undefined : undefined,
         workspace_name: workspaceName,
         environments: environments,
       });
@@ -586,40 +600,153 @@ export default function SetupWizard({ onComplete, mode, setMode }: SetupWizardPr
     </Box>
   );
 
+  const handleFetchOllamaModels = async () => {
+    setOllamaModelsLoading(true);
+    setOllamaFetchError(null);
+    try {
+      const { data } = await appSettingsApi.getOllamaModels(ollamaBaseUrl.trim() || undefined);
+      setOllamaModels(data);
+      if (data.length === 0) {
+        setOllamaFetchError(t("settings.ollamaNoModels"));
+      }
+    } catch {
+      setOllamaFetchError(t("settings.ollamaConnectionFailed"));
+      setOllamaModels([]);
+    } finally {
+      setOllamaModelsLoading(false);
+    }
+  };
+
   const renderApiKeyStep = () => (
     <Box sx={{ py: 2 }}>
-      <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-        {t("setup.apiKeyTitle")}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        {t("setup.apiKeyDescription")}
-      </Typography>
+      <Box sx={{ textAlign: "center", mb: 3 }}>
+        <SmartToy sx={{ fontSize: 48, color: "primary.main", mb: 2, opacity: 0.8 }} />
+        <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+          {t("setup.aiConfigTitle")}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {t("setup.aiConfigDescription")}
+        </Typography>
+      </Box>
+
       <Alert severity="info" sx={{ mb: 3, borderRadius: 2 }}>
         {t("setup.apiKeyOptional")}
       </Alert>
-      <TextField
-        fullWidth
-        label="OpenAI API Key"
-        placeholder="sk-..."
-        value={openaiKey}
-        onChange={(e) => setOpenaiKey(e.target.value)}
-        type={showKey ? "text" : "password"}
-        InputProps={{
-          sx: { fontFamily: "'JetBrains Mono', monospace", fontSize: 13 },
-          startAdornment: (
-            <InputAdornment position="start">
-              <Key sx={iconSx} />
-            </InputAdornment>
-          ),
-          endAdornment: (
-            <InputAdornment position="end">
-              <IconButton size="small" onClick={() => setShowKey(!showKey)} sx={{ color: "text.secondary", opacity: 0.5 }}>
-                {showKey ? <VisibilityOff sx={{ fontSize: 18 }} /> : <Visibility sx={{ fontSize: 18 }} />}
-              </IconButton>
-            </InputAdornment>
-          ),
-        }}
-      />
+
+      {/* Provider Toggle */}
+      <Box sx={{ mb: 3, display: "flex", justifyContent: "center" }}>
+        <ToggleButtonGroup
+          value={aiProvider}
+          exclusive
+          onChange={(_, v) => v && setAiProvider(v)}
+          size="small"
+        >
+          <ToggleButton value="openai" sx={{ textTransform: "none", px: 3 }}>
+            OpenAI
+          </ToggleButton>
+          <ToggleButton value="ollama" sx={{ textTransform: "none", px: 3 }}>
+            Ollama
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+
+      {/* OpenAI Config */}
+      {aiProvider === "openai" && (
+        <TextField
+          fullWidth
+          label="OpenAI API Key"
+          placeholder="sk-..."
+          value={openaiKey}
+          onChange={(e) => setOpenaiKey(e.target.value)}
+          type={showKey ? "text" : "password"}
+          InputProps={{
+            sx: { fontFamily: "'JetBrains Mono', monospace", fontSize: 13 },
+            startAdornment: (
+              <InputAdornment position="start">
+                <Key sx={iconSx} />
+              </InputAdornment>
+            ),
+            endAdornment: (
+              <InputAdornment position="end">
+                <IconButton size="small" onClick={() => setShowKey(!showKey)} sx={{ color: "text.secondary", opacity: 0.5 }}>
+                  {showKey ? <VisibilityOff sx={{ fontSize: 18 }} /> : <Visibility sx={{ fontSize: 18 }} />}
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+        />
+      )}
+
+      {/* Ollama Config */}
+      {aiProvider === "ollama" && (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {ollamaFetchError && (
+            <Alert severity="error" sx={{ borderRadius: 2 }} onClose={() => setOllamaFetchError(null)}>
+              {ollamaFetchError}
+            </Alert>
+          )}
+
+          <TextField
+            fullWidth
+            size="small"
+            label={t("settings.ollamaBaseUrl")}
+            value={ollamaBaseUrl}
+            onChange={(e) => setOllamaBaseUrl(e.target.value)}
+            placeholder="http://localhost:11434"
+            InputProps={{
+              sx: { fontFamily: "'JetBrains Mono', monospace", fontSize: 13 },
+            }}
+          />
+
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            <FormControl size="small" sx={{ flex: 1 }}>
+              <InputLabel>{t("settings.ollamaModel")}</InputLabel>
+              <Select
+                value={ollamaModel}
+                onChange={(e) => setOllamaModel(e.target.value)}
+                label={t("settings.ollamaModel")}
+              >
+                {ollamaModels.map((m) => (
+                  <MenuItem key={m.name} value={m.name}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      {m.name}
+                      {m.size && (
+                        <Typography variant="caption" color="text.secondary">
+                          ({(m.size / 1e9).toFixed(1)} GB)
+                        </Typography>
+                      )}
+                    </Box>
+                  </MenuItem>
+                ))}
+                {ollamaModel && !ollamaModels.find((m) => m.name === ollamaModel) && (
+                  <MenuItem value={ollamaModel}>{ollamaModel}</MenuItem>
+                )}
+              </Select>
+            </FormControl>
+            <Button
+              variant="outlined"
+              onClick={handleFetchOllamaModels}
+              disabled={ollamaModelsLoading}
+              startIcon={
+                ollamaModelsLoading ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <Refresh />
+                )
+              }
+              sx={{ whiteSpace: "nowrap" }}
+            >
+              {t("settings.ollamaFetchModels")}
+            </Button>
+          </Box>
+
+          {ollamaModels.length > 0 && (
+            <Alert severity="success" sx={{ borderRadius: 2 }}>
+              {t("settings.ollamaConnectionOk")} — {ollamaModels.length} {t("settings.ollamaFetchModels").toLowerCase()}
+            </Alert>
+          )}
+        </Box>
+      )}
     </Box>
   );
 

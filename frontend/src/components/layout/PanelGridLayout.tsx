@@ -18,8 +18,10 @@ import {
   LAYOUT_PRESETS,
   LAYOUT_DEFAULT,
   PANEL_META,
+  CUSTOM_PRESETS_STORAGE_KEY,
+  MAX_CUSTOM_PRESETS,
 } from "@/config/panelLayouts";
-import type { PanelId, PanelLayoutItem, PersistedLayoutState } from "@/types";
+import type { PanelId, PanelLayoutItem, PersistedLayoutState, CustomPreset } from "@/types";
 
 const LAYOUT_STORAGE_KEY = "openreq-panel-layout";
 const LAYOUT_VERSION = 1;
@@ -61,6 +63,24 @@ function persistLayout(state: PersistedLayoutState): void {
   }
 }
 
+function loadCustomPresets(): CustomPreset[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_PRESETS_STORAGE_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as CustomPreset[];
+  } catch {
+    return [];
+  }
+}
+
+function persistCustomPresets(presets: CustomPreset[]): void {
+  try {
+    localStorage.setItem(CUSTOM_PRESETS_STORAGE_KEY, JSON.stringify(presets));
+  } catch {
+    /* ignore */
+  }
+}
+
 function toRglLayout(items: PanelLayoutItem[], minimizedPanels: PanelId[], visiblePanels: PanelId[]): Layout {
   return items
     .filter((item) => visiblePanels.includes(item.i))
@@ -87,6 +107,8 @@ export default function PanelGridLayout({
       minimizedPanels: [],
     };
   });
+
+  const [customPresets, setCustomPresets] = useState<CustomPreset[]>(loadCustomPresets);
 
   // One-time cleanup of old key
   useEffect(() => {
@@ -161,6 +183,46 @@ export default function PanelGridLayout({
     });
   }, []);
 
+  const handleSaveCustomPreset = useCallback((name: string) => {
+    const newPreset: CustomPreset = {
+      id: `custom-${Date.now()}`,
+      name,
+      items: [...layoutState.items],
+    };
+    setCustomPresets((prev) => {
+      if (prev.length >= MAX_CUSTOM_PRESETS) return prev;
+      const updated = [...prev, newPreset];
+      persistCustomPresets(updated);
+      return updated;
+    });
+    setLayoutState((prev) => ({ ...prev, activePresetId: newPreset.id }));
+  }, [layoutState.items]);
+
+  const handleDeleteCustomPreset = useCallback((presetId: string) => {
+    setCustomPresets((prev) => {
+      const updated = prev.filter((p) => p.id !== presetId);
+      persistCustomPresets(updated);
+      return updated;
+    });
+    setLayoutState((prev) => {
+      if (prev.activePresetId === presetId) {
+        return { ...prev, activePresetId: "custom" };
+      }
+      return prev;
+    });
+  }, []);
+
+  const handleSelectCustomPreset = useCallback((presetId: string) => {
+    const preset = customPresets.find((p) => p.id === presetId);
+    if (!preset) return;
+    setLayoutState({
+      version: LAYOUT_VERSION,
+      activePresetId: presetId,
+      items: preset.items,
+      minimizedPanels: [],
+    });
+  }, [customPresets]);
+
   const panelContent: Record<PanelId, React.ReactNode> = {
     requestBuilder: children.requestBuilder,
     scriptEditor: children.scriptEditor,
@@ -173,8 +235,13 @@ export default function PanelGridLayout({
       <LayoutToolbar
         presets={LAYOUT_PRESETS}
         activePresetId={layoutState.activePresetId}
+        customPresets={customPresets}
         onSelectPreset={handleSelectPreset}
         onResetLayout={handleResetLayout}
+        onSaveCustomPreset={handleSaveCustomPreset}
+        onDeleteCustomPreset={handleDeleteCustomPreset}
+        onSelectCustomPreset={handleSelectCustomPreset}
+        canSavePreset={layoutState.activePresetId === "custom"}
       />
 
       <Box ref={containerRef} sx={{ flex: 1, overflow: "auto", position: "relative" }}>
@@ -189,6 +256,7 @@ export default function PanelGridLayout({
             margin={GRID_MARGIN}
             containerPadding={GRID_CONTAINER_PADDING}
             dragConfig={{ handle: ".panel-drag-handle" }}
+            resizeConfig={{ handles: ['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne'] }}
             onLayoutChange={handleLayoutChange}
             compactor={verticalCompactor}
           >

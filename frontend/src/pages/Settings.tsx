@@ -25,6 +25,9 @@ import {
   DialogContent,
   DialogActions,
   Tooltip,
+  ToggleButtonGroup,
+  ToggleButton,
+  CircularProgress,
 } from "@mui/material";
 import {
   Visibility,
@@ -41,12 +44,13 @@ import {
   Delete,
   CheckCircle,
   Cancel,
+  Refresh,
 } from "@mui/icons-material";
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import { appSettingsApi, usersApi } from "@/api/endpoints";
-import type { User } from "@/types";
+import type { User, OllamaModel } from "@/types";
 
 const LANGUAGES = [
   { code: "en", label: "English" },
@@ -69,6 +73,9 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
   const [followRedirects, setFollowRedirects] = useState(true);
   const [saved, setSaved] = useState(false);
 
+  // AI provider state
+  const [aiProvider, setAiProvider] = useState<"openai" | "ollama">("openai");
+
   // OpenAI key state
   const [openaiKey, setOpenaiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -77,6 +84,15 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
   const [keyError, setKeyError] = useState<string | null>(null);
   const [hasKey, setHasKey] = useState(false);
   const [keyHint, setKeyHint] = useState<string | null>(null);
+
+  // Ollama state
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
+  const [ollamaModel, setOllamaModel] = useState("");
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [ollamaModelsLoading, setOllamaModelsLoading] = useState(false);
+  const [ollamaSaving, setOllamaSaving] = useState(false);
+  const [ollamaSaved, setOllamaSaved] = useState(false);
+  const [ollamaError, setOllamaError] = useState<string | null>(null);
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState("");
@@ -99,6 +115,9 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
       .then(({ data }) => {
         setHasKey(data.has_openai_key);
         setKeyHint(data.openai_api_key_hint);
+        setAiProvider(data.ai_provider || "openai");
+        if (data.ollama_base_url) setOllamaBaseUrl(data.ollama_base_url);
+        if (data.ollama_model) setOllamaModel(data.ollama_model);
       })
       .catch(() => {});
   }, []);
@@ -160,6 +179,42 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
       setKeyError(t("common.error"));
     } finally {
       setKeySaving(false);
+    }
+  };
+
+  const handleFetchOllamaModels = async () => {
+    setOllamaModelsLoading(true);
+    setOllamaError(null);
+    try {
+      const { data } = await appSettingsApi.getOllamaModels(ollamaBaseUrl.trim() || undefined);
+      setOllamaModels(data);
+      if (data.length === 0) {
+        setOllamaError(t("settings.ollamaNoModels"));
+      }
+    } catch {
+      setOllamaError(t("settings.ollamaConnectionFailed"));
+      setOllamaModels([]);
+    } finally {
+      setOllamaModelsLoading(false);
+    }
+  };
+
+  const handleSaveProvider = async () => {
+    setOllamaSaving(true);
+    setOllamaError(null);
+    try {
+      const { data } = await appSettingsApi.update({
+        ai_provider: aiProvider,
+        ollama_base_url: aiProvider === "ollama" ? ollamaBaseUrl.trim() : undefined,
+        ollama_model: aiProvider === "ollama" ? ollamaModel : undefined,
+      });
+      setAiProvider(data.ai_provider || "openai");
+      setOllamaSaved(true);
+      setTimeout(() => setOllamaSaved(false), 2000);
+    } catch {
+      setOllamaError(t("common.error"));
+    } finally {
+      setOllamaSaving(false);
     }
   };
 
@@ -341,72 +396,187 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
             </Box>
 
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              {t("settings.aiDescription")}
+              {t("settings.aiProviderDescription")}
             </Typography>
 
-            {keySaved && (
+            {ollamaSaved && (
               <Alert severity="success" sx={{ mb: 2, borderRadius: 2 }}>
                 {t("settings.apiKeySaved")}
               </Alert>
             )}
-            {keyError && (
-              <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }}>
-                {keyError}
-              </Alert>
-            )}
 
-            {hasKey && (
-              <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}>
-                {t("settings.apiKeyConfigured")}: <strong>{keyHint}</strong>
-              </Alert>
-            )}
-
-            <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-              <TextField
+            {/* Provider Toggle */}
+            <Box sx={{ mb: 2.5 }}>
+              <Typography variant="body2" fontWeight={500} sx={{ mb: 1 }}>
+                {t("settings.aiProvider")}
+              </Typography>
+              <ToggleButtonGroup
+                value={aiProvider}
+                exclusive
+                onChange={(_, v) => v && setAiProvider(v)}
                 size="small"
-                fullWidth
-                placeholder={hasKey ? t("settings.apiKeyReplace") : "sk-..."}
-                value={openaiKey}
-                onChange={(e) => setOpenaiKey(e.target.value)}
-                type={showKey ? "text" : "password"}
-                InputProps={{
-                  sx: {
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 13,
-                  },
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      <IconButton size="small" onClick={() => setShowKey(!showKey)}>
-                        {showKey ? (
-                          <VisibilityOff fontSize="small" />
-                        ) : (
-                          <Visibility fontSize="small" />
-                        )}
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
-              <Button
-                variant="contained"
-                onClick={handleSaveKey}
-                disabled={keySaving || !openaiKey.trim()}
-                sx={{ whiteSpace: "nowrap" }}
               >
-                {t("common.save")}
-              </Button>
-              {hasKey && (
-                <Button
-                  variant="outlined"
-                  color="error"
-                  onClick={handleRemoveKey}
-                  disabled={keySaving}
-                  sx={{ whiteSpace: "nowrap" }}
-                >
-                  {t("common.remove")}
-                </Button>
-              )}
+                <ToggleButton value="openai" sx={{ textTransform: "none", px: 3 }}>
+                  OpenAI
+                </ToggleButton>
+                <ToggleButton value="ollama" sx={{ textTransform: "none", px: 3 }}>
+                  Ollama
+                </ToggleButton>
+              </ToggleButtonGroup>
             </Box>
+
+            {/* OpenAI Config */}
+            {aiProvider === "openai" && (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {t("settings.aiDescription")}
+                </Typography>
+
+                {keySaved && (
+                  <Alert severity="success" sx={{ borderRadius: 2 }}>
+                    {t("settings.apiKeySaved")}
+                  </Alert>
+                )}
+                {keyError && (
+                  <Alert severity="error" sx={{ borderRadius: 2 }}>
+                    {keyError}
+                  </Alert>
+                )}
+
+                {hasKey && (
+                  <Alert severity="info" sx={{ borderRadius: 2 }}>
+                    {t("settings.apiKeyConfigured")}: <strong>{keyHint}</strong>
+                  </Alert>
+                )}
+
+                <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    placeholder={hasKey ? t("settings.apiKeyReplace") : "sk-..."}
+                    value={openaiKey}
+                    onChange={(e) => setOpenaiKey(e.target.value)}
+                    type={showKey ? "text" : "password"}
+                    InputProps={{
+                      sx: {
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: 13,
+                      },
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton size="small" onClick={() => setShowKey(!showKey)}>
+                            {showKey ? (
+                              <VisibilityOff fontSize="small" />
+                            ) : (
+                              <Visibility fontSize="small" />
+                            )}
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                  <Button
+                    variant="contained"
+                    onClick={handleSaveKey}
+                    disabled={keySaving || !openaiKey.trim()}
+                    sx={{ whiteSpace: "nowrap" }}
+                  >
+                    {t("common.save")}
+                  </Button>
+                  {hasKey && (
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      onClick={handleRemoveKey}
+                      disabled={keySaving}
+                      sx={{ whiteSpace: "nowrap" }}
+                    >
+                      {t("common.remove")}
+                    </Button>
+                  )}
+                </Box>
+              </Box>
+            )}
+
+            {/* Ollama Config */}
+            {aiProvider === "ollama" && (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {ollamaError && (
+                  <Alert severity="error" sx={{ borderRadius: 2 }} onClose={() => setOllamaError(null)}>
+                    {ollamaError}
+                  </Alert>
+                )}
+
+                <TextField
+                  size="small"
+                  label={t("settings.ollamaBaseUrl")}
+                  value={ollamaBaseUrl}
+                  onChange={(e) => setOllamaBaseUrl(e.target.value)}
+                  placeholder="http://localhost:11434"
+                  InputProps={{
+                    sx: { fontFamily: "'JetBrains Mono', monospace", fontSize: 13 },
+                  }}
+                />
+
+                <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                  <FormControl size="small" sx={{ flex: 1 }}>
+                    <InputLabel>{t("settings.ollamaModel")}</InputLabel>
+                    <Select
+                      value={ollamaModel}
+                      onChange={(e) => setOllamaModel(e.target.value)}
+                      label={t("settings.ollamaModel")}
+                    >
+                      {ollamaModels.map((m) => (
+                        <MenuItem key={m.name} value={m.name}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            {m.name}
+                            {m.size && (
+                              <Typography variant="caption" color="text.secondary">
+                                ({(m.size / 1e9).toFixed(1)} GB)
+                              </Typography>
+                            )}
+                          </Box>
+                        </MenuItem>
+                      ))}
+                      {ollamaModel && !ollamaModels.find((m) => m.name === ollamaModel) && (
+                        <MenuItem value={ollamaModel}>{ollamaModel}</MenuItem>
+                      )}
+                    </Select>
+                  </FormControl>
+                  <Button
+                    variant="outlined"
+                    onClick={handleFetchOllamaModels}
+                    disabled={ollamaModelsLoading}
+                    startIcon={
+                      ollamaModelsLoading ? (
+                        <CircularProgress size={16} />
+                      ) : (
+                        <Refresh />
+                      )
+                    }
+                    sx={{ whiteSpace: "nowrap" }}
+                  >
+                    {t("settings.ollamaFetchModels")}
+                  </Button>
+                </Box>
+
+                {ollamaModels.length > 0 && (
+                  <Alert severity="success" sx={{ borderRadius: 2 }}>
+                    {t("settings.ollamaConnectionOk")} — {ollamaModels.length} {t("settings.ollamaFetchModels").toLowerCase()}
+                  </Alert>
+                )}
+              </Box>
+            )}
+
+            {/* Save provider button */}
+            <Button
+              variant="contained"
+              onClick={handleSaveProvider}
+              disabled={ollamaSaving}
+              sx={{ mt: 2, alignSelf: "flex-start" }}
+            >
+              {t("common.save")} {t("settings.aiProvider")}
+            </Button>
           </Paper>
 
           {/* Account Info */}

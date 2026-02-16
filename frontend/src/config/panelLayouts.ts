@@ -77,6 +77,10 @@ export const LAYOUT_PRESETS: PanelLayout[] = [
   LAYOUT_COMPACT,
 ];
 
+// ── Custom Presets ──
+export const CUSTOM_PRESETS_STORAGE_KEY = "openreq-custom-presets";
+export const MAX_CUSTOM_PRESETS = 5;
+
 export const PANEL_META: Record<PanelId, { titleKey: string; icon: string }> = {
   requestBuilder: { titleKey: "layout.panelRequest", icon: "Send" },
   scriptEditor: { titleKey: "layout.panelScripts", icon: "Terminal" },

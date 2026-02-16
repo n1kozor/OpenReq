@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     auth, users, workspaces, collections, requests, environments,
     proxy, history, ai, import_export, codegen, oauth, websocket_proxy, sdk,
-    setup, app_settings, collection_runs, network,
+    setup, app_settings, collection_runs, network, ai_chat,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -26,3 +26,4 @@ api_router.include_router(setup.router, prefix="/setup", tags=["Setup"])
 api_router.include_router(app_settings.router, prefix="/settings", tags=["Settings"])
 api_router.include_router(collection_runs.router, prefix="/runs", tags=["Collection Runs"])
 api_router.include_router(network.router, prefix="/network", tags=["Network"])
+api_router.include_router(ai_chat.router, prefix="/ai/chat", tags=["AI Chat"])

@@ -53,9 +53,19 @@ def initialize_setup(
     db.add(user)
     db.flush()
 
-    # Store OpenAI key globally
-    if payload.openai_api_key:
-        app_settings = AppSettings(openai_api_key=payload.openai_api_key)
+    # Store AI settings globally
+    has_ai_config = (
+        payload.openai_api_key
+        or (payload.ai_provider and payload.ai_provider != "openai")
+        or payload.ollama_base_url
+    )
+    if has_ai_config:
+        app_settings = AppSettings(
+            openai_api_key=payload.openai_api_key,
+            ai_provider=payload.ai_provider or "openai",
+            ollama_base_url=payload.ollama_base_url,
+            ollama_model=payload.ollama_model,
+        )
         db.add(app_settings)
         db.flush()
 

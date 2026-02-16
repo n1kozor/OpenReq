@@ -22,35 +22,142 @@
   transition: none;
 }
 
-/* ── Resize handle: bottom-right corner ── */
+/* ── Resize handles: Windows-style invisible borders ── */
+
+/* Base: all handles are invisible until panel hover */
 .openreq-grid-layout .react-resizable-handle {
-  width: 16px;
-  height: 16px;
-  bottom: 2px;
-  right: 2px;
-  cursor: nwse-resize;
-  background: none;
   z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  background: transparent;
 }
 
+/* Show handles when hovering the grid item */
+.openreq-grid-layout .react-grid-item:hover > .react-resizable-handle {
+  opacity: 1;
+}
+
+/* Remove the default library ::after pseudo-element for all handles */
 .openreq-grid-layout .react-resizable-handle::after {
+  display: none;
+}
+
+/* ── Edge handles (n, s): horizontal bars along top/bottom ── */
+
+.openreq-grid-layout .react-resizable-handle-n,
+.openreq-grid-layout .react-resizable-handle-s {
+  width: calc(100% - 20px) !important;
+  height: 6px !important;
+  left: 10px !important;
+  right: auto !important;
+  cursor: ns-resize;
+  transform: none !important;
+}
+
+.openreq-grid-layout .react-resizable-handle-n {
+  top: -2px !important;
+  bottom: auto !important;
+}
+
+.openreq-grid-layout .react-resizable-handle-s {
+  bottom: -2px !important;
+  top: auto !important;
+}
+
+/* ── Edge handles (e, w): vertical bars along left/right ── */
+
+.openreq-grid-layout .react-resizable-handle-e,
+.openreq-grid-layout .react-resizable-handle-w {
+  height: calc(100% - 20px) !important;
+  width: 6px !important;
+  top: 10px !important;
+  bottom: auto !important;
+  cursor: ew-resize;
+  transform: none !important;
+}
+
+.openreq-grid-layout .react-resizable-handle-w {
+  left: -2px !important;
+  right: auto !important;
+}
+
+.openreq-grid-layout .react-resizable-handle-e {
+  right: -2px !important;
+  left: auto !important;
+}
+
+/* ── Corner handles (nw, ne, sw, se): small corner areas ── */
+
+.openreq-grid-layout .react-resizable-handle-se,
+.openreq-grid-layout .react-resizable-handle-sw,
+.openreq-grid-layout .react-resizable-handle-ne,
+.openreq-grid-layout .react-resizable-handle-nw {
+  width: 14px !important;
+  height: 14px !important;
+  transform: none !important;
+}
+
+.openreq-grid-layout .react-resizable-handle-se {
+  bottom: -1px !important;
+  right: -1px !important;
+  top: auto !important;
+  left: auto !important;
+  cursor: nwse-resize;
+}
+
+.openreq-grid-layout .react-resizable-handle-sw {
+  bottom: -1px !important;
+  left: -1px !important;
+  top: auto !important;
+  right: auto !important;
+  cursor: nesw-resize;
+}
+
+.openreq-grid-layout .react-resizable-handle-ne {
+  top: -1px !important;
+  right: -1px !important;
+  bottom: auto !important;
+  left: auto !important;
+  cursor: nesw-resize;
+}
+
+.openreq-grid-layout .react-resizable-handle-nw {
+  top: -1px !important;
+  left: -1px !important;
+  bottom: auto !important;
+  right: auto !important;
+  cursor: nwse-resize;
+}
+
+/* ── Hover highlight on all handles ── */
+
+.openreq-grid-layout .react-resizable-handle:hover {
+  background: rgba(129, 140, 248, 0.12);
+  border-radius: 2px;
+}
+
+/* ── Keep subtle SE corner indicator (the classic resize grip) ── */
+
+.openreq-grid-layout .react-resizable-handle-se::after {
+  display: block;
   content: "";
   position: absolute;
-  right: 4px;
-  bottom: 4px;
-  width: 8px;
-  height: 8px;
-  border-right: 2px solid rgba(139, 148, 158, 0.3);
-  border-bottom: 2px solid rgba(139, 148, 158, 0.3);
+  right: 3px;
+  bottom: 3px;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid rgba(139, 148, 158, 0.25);
+  border-bottom: 2px solid rgba(139, 148, 158, 0.25);
   border-radius: 0 0 2px 0;
   transition: border-color 0.15s ease;
 }
 
-.openreq-grid-layout .react-resizable-handle:hover::after {
+.openreq-grid-layout .react-resizable-handle-se:hover::after {
   border-color: rgba(129, 140, 248, 0.6);
 }
 
 /* ── Placeholder (drop target indicator) ── */
+
 .openreq-grid-layout .react-grid-placeholder {
   border-radius: 10px;
   border: 2px dashed rgba(129, 140, 248, 0.4) !important;
@@ -59,12 +166,17 @@
 }
 
 /* ── Light mode overrides ── */
-[data-theme="light"] .openreq-grid-layout .react-resizable-handle::after {
-  border-color: rgba(100, 116, 139, 0.25);
+
+[data-theme="light"] .openreq-grid-layout .react-resizable-handle-se::after {
+  border-color: rgba(100, 116, 139, 0.2);
 }
 
-[data-theme="light"] .openreq-grid-layout .react-resizable-handle:hover::after {
+[data-theme="light"] .openreq-grid-layout .react-resizable-handle-se:hover::after {
   border-color: rgba(99, 102, 241, 0.5);
+}
+
+[data-theme="light"] .openreq-grid-layout .react-resizable-handle:hover {
+  background: rgba(99, 102, 241, 0.08);
 }
 
 [data-theme="light"] .openreq-grid-layout .react-grid-placeholder {

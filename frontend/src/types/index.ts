@@ -32,6 +32,16 @@ export interface User {
 export interface AppSettings {
   has_openai_key: boolean;
   openai_api_key_hint: string | null;
+  ai_provider: "openai" | "ollama";
+  ollama_base_url: string | null;
+  ollama_model: string | null;
+  has_ollama_url: boolean;
+}
+
+export interface OllamaModel {
+  name: string;
+  size: number | null;
+  modified_at: string | null;
 }
 
 export interface AIGenerateResult {
@@ -373,4 +383,35 @@ export interface PersistedLayoutState {
   activePresetId: string;
   items: PanelLayoutItem[];
   minimizedPanels: PanelId[];
+}
+
+export interface CustomPreset {
+  id: string;
+  name: string;
+  items: PanelLayoutItem[];
+}
+
+// ── AI Agent Chat Types ──
+
+export interface AIConversation {
+  id: string;
+  title: string;
+  provider: string;
+  model: string | null;
+  is_shared: boolean;
+  workspace_id: string | null;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIChatMessage {
+  id: string;
+  conversation_id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  context_type: "collection" | "request" | null;
+  context_id: string | null;
+  context_name: string | null;
+  created_at: string;
 }

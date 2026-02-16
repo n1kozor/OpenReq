@@ -6,6 +6,7 @@ from app.models.environment import Environment, EnvironmentVariable
 from app.models.history import RequestHistory
 from app.models.app_settings import AppSettings
 from app.models.collection_run import CollectionRun, CollectionRunResult
+from app.models.ai_chat import AIConversation, AIChatMessage
 
 __all__ = [
     "User",
@@ -20,4 +21,6 @@ __all__ = [
     "AppSettings",
     "CollectionRun",
     "CollectionRunResult",
+    "AIConversation",
+    "AIChatMessage",
 ]

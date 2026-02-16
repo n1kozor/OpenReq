@@ -321,7 +321,7 @@ export default function UrlInput({
   };
 
   return (
-    <Box sx={{ flexGrow: 1 }} ref={containerRef}>
+    <Box sx={{ flexGrow: 1, minWidth: 0, overflow: "hidden" }} ref={containerRef}>
       <Box sx={{ position: "relative" }}>
         <TextField
           fullWidth
