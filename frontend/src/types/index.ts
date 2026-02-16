@@ -229,7 +229,7 @@ export interface WebSocketMessage {
   direction: "sent" | "received";
 }
 
-export type TabType = "request" | "collection";
+export type TabType = "request" | "collection" | "testflow";
 
 export type ScriptLanguage = "javascript" | "python";
 
@@ -414,4 +414,136 @@ export interface AIChatMessage {
   context_id: string | null;
   context_name: string | null;
   created_at: string;
+}
+
+// ── Test Flow Types ──
+
+export type TestFlowNodeType =
+  | "http_request"
+  | "collection"
+  | "assertion"
+  | "script"
+  | "delay"
+  | "condition"
+  | "loop"
+  | "set_variable"
+  | "group";
+
+export interface TestFlowNodeConfig {
+  request_id?: string;
+  request_name_hint?: string;
+  inline_request?: {
+    method: HttpMethod;
+    url: string;
+    headers?: Record<string, string>;
+    body?: string;
+    body_type?: string;
+    query_params?: Record<string, string>;
+    auth_type?: AuthType;
+    auth_config?: Record<string, string>;
+  };
+  collection_id?: string;
+  collection_name_hint?: string;
+  assertions?: {
+    type: "status_code" | "body_contains" | "json_path" | "header_check" | "response_time";
+    field?: string;
+    operator: "eq" | "neq" | "gt" | "lt" | "gte" | "lte" | "contains" | "not_contains" | "regex";
+    expected: string;
+  }[];
+  script?: string;
+  language?: "javascript" | "python";
+  delay_ms?: number;
+  expression?: string;
+  mode?: "count" | "condition";
+  count?: number;
+  condition?: string;
+  max_iterations?: number;
+  assignments?: { key: string; value: string }[];
+  color?: string;
+  width?: number;
+  height?: number;
+}
+
+export interface TestFlowNodeData {
+  id: string;
+  node_type: TestFlowNodeType;
+  label: string;
+  position_x: number;
+  position_y: number;
+  config: TestFlowNodeConfig;
+  parent_node_id?: string | null;
+}
+
+export interface TestFlowEdgeData {
+  id: string;
+  source_node_id: string;
+  target_node_id: string;
+  source_handle?: string | null;
+  target_handle?: string | null;
+  label?: string | null;
+}
+
+export interface TestFlow {
+  id: string;
+  name: string;
+  description: string | null;
+  workspace_id: string | null;
+  viewport?: { x: number; y: number; zoom: number } | null;
+  variables: Record<string, string> | null;
+  nodes: TestFlowNodeData[];
+  edges: TestFlowEdgeData[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TestFlowSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  workspace_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TestFlowRunResult {
+  id: string;
+  node_id: string;
+  node_type: string;
+  node_label: string;
+  execution_order: number;
+  iteration: number;
+  status: "success" | "error" | "skipped";
+  error: string | null;
+  elapsed_ms: number | null;
+  status_code: number | null;
+  response_body: string | null;
+  response_headers: Record<string, string> | null;
+  size_bytes: number | null;
+  assertion_results: { name: string; passed: boolean; actual?: string | null; expected?: string; error: string | null }[] | null;
+  console_logs: string[] | null;
+  variables_snapshot: Record<string, string> | null;
+  branch_taken: string | null;
+}
+
+export interface TestFlowRunSummary {
+  id: string;
+  flow_id: string;
+  flow_name: string;
+  environment_name: string | null;
+  status: "completed" | "stopped" | "failed";
+  total_nodes: number;
+  passed_count: number;
+  failed_count: number;
+  skipped_count: number;
+  total_assertions: number;
+  passed_assertions: number;
+  failed_assertions: number;
+  total_time_ms: number;
+  created_at: string;
+  finished_at: string | null;
+}
+
+export interface TestFlowRunDetail extends TestFlowRunSummary {
+  final_variables: Record<string, string> | null;
+  results: TestFlowRunResult[];
 }

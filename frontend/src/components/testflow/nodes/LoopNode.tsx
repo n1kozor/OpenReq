@@ -1,0 +1,32 @@
+import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Box, Typography, Chip } from "@mui/material";
+import { Loop } from "@mui/icons-material";
+import { nodeStatusStyles } from "./shared";
+
+export default function LoopNode({ data, selected }: NodeProps) {
+  const d = data as Record<string, unknown>;
+  const config = (d.config ?? {}) as Record<string, unknown>;
+  const runStatus = d._runStatus as string | undefined;
+  const mode = (config.mode as string) || "count";
+  const count = (config.count as number) ?? 3;
+  const iterations = d._iterationsCompleted as number | undefined;
+
+  return (
+    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#06b6d4"), minWidth: 160 }}>
+      <Handle type="target" position={Position.Top} />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1 }}>
+        <Loop sx={{ fontSize: 16, color: "#06b6d4" }} />
+        <Typography variant="body2" fontWeight={600} noWrap sx={{ flex: 1 }}>
+          {(d.label as string) || "Loop"}
+        </Typography>
+        <Chip
+          label={iterations !== undefined ? `${iterations}/${count}` : mode === "count" ? `x${count}` : "?"}
+          size="small"
+          sx={{ fontSize: "0.65rem", height: 18 }}
+        />
+      </Box>
+      <Handle type="source" position={Position.Bottom} id="source-loop" style={{ left: "30%" }} />
+      <Handle type="source" position={Position.Bottom} id="source-done" style={{ left: "70%" }} />
+    </Box>
+  );
+}

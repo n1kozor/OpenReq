@@ -7,6 +7,13 @@ from app.models.history import RequestHistory
 from app.models.app_settings import AppSettings
 from app.models.collection_run import CollectionRun, CollectionRunResult
 from app.models.ai_chat import AIConversation, AIChatMessage
+from app.models.test_flow import (
+    TestFlow,
+    TestFlowNode,
+    TestFlowEdge,
+    TestFlowRun,
+    TestFlowRunResult,
+)
 
 __all__ = [
     "User",
@@ -23,4 +30,9 @@ __all__ = [
     "CollectionRunResult",
     "AIConversation",
     "AIChatMessage",
+    "TestFlow",
+    "TestFlowNode",
+    "TestFlowEdge",
+    "TestFlowRun",
+    "TestFlowRunResult",
 ]

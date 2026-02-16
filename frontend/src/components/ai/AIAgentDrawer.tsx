@@ -1010,7 +1010,7 @@ export default function AIAgentDrawer({
                           </Typography>
                         }
                         secondary={
-                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.25 }}>
+                          <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.25 }}>
                             <Typography component="span" sx={{ fontSize: 11, color: "text.secondary" }}>
                               {new Date(conv.updated_at).toLocaleDateString()}
                             </Typography>

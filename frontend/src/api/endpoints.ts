@@ -20,6 +20,10 @@ import type {
   CollectionRunDetail,
   AIConversation,
   AIChatMessage,
+  TestFlow,
+  TestFlowSummary,
+  TestFlowRunSummary,
+  TestFlowRunDetail,
 } from "@/types";
 
 // ── Auth ──
@@ -655,5 +659,176 @@ export const aiChatApi = {
       });
 
     return ctrl;
+  },
+};
+
+// ── Test Flows ──
+export const testFlowsApi = {
+  list: (workspaceId?: string) =>
+    client.get<TestFlowSummary[]>("/test-flows/", {
+      params: workspaceId ? { workspace_id: workspaceId } : undefined,
+    }),
+
+  get: (id: string) => client.get<TestFlow>(`/test-flows/${id}`),
+
+  create: (data: {
+    name: string;
+    description?: string;
+    workspace_id?: string;
+    variables?: Record<string, string>;
+    nodes?: unknown[];
+    edges?: unknown[];
+  }) => client.post<TestFlow>("/test-flows/", data),
+
+  update: (
+    id: string,
+    data: {
+      name?: string;
+      description?: string;
+      viewport?: { x: number; y: number; zoom: number };
+      variables?: Record<string, string>;
+      nodes?: unknown[];
+      edges?: unknown[];
+    },
+  ) => client.patch<TestFlow>(`/test-flows/${id}`, data),
+
+  delete: (id: string) => client.delete(`/test-flows/${id}`),
+
+  duplicate: (id: string) => client.post<TestFlow>(`/test-flows/${id}/duplicate`),
+
+  runStream: (
+    flowId: string,
+    environmentId: string | null,
+    callbacks: {
+      onStart: (data: { total_nodes: number; flow_name: string }) => void;
+      onNodeStart: (nodeId: string, nodeType: string, label: string) => void;
+      onNodeResult: (nodeId: string, result: Record<string, unknown>) => void;
+      onNodeSkipped: (nodeId: string, reason: string) => void;
+      onEdgeActive: (edgeId: string) => void;
+      onLoopIteration: (nodeId: string, iteration: number, total: number) => void;
+      onDone: (summary: Record<string, unknown>, finalVars: Record<string, string>) => void;
+      onError: (message: string) => void;
+    },
+  ): AbortController => {
+    const ctrl = new AbortController();
+    const token = localStorage.getItem("openreq-token");
+    const params = new URLSearchParams();
+    if (environmentId) params.set("environment_id", environmentId);
+
+    fetch(`${API_URL}/api/v1/test-flows/${flowId}/run?${params}`, {
+      method: "POST",
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      signal: ctrl.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ detail: "Stream failed" }));
+          callbacks.onError(err.detail || "Execution failed");
+          return;
+        }
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+
+          for (const part of parts) {
+            if (!part.trim()) continue;
+            const dataLine = part.split("\n").find((l) => l.startsWith("data: "));
+            if (!dataLine) continue;
+            try {
+              const parsed = JSON.parse(dataLine.slice(6));
+              switch (parsed.type) {
+                case "start":
+                  callbacks.onStart(parsed);
+                  break;
+                case "node_start":
+                  callbacks.onNodeStart(parsed.node_id, parsed.node_type, parsed.label);
+                  break;
+                case "node_result":
+                  callbacks.onNodeResult(parsed.node_id, parsed);
+                  break;
+                case "node_skipped":
+                  callbacks.onNodeSkipped(parsed.node_id, parsed.reason);
+                  break;
+                case "edge_active":
+                  callbacks.onEdgeActive(parsed.edge_id);
+                  break;
+                case "loop_iteration":
+                  callbacks.onLoopIteration(parsed.node_id, parsed.iteration, parsed.total);
+                  break;
+                case "done":
+                  callbacks.onDone(parsed.summary, parsed.final_variables || {});
+                  break;
+                case "error":
+                  callbacks.onError(parsed.message);
+                  break;
+              }
+            } catch {
+              /* skip malformed */
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") callbacks.onError(err.message);
+      });
+
+    return ctrl;
+  },
+
+  saveRun: (
+    flowId: string,
+    data: {
+      flow_name: string;
+      environment_id?: string | null;
+      environment_name?: string | null;
+      status: string;
+      total_nodes: number;
+      passed_count: number;
+      failed_count: number;
+      skipped_count: number;
+      total_assertions: number;
+      passed_assertions: number;
+      failed_assertions: number;
+      total_time_ms: number;
+      final_variables?: Record<string, string> | null;
+      results: unknown[];
+    },
+  ) =>
+    client.post<TestFlowRunSummary>(`/test-flows/${flowId}/runs`, {
+      flow_id: flowId,
+      ...data,
+    }),
+
+  listRuns: (flowId: string, limit = 50, offset = 0) =>
+    client.get<TestFlowRunSummary[]>(`/test-flows/${flowId}/runs`, {
+      params: { limit, offset },
+    }),
+
+  getRun: (runId: string) =>
+    client.get<TestFlowRunDetail>(`/test-flows/runs/${runId}`),
+
+  deleteRun: (runId: string) =>
+    client.delete(`/test-flows/runs/${runId}`),
+
+  exportRun: async (runId: string, format: "json" | "html") => {
+    const response = await client.get(`/test-flows/runs/${runId}/export`, {
+      params: { format },
+      responseType: "blob",
+    });
+    const blob = response.data as Blob;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `flow-report-${runId.slice(0, 8)}.${format}`;
+    a.click();
+    URL.revokeObjectURL(url);
   },
 };

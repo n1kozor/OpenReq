@@ -28,6 +28,9 @@ import ScriptEditor from "@/components/request/ScriptEditor";
 import WebSocketPanel from "@/components/websocket/WebSocketPanel";
 import PanelGridLayout from "./PanelGridLayout";
 import AIAgentDrawer, { DRAWER_WIDTH, type ApplyScriptPayload } from "@/components/ai/AIAgentDrawer";
+import TestFlowCanvas from "@/components/testflow/TestFlowCanvas";
+import TestFlowListDialog from "@/components/testflow/TestFlowListDialog";
+import { ReactFlowProvider } from "@xyflow/react";
 import SettingsPage from "@/pages/Settings";
 import { newPair } from "@/components/common/KeyValueEditor";
 import {
@@ -130,6 +133,15 @@ function createCollectionTab(collectionId: string, collectionName: string): Requ
   };
 }
 
+function createTestFlowTab(flowId: string, flowName: string): RequestTab {
+  return {
+    ...createNewTab(),
+    tabType: "testflow",
+    collectionId: flowId,
+    name: flowName,
+  };
+}
+
 function restoreTabs(): RequestTab[] {
   try {
     const raw = localStorage.getItem(TABS_STORAGE_KEY);
@@ -203,6 +215,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const [showWebSocket, setShowWebSocket] = useState(false);
   const [showSDK, setShowSDK] = useState(false);
   const [showAIAgent, setShowAIAgent] = useState(false);
+  const [showTestFlowList, setShowTestFlowList] = useState(false);
   const [showRunner, setShowRunner] = useState<{ id: string; name: string } | null>(null);
   const didInitCollections = useRef(false);
   const didInitWorkspaces = useRef(false);
@@ -963,6 +976,21 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     setView("request");
   }, [tabs, collections, collectionTrees, loadCollectionTree]);
 
+  // ── Open test flow tab ──
+  const handleOpenTestFlow = useCallback((flowId: string, flowName: string) => {
+    const existing = tabs.find((t) => t.tabType === "testflow" && t.collectionId === flowId);
+    if (existing) {
+      setActiveTabId(existing.id);
+      setView("request");
+      return;
+    }
+    const tab = createTestFlowTab(flowId, flowName);
+    setTabs((prev) => [...prev, tab]);
+    setActiveTabId(tab.id);
+    setView("request");
+    setShowTestFlowList(false);
+  }, [tabs]);
+
   // ── Save collection from detail view ──
   const handleSaveCollectionDetail = useCallback(async (collectionId: string, data: { name: string; description: string; visibility: "private" | "shared"; variables: Record<string, string>; auth_type?: string | null; auth_config?: Record<string, string> | null; pre_request_script?: string | null; post_response_script?: string | null; script_language?: string | null }) => {
     try {
@@ -1069,6 +1097,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onOpenCodeGen={() => setShowCodeGen(true)}
         onOpenSDK={() => setShowSDK(true)}
         onOpenAIAgent={() => setShowAIAgent(true)}
+        onOpenTestBuilder={() => setShowTestFlowList(true)}
       />
 
       <Box sx={{
@@ -1131,8 +1160,24 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
               );
             })()}
 
+            {/* Test Flow Canvas tab */}
+            {activeTab && activeTab.tabType === "testflow" && activeTab.collectionId && (
+              <ReactFlowProvider>
+                <TestFlowCanvas
+                  key={activeTab.collectionId}
+                  flowId={activeTab.collectionId}
+                  environments={environments}
+                  selectedEnvId={selectedEnvId}
+                  collections={collections}
+                  collectionItems={collectionItems}
+                  onLoadAllItems={loadAllCollectionItems}
+                  onOpenRequest={handleSelectRequest}
+                />
+              </ReactFlowProvider>
+            )}
+
             {/* Request Builder: normal request tab */}
-            {activeTab && activeTab.tabType !== "collection" && (
+            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && (
               <PanelGridLayout showWebSocket={showWebSocket}>
                 {{
                   requestBuilder: (
@@ -1357,6 +1402,14 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         open={showSDK}
         onClose={() => setShowSDK(false)}
         collections={collections}
+      />
+
+      {/* Test Flow List */}
+      <TestFlowListDialog
+        open={showTestFlowList}
+        onClose={() => setShowTestFlowList(false)}
+        onOpenFlow={handleOpenTestFlow}
+        workspaceId={currentWorkspaceId}
       />
 
       {/* Collection Runner */}

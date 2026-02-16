@@ -37,6 +37,7 @@ import {
   Search,
   SwapHoriz,
   SmartToy,
+  AccountTree,
 } from "@mui/icons-material";
 import { List as VirtualList } from "react-window";
 import { useTranslation } from "react-i18next";
@@ -92,6 +93,7 @@ interface SidebarProps {
   onOpenCodeGen: () => void;
   onOpenSDK: () => void;
   onOpenAIAgent: () => void;
+  onOpenTestBuilder: () => void;
 }
 
 type SidebarRow =
@@ -131,6 +133,7 @@ export default function Sidebar({
   onOpenCodeGen,
   onOpenSDK,
   onOpenAIAgent,
+  onOpenTestBuilder,
 }: SidebarProps) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -222,6 +225,7 @@ export default function Sidebar({
     { icon: <History sx={{ fontSize: 17 }} />, label: t("nav.history"), onClick: onOpenHistory },
     { icon: <Cable sx={{ fontSize: 17 }} />, label: t("websocket.title"), onClick: onOpenWebSocket },
     { icon: <Code sx={{ fontSize: 17 }} />, label: t("codegen.generateCode"), onClick: onOpenCodeGen },
+    { icon: <AccountTree sx={{ fontSize: 17 }} />, label: t("nav.testBuilder"), onClick: onOpenTestBuilder },
     { icon: <SwapHoriz sx={{ fontSize: 17 }} />, label: t("importExport.title"), onClick: onOpenImport },
     { icon: <FileDownload sx={{ fontSize: 17 }} />, label: t("sdk.title"), onClick: onOpenSDK },
     { icon: <SmartToy sx={{ fontSize: 17 }} />, label: t("nav.aiAgent"), onClick: onOpenAIAgent },
@@ -440,6 +444,11 @@ export default function Sidebar({
                 return (
                   <Box style={style} {...ariaAttributes}>
                     <ListItemButton
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("application/openreq-collection", JSON.stringify({ collectionId: col.id }));
+                        e.dataTransfer.effectAllowed = "copyMove";
+                      }}
                       sx={{
                         py: 0.5,
                         minHeight: COLLECTION_ROW_HEIGHT,

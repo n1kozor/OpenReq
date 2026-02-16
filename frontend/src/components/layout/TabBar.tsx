@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Tabs, Tab, Box, IconButton, Menu, MenuItem } from "@mui/material";
-import { Close, Add, ContentCopy, Delete, FolderOpen } from "@mui/icons-material";
+import { Close, Add, ContentCopy, Delete, FolderOpen, AccountTree } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import type { RequestTab } from "@/types";
@@ -100,7 +100,15 @@ export default function TabBar({
                   gap: 0.75,
                 }}
               >
-                {tab.tabType === "collection" ? (
+                {tab.tabType === "testflow" ? (
+                  <AccountTree
+                    sx={{
+                      fontSize: 14,
+                      color: theme.palette.secondary.main,
+                      flexShrink: 0,
+                    }}
+                  />
+                ) : tab.tabType === "collection" ? (
                   /* Collection tab icon */
                   <FolderOpen
                     sx={{
