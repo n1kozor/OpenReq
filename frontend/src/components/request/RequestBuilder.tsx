@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Box,
   Select,
@@ -12,8 +12,10 @@ import {
   Chip,
   Typography,
   InputAdornment,
+  IconButton,
+  Tooltip,
 } from "@mui/material";
-import { Send, Save } from "@mui/icons-material";
+import { Send, Save, Dns, NetworkPing } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import KeyValueEditor from "@/components/common/KeyValueEditor";
@@ -23,6 +25,7 @@ import UrlInput from "./UrlInput";
 import AuthEditor from "./AuthEditor";
 import BodyEditor from "./BodyEditor";
 import RequestSettingsEditor from "./RequestSettingsEditor";
+import { DnsResolveModal, PingModal } from "./NetworkToolsModals";
 import type { HttpMethod, AuthType, BodyType, KeyValuePair, Environment, OAuthConfig, RequestSettings } from "@/types";
 import { defaultRequestSettings } from "@/types";
 
@@ -107,6 +110,29 @@ export default function RequestBuilder(props: RequestBuilderProps) {
     props.collectionVariables,
   );
 
+  const [dnsOpen, setDnsOpen] = useState(false);
+  const [pingOpen, setPingOpen] = useState(false);
+
+  const hostname = useMemo(() => {
+    let resolved = props.url;
+    if (resolvedVariables) {
+      for (const [key, info] of resolvedVariables) {
+        resolved = resolved.split(`{{${key}}}`).join(info.value);
+      }
+    }
+    for (const [key, value] of Object.entries(props.pathParams)) {
+      if (value) {
+        resolved = resolved.split(`{${key}}`).join(value);
+      }
+    }
+    try {
+      return new URL(resolved).hostname;
+    } catch {
+      const match = resolved.match(/(?:https?:\/\/)?([^/:]+)/);
+      return match?.[1] ?? "";
+    }
+  }, [props.url, resolvedVariables, props.pathParams]);
+
   const handleInsertVariable = (varKey: string) => {
     props.onUrlChange(props.url + `{{${varKey}}}`);
   };
@@ -167,6 +193,32 @@ export default function RequestBuilder(props: RequestBuilderProps) {
             ) : undefined
           }
         />
+
+        {/* DNS Resolve & Ping buttons */}
+        <Tooltip title={hostname ? t("network.dnsResolve") : t("network.noHostname")}>
+          <span>
+            <IconButton
+              size="small"
+              onClick={() => setDnsOpen(true)}
+              disabled={!hostname}
+              sx={{ width: 32, height: 32 }}
+            >
+              <Dns fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title={hostname ? t("network.ping") : t("network.noHostname")}>
+          <span>
+            <IconButton
+              size="small"
+              onClick={() => setPingOpen(true)}
+              disabled={!hostname}
+              sx={{ width: 32, height: 32 }}
+            >
+              <NetworkPing fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
 
         {/* Per-request env */}
         <FormControl size="small" sx={{ minWidth: 130 }}>
@@ -364,6 +416,10 @@ export default function RequestBuilder(props: RequestBuilderProps) {
           />
         )}
       </Box>
+
+      {/* Network tools modals */}
+      <DnsResolveModal open={dnsOpen} onClose={() => setDnsOpen(false)} hostname={hostname} />
+      <PingModal open={pingOpen} onClose={() => setPingOpen(false)} hostname={hostname} />
     </Box>
   );
 }

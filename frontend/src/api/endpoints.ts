@@ -186,6 +186,14 @@ export const proxyApi = {
     }),
 };
 
+// ── Network Tools ──
+export const networkApi = {
+  dnsResolve: (hostname: string) =>
+    client.post("/network/dns", { hostname }),
+  ping: (hostname: string, count?: number) =>
+    client.post("/network/ping", { hostname, count }),
+};
+
 // ── History ──
 export interface HistoryEntry {
   id: string;
