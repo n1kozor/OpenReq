@@ -244,16 +244,6 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   );
 
   // ── Load data ──
-  const loadCollections = useCallback(async () => {
-    try {
-      const { data: cols } = await collectionsApi.list();
-      setCollections(cols);
-      // Clear cached items/trees so they reload fresh
-      setCollectionItems({});
-      setCollectionTrees({});
-    } catch { /* ignore */ }
-  }, []);
-
   const buildTree = useCallback((items: CollectionItem[]): CollectionItem[] => {
     const map = new Map<string, CollectionItem>();
     const roots: CollectionItem[] = [];
@@ -276,6 +266,27 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     sortTree(roots);
     return roots;
   }, []);
+
+  const loadedCollectionIdsRef = useRef<string[]>([]);
+  // Keep ref in sync with loaded collection IDs
+  useEffect(() => {
+    loadedCollectionIdsRef.current = Object.keys(collectionTrees);
+  }, [collectionTrees]);
+
+  const loadCollections = useCallback(async () => {
+    try {
+      const { data: cols } = await collectionsApi.list();
+      setCollections(cols);
+      // Reload trees for already-loaded collections (keeps sidebar open & fresh)
+      const openIds = loadedCollectionIdsRef.current;
+      for (const colId of openIds) {
+        collectionsApi.listItems(colId).then(({ data }) => {
+          setCollectionItems((p) => ({ ...p, [colId]: data }));
+          setCollectionTrees((p) => ({ ...p, [colId]: buildTree(data) }));
+        }).catch(() => {});
+      }
+    } catch { /* ignore */ }
+  }, [buildTree]);
 
   const loadCollectionTree = useCallback(async (collectionId: string) => {
     if (collectionTreeLoading[collectionId]) return;
