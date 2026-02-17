@@ -10,6 +10,7 @@ export default function AssertionNode({ data, selected }: NodeProps) {
   const config = (d.config ?? {}) as Record<string, unknown>;
   const assertions = (config.assertions as unknown[]) || [];
   const runStatus = d._runStatus as string | undefined;
+  const animating = d._animating as boolean | undefined;
   const branchTaken = d._branchTaken as string | undefined;
   const assertionResults = d._assertionResults as { passed: boolean; name?: string }[] | undefined;
 
@@ -31,7 +32,7 @@ export default function AssertionNode({ data, selected }: NodeProps) {
   }
 
   return (
-    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#a855f7"), minWidth: 180 }}>
+    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#a855f7", animating), minWidth: 180 }}>
       <Handle type="target" position={Position.Top} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, pb: 0.25 }}>
         {icon}

@@ -7,9 +7,10 @@ export default function CollectionNode({ data, selected }: NodeProps) {
   const d = data as Record<string, unknown>;
   const config = (d.config ?? {}) as Record<string, unknown>;
   const runStatus = d._runStatus as string | undefined;
+  const animating = d._animating as boolean | undefined;
 
   return (
-    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#3b82f6"), minWidth: 180 }}>
+    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#3b82f6", animating), minWidth: 180 }}>
       <Handle type="target" position={Position.Top} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1 }}>
         <FolderOpen sx={{ fontSize: 16, color: "#3b82f6" }} />

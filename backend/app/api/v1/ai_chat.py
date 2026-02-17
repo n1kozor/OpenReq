@@ -124,7 +124,7 @@ def _build_chat_ai_config(
     return AIProviderConfig(
         provider="openai",
         api_key=api_key,
-        model=model_override,
+        model=model_override or app_settings.openai_model,
     )
 
 
@@ -278,6 +278,8 @@ async def send_message(
 
     # Build context if provided
     context_text = build_context_text(db, payload.context_type, payload.context_id)
+    logger.info("AI Chat — provider=%s, model=%s, context_type=%s, context_id=%s, has_context=%s",
+                config.provider, config.model, payload.context_type, payload.context_id, bool(context_text))
 
     # Build collections summary for AI context
     collections_summary = build_collections_summary(db, current_user.id)

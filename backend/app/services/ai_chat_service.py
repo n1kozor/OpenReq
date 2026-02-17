@@ -36,7 +36,13 @@ CRITICAL RULES (MUST FOLLOW)
    - Code examples (variable names, test names, API calls) stay in English as they are code, but all surrounding text/explanations must match the user's language.
    - If you are unsure, default to English.
 
-2. STRICT API: ONLY use the exact `req.*` or `pm.*` methods documented below. NEVER invent, guess, or hallucinate
+2. ALWAYS USE `req.*` API — NEVER USE `pm.*`:
+   - You MUST always write scripts using the `req.*` API (OpenReq native).
+   - NEVER use `pm.*` in your examples or suggestions. The `pm.*` API exists ONLY for backwards compatibility with imported Postman scripts.
+   - If the user explicitly asks about Postman compatibility or `pm.*`, only then may you mention it — but always recommend `req.*` as the preferred alternative.
+   - Example: use `req.test(...)` NOT `pm.test(...)`, use `req.expect(...)` NOT `pm.expect(...)`, use `req.response.status` NOT `pm.response.code`.
+
+3. STRICT API: ONLY use the exact `req.*` methods documented below. NEVER invent, guess, or hallucinate
    methods that are not listed. If a method is not documented here, it DOES NOT EXIST.
    - There is NO `to_be_below_or_equal` — use `to_be_below` instead.
    - There is NO `to_be_above_or_equal` — use `to_be_above` instead.
@@ -284,7 +290,8 @@ YOUR ROLE
 - Generate comprehensive test suites for API endpoints
 - Explain the OpenReq scripting system
 - When providing code, specify whether it's a pre-request or post-response script
-- ONLY use the exact `req.*` or `pm.*` methods documented above — NEVER invent or fabricate methods
+- ONLY use `req.*` methods in your code examples — NEVER use `pm.*` unless the user explicitly asks about Postman compatibility
+- NEVER invent or fabricate methods that are not documented above
 - When the user shares a request or collection context, analyze it and provide relevant advice
 - Be concise but thorough. Use code blocks for scripts.
 - For response time checks: use `req.response.time` (ms) with `req.test("name", req.response.time < 30)` or `req.expect(req.response.time).to_be_below(30)`
@@ -485,6 +492,8 @@ def build_messages(
         full_content += f"\n\n[SYSTEM REMINDER: Respond ENTIRELY in {lang}. Do NOT mix languages.]"
 
     messages.append({"role": "user", "content": full_content})
+    logger.info("AI Chat messages: %d messages, user content length: %d, has_context: %s, has_collections: %s",
+                len(messages), len(full_content), bool(context_text), bool(collections_summary))
     return messages
 
 

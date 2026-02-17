@@ -8,11 +8,12 @@ export default function WebSocketNode({ data, selected }: NodeProps) {
   const config = (d.config ?? {}) as Record<string, unknown>;
   const url = (config.ws_url as string) || "";
   const runStatus = d._runStatus as string | undefined;
+  const animating = d._animating as boolean | undefined;
   const statusCode = d._statusCode as number | undefined;
   const elapsedMs = d._elapsedMs as number | undefined;
 
   return (
-    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#14b8a6"), minWidth: 200 }}>
+    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#14b8a6", animating), minWidth: 200 }}>
       <Handle type="target" position={Position.Top} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <Cable sx={{ fontSize: 16, color: "#14b8a6" }} />

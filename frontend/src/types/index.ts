@@ -35,6 +35,7 @@ export interface AppSettings {
   has_openai_key: boolean;
   openai_api_key_hint: string | null;
   ai_provider: "openai" | "ollama";
+  openai_model: string | null;
   ollama_base_url: string | null;
   ollama_model: string | null;
   has_ollama_url: boolean;
@@ -44,6 +45,11 @@ export interface OllamaModel {
   name: string;
   size: number | null;
   modified_at: string | null;
+}
+
+export interface OpenAIModel {
+  id: string;
+  owned_by: string | null;
 }
 
 export interface AIGenerateResult {

@@ -15,6 +15,7 @@ class AppSettings(Base):
     ai_provider: Mapped[str] = mapped_column(String(20), default="openai")  # "openai" | "ollama"
     ollama_base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     ollama_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    openai_model: Mapped[str | None] = mapped_column(String(200), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 

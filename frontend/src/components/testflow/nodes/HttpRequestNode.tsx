@@ -11,11 +11,12 @@ export default function HttpRequestNode({ data, selected }: NodeProps) {
     (config.request_name_hint as string) ||
     "GET";
   const runStatus = d._runStatus as string | undefined;
+  const animating = d._animating as boolean | undefined;
   const statusCode = d._statusCode as number | undefined;
   const elapsedMs = d._elapsedMs as number | undefined;
 
   return (
-    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#22c55e"), minWidth: 200 }}>
+    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#22c55e", animating), minWidth: 200 }}>
       <Handle type="target" position={Position.Top} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <Http sx={{ fontSize: 16, color: "#22c55e" }} />

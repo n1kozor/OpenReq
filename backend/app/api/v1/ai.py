@@ -139,7 +139,7 @@ def _build_ai_config(db: Session) -> AIProviderConfig:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="OpenAI API key not configured. Set it in Settings or environment variables.",
         )
-    return AIProviderConfig(provider="openai", api_key=api_key)
+    return AIProviderConfig(provider="openai", api_key=api_key, model=app_settings.openai_model)
 
 
 # ── SSE helpers ──────────────────────────────────────────────────────────────

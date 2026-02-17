@@ -533,3 +533,69 @@ def _export_html(run: TestFlowRun) -> Response:
         media_type="text/html",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ── AI Test Flow Generation ─────────────────────────────────────────────────
+
+from pydantic import BaseModel as _BaseModel  # noqa: E402
+
+
+class AIGenerateRequest(_BaseModel):
+    collection_id: str
+    strategy: str = "comprehensive"
+    extra_prompt: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    request_ids: list[str] | None = None  # If provided, only include these requests
+
+
+@router.post("/{flow_id}/ai-generate")
+async def ai_generate_flow(
+    flow_id: str,
+    payload: AIGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate test flow nodes/edges with AI — streams SSE events."""
+    from app.config import settings as app_cfg
+    from app.models.app_settings import get_or_create_settings
+    from app.services.ai_generator import AIProviderConfig
+    from app.services.testflow_ai_generator import generate_testflow_stream
+
+    # Verify flow exists and belongs to user
+    flow = db.query(TestFlow).filter(TestFlow.id == flow_id).first()
+    if not flow or flow.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    # Build AI config
+    app_settings = get_or_create_settings(db)
+    provider = payload.provider or app_settings.ai_provider or "openai"
+
+    if provider == "ollama":
+        config = AIProviderConfig(
+            provider="ollama",
+            base_url=app_settings.ollama_base_url or "http://localhost:11434",
+            model=payload.model or app_settings.ollama_model,
+        )
+    else:
+        api_key = app_settings.openai_api_key or app_cfg.OPENAI_API_KEY
+        if not api_key:
+            raise HTTPException(status_code=400, detail="OpenAI API key not configured")
+        config = AIProviderConfig(
+            provider="openai",
+            api_key=api_key,
+            model=payload.model or app_settings.openai_model,
+        )
+
+    return StreamingResponse(
+        generate_testflow_stream(
+            db=db,
+            collection_id=payload.collection_id,
+            strategy=payload.strategy,
+            extra_prompt=payload.extra_prompt,
+            config=config,
+            request_ids=payload.request_ids,
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

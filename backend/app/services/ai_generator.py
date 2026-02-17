@@ -32,9 +32,9 @@ def _create_client(config: AIProviderConfig) -> OpenAI:
 
 def _get_model(config: AIProviderConfig) -> str:
     """Return the model name based on provider config."""
-    if config.provider == "ollama":
-        return config.model or "llama3.1"
-    return "gpt-5-mini"
+    if config.model:
+        return config.model
+    return "llama3.1" if config.provider == "ollama" else "gpt-4.1-mini"
 
 
 SYSTEM_PROMPT = """You are an API documentation parser. Given API documentation text, extract all API endpoints and return them as structured JSON.

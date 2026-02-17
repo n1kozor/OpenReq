@@ -9,6 +9,7 @@ export default function GraphQLNode({ data, selected }: NodeProps) {
   const url = (config.graphql_url as string) || "";
   const query = (config.graphql_query as string) || "";
   const runStatus = d._runStatus as string | undefined;
+  const animating = d._animating as boolean | undefined;
   const statusCode = d._statusCode as number | undefined;
   const elapsedMs = d._elapsedMs as number | undefined;
 
@@ -17,7 +18,7 @@ export default function GraphQLNode({ data, selected }: NodeProps) {
   const opName = opMatch ? opMatch[1] : "";
 
   return (
-    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#e879f9"), minWidth: 200 }}>
+    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#e879f9", animating), minWidth: 200 }}>
       <Handle type="target" position={Position.Top} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
         <Hub sx={{ fontSize: 16, color: "#e879f9" }} />

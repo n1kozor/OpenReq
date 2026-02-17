@@ -97,6 +97,7 @@ interface SidebarProps {
   onOpenSDK: () => void;
   onOpenAIAgent: () => void;
   onOpenTestBuilder: () => void;
+  onGenerateDocs: (collectionId: string, collectionName: string, folderId?: string, folderName?: string) => void;
 }
 
 type SidebarRow =
@@ -139,6 +140,7 @@ export default function Sidebar({
   onOpenSDK,
   onOpenAIAgent,
   onOpenTestBuilder,
+  onGenerateDocs,
 }: SidebarProps) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -817,6 +819,15 @@ export default function Sidebar({
         <MuiMenuItem
           onClick={() => {
             setColMenuPos(null);
+            if (colMenuTarget) onGenerateDocs(colMenuTarget.id, colMenuTarget.name);
+          }}
+        >
+          <AutoAwesome sx={{ mr: 1.5, fontSize: 16, color: "secondary.main" }} />{" "}
+          {t("docGenerator.menuItem")}
+        </MuiMenuItem>
+        <MuiMenuItem
+          onClick={() => {
+            setColMenuPos(null);
             if (colMenuTarget) onDuplicateCollection(colMenuTarget.id, colMenuTarget.name);
           }}
         >
@@ -896,6 +907,16 @@ export default function Sidebar({
             }}
           >
             <FileDownload sx={{ mr: 1.5, fontSize: 16 }} /> {t("collection.exportFolder")}
+          </MuiMenuItem>
+          <MuiMenuItem
+            onClick={() => {
+              setItemMenuPos(null);
+              if (itemMenuTarget && itemMenuCollectionId)
+                onGenerateDocs(itemMenuCollectionId, "", itemMenuTarget.id, itemMenuTarget.name);
+            }}
+          >
+            <AutoAwesome sx={{ mr: 1.5, fontSize: 16, color: "secondary.main" }} />{" "}
+            {t("docGenerator.menuItem")}
           </MuiMenuItem>
           </>
         ) : (

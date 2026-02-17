@@ -3,7 +3,7 @@ import {
 } from "@mui/material";
 import {
   PlayArrow, Stop, Save, AutoFixHigh, FitScreen,
-  Undo, Redo, FileDownload,
+  Undo, Redo, FileDownload, AutoAwesome,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import type { Environment } from "@/types";
@@ -25,6 +25,8 @@ interface TestFlowToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
   onExportJson: () => void;
+  onAIGenerate: () => void;
+  isGenerating: boolean;
   summary?: {
     total_nodes: number;
     passed_count: number;
@@ -51,6 +53,8 @@ export default function TestFlowToolbar({
   onUndo,
   onRedo,
   onExportJson,
+  onAIGenerate,
+  isGenerating,
   summary,
 }: TestFlowToolbarProps) {
   const { t } = useTranslation();
@@ -140,6 +144,25 @@ export default function TestFlowToolbar({
           <IconButton size="small" onClick={onFitView}>
             <FitScreen sx={{ fontSize: 18 }} />
           </IconButton>
+        </Tooltip>
+        <Tooltip title={t("testFlowWizard.generate")}>
+          <span>
+            <IconButton
+              size="small"
+              onClick={onAIGenerate}
+              disabled={isRunning || isGenerating}
+              sx={{
+                color: isGenerating ? "#eab308" : "primary.main",
+                animation: isGenerating ? "spin 2s linear infinite" : undefined,
+                "@keyframes spin": {
+                  "0%": { transform: "rotate(0deg)" },
+                  "100%": { transform: "rotate(360deg)" },
+                },
+              }}
+            >
+              <AutoAwesome sx={{ fontSize: 18 }} />
+            </IconButton>
+          </span>
         </Tooltip>
         <Tooltip title={t("testFlow.exportJson")}>
           <IconButton size="small" onClick={onExportJson}>

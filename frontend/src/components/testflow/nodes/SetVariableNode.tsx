@@ -7,10 +7,11 @@ export default function SetVariableNode({ data, selected }: NodeProps) {
   const d = data as Record<string, unknown>;
   const config = (d.config ?? {}) as Record<string, unknown>;
   const runStatus = d._runStatus as string | undefined;
+  const animating = d._animating as boolean | undefined;
   const assignments = (config.assignments as { key: string; value: string }[]) || [];
 
   return (
-    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#f97316"), minWidth: 160 }}>
+    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#f97316", animating), minWidth: 160 }}>
       <Handle type="target" position={Position.Top} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, borderBottom: assignments.length ? "1px solid rgba(255,255,255,0.08)" : "none" }}>
         <DataObject sx={{ fontSize: 16, color: "#f97316" }} />

@@ -33,6 +33,7 @@ import TestFlowToolbar from "./TestFlowToolbar";
 import TestFlowPalette from "./TestFlowPalette";
 import TestFlowNodeInspector from "./TestFlowNodeInspector";
 import TestFlowRunReportView from "./TestFlowRunReportView";
+import AITestFlowWizard from "./AITestFlowWizard";
 
 import HttpRequestNode from "./nodes/HttpRequestNode";
 import CollectionNode from "./nodes/CollectionNode";
@@ -124,6 +125,13 @@ export default function TestFlowCanvas({
     type: "node" | "edge" | "pane";
     targetId?: string;
   } | null>(null);
+
+  // AI Wizard
+  const [aiWizardOpen, setAiWizardOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiNodeCount, setAiNodeCount] = useState(0);
+  const [aiProgressPhase, setAiProgressPhase] = useState("");
+  const aiAbortRef = useRef<AbortController | null>(null);
 
   // Undo/redo
   const historyRef = useRef<{ nodes: Node[]; edges: Edge[] }[]>([]);
@@ -800,6 +808,117 @@ export default function TestFlowCanvas({
     setIsRunning(false);
   }, []);
 
+  // ── AI Generate ──
+  const handleAIGenerate = useCallback(
+    (collectionId: string, strategy: string, extraPrompt: string | undefined, provider: string | undefined, model: string | undefined, requestIds: string[] | undefined) => {
+      if (!flow) return;
+      setIsGenerating(true);
+      setAiNodeCount(0);
+      setAiProgressPhase("collecting");
+
+      const pendingNodes: Node[] = [];
+      const pendingEdges: Edge[] = [];
+
+      const ctrl = testFlowsApi.aiGenerateStream(
+        flow.id,
+        { collection_id: collectionId, strategy, extra_prompt: extraPrompt, provider, model, request_ids: requestIds },
+        {
+          onProgress: (phase) => {
+            setAiProgressPhase(phase);
+          },
+          onNode: (nodeData) => {
+            const rfNode: Node = {
+              id: nodeData.id,
+              type: nodeData.node_type,
+              position: { x: nodeData.position_x, y: nodeData.position_y },
+              data: {
+                node_type: nodeData.node_type,
+                label: nodeData.label,
+                config: nodeData.config,
+                _animating: true,
+              },
+            };
+            pendingNodes.push(rfNode);
+            setNodes((nds) => [...nds, rfNode]);
+            setAiNodeCount((c) => c + 1);
+
+            // Remove animation flag after animation completes
+            setTimeout(() => {
+              setNodes((nds) =>
+                nds.map((n) =>
+                  n.id === rfNode.id
+                    ? { ...n, data: { ...n.data, _animating: false } }
+                    : n,
+                ),
+              );
+            }, 600);
+          },
+          onEdge: (edgeData) => {
+            const rfEdge: Edge = {
+              id: edgeData.id,
+              source: edgeData.source_node_id,
+              target: edgeData.target_node_id,
+              sourceHandle: edgeData.source_handle || undefined,
+              targetHandle: edgeData.target_handle || undefined,
+              label: edgeData.label || undefined,
+              type: "animated",
+              data: {},
+            };
+            pendingEdges.push(rfEdge);
+            setEdges((eds) => [...eds, rfEdge]);
+          },
+          onComplete: () => {
+            setIsGenerating(false);
+            setAiWizardOpen(false);
+            setAiProgressPhase("");
+            setIsDirty(true);
+
+            // Auto-layout after a short delay to let all nodes render
+            setTimeout(() => {
+              // Use dagre to layout the newly created nodes
+              const g = new dagre.graphlib.Graph();
+              g.setDefaultEdgeLabel(() => ({}));
+              g.setGraph({ rankdir: "TB", ranksep: 60, nodesep: 40 });
+
+              setNodes((currentNodes) => {
+                setEdges((currentEdges) => {
+                  for (const node of currentNodes) {
+                    g.setNode(node.id, { width: 200, height: 60 });
+                  }
+                  for (const edge of currentEdges) {
+                    g.setEdge(edge.source, edge.target);
+                  }
+                  dagre.layout(g);
+                  return currentEdges;
+                });
+
+                return currentNodes.map((node) => {
+                  const pos = g.node(node.id);
+                  return pos
+                    ? { ...node, position: { x: pos.x - 100, y: pos.y - 30 } }
+                    : node;
+                });
+              });
+
+              setTimeout(() => reactFlowInstance.fitView({ padding: 0.2 }), 100);
+              pushHistory();
+            }, 300);
+
+            setSnackbar({ message: t("testFlowWizard.complete"), severity: "success" });
+          },
+          onError: (message) => {
+            setIsGenerating(false);
+            setAiProgressPhase("");
+            setSnackbar({ message, severity: "error" });
+          },
+        },
+      );
+
+      aiAbortRef.current = ctrl;
+    },
+    [flow, setNodes, setEdges, reactFlowInstance, pushHistory, t],
+  );
+
   if (!flow) return null;
 
   return (
@@ -821,6 +940,8 @@ export default function TestFlowCanvas({
         onUndo={handleUndo}
         onRedo={handleRedo}
         onExportJson={handleExportJson}
+        onAIGenerate={() => setAiWizardOpen(true)}
+        isGenerating={isGenerating}
         summary={summary as TestFlowCanvasProps["environments"] extends never ? never : typeof summary extends null ? null : {
           total_nodes: number;
           passed_count: number;
@@ -906,6 +1027,11 @@ export default function TestFlowCanvas({
               0%, 100% { box-shadow: 0 0 8px rgba(234,179,8,0.2); }
               50% { box-shadow: 0 0 20px rgba(234,179,8,0.5); }
             }
+            @keyframes nodeAppear {
+              0% { transform: scale(0.3); opacity: 0; filter: brightness(2); }
+              60% { transform: scale(1.08); opacity: 0.9; }
+              100% { transform: scale(1); opacity: 1; filter: brightness(1); }
+            }
             .react-flow__panel { }
             .rf-controls-dark button {
               background-color: rgba(30, 41, 59, 0.95) !important;
@@ -965,6 +1091,24 @@ export default function TestFlowCanvas({
           </Alert>
         ) : undefined}
       </Snackbar>
+
+      {/* AI Test Flow Wizard */}
+      <AITestFlowWizard
+        open={aiWizardOpen}
+        onClose={() => {
+          if (isGenerating) {
+            aiAbortRef.current?.abort();
+            setIsGenerating(false);
+            setAiProgressPhase("");
+          }
+          setAiWizardOpen(false);
+        }}
+        onGenerate={handleAIGenerate}
+        collections={collections}
+        isGenerating={isGenerating}
+        nodeCount={aiNodeCount}
+        progressPhase={aiProgressPhase}
+      />
 
       {/* ── Context Menu ── */}
       <Menu

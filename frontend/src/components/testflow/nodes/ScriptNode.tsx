@@ -7,10 +7,11 @@ export default function ScriptNode({ data, selected }: NodeProps) {
   const d = data as Record<string, unknown>;
   const config = (d.config ?? {}) as Record<string, unknown>;
   const runStatus = d._runStatus as string | undefined;
+  const animating = d._animating as boolean | undefined;
   const lang = (config.language as string) || "javascript";
 
   return (
-    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#f59e0b"), minWidth: 170 }}>
+    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#f59e0b", animating), minWidth: 170 }}>
       <Handle type="target" position={Position.Top} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1 }}>
         <Code sx={{ fontSize: 16, color: "#f59e0b" }} />

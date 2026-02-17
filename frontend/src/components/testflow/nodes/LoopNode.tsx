@@ -9,12 +9,13 @@ export default function LoopNode({ data, selected }: NodeProps) {
   const d = data as Record<string, unknown>;
   const config = (d.config ?? {}) as Record<string, unknown>;
   const runStatus = d._runStatus as string | undefined;
+  const animating = d._animating as boolean | undefined;
   const mode = (config.mode as string) || "count";
   const count = (config.count as number) ?? 3;
   const iterations = d._iterationsCompleted as number | undefined;
 
   return (
-    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#06b6d4"), minWidth: 160 }}>
+    <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#06b6d4", animating), minWidth: 160 }}>
       <Handle type="target" position={Position.Top} />
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1 }}>
         <Loop sx={{ fontSize: 16, color: "#06b6d4" }} />

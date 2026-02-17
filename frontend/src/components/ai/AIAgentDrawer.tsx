@@ -56,6 +56,7 @@ import type {
   AIConversation,
   AIChatMessage,
   OllamaModel,
+  OpenAIModel,
   AppSettings,
 } from "@/types";
 
@@ -461,6 +462,7 @@ export default function AIAgentDrawer({
   const [provider, setProvider] = useState<"openai" | "ollama">("openai");
   const [model, setModel] = useState("");
   const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [openaiModels, setOpenaiModels] = useState<OpenAIModel[]>([]);
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
   // Context
@@ -516,9 +518,15 @@ export default function AIAgentDrawer({
     appSettingsApi.get().then(({ data }) => {
       setAppSettings(data);
       setProvider(data.ai_provider || "openai");
+      if (data.openai_model) setModel(data.openai_model);
       if (data.ai_provider === "ollama" && data.has_ollama_url) {
         appSettingsApi.getOllamaModels(data.ollama_base_url || undefined).then(({ data: models }) => {
           setOllamaModels(models);
+        }).catch(() => {});
+      }
+      if (data.has_openai_key) {
+        appSettingsApi.getOpenAIModels().then(({ data: models }) => {
+          setOpenaiModels(models);
         }).catch(() => {});
       }
     }).catch(() => {});
@@ -1218,15 +1226,23 @@ export default function AIAgentDrawer({
                 </Select>
               ) : (
                 <Select
-                  value={model || "gpt-5-mini"}
+                  value={model || appSettings?.openai_model || "gpt-4.1-mini"}
                   onChange={(e) => setModel(e.target.value)}
                   label={t("aiAgent.model")}
                   sx={{ fontSize: 12, height: 32 }}
                   disabled={isReadOnly}
                 >
-                  <MenuItem value="gpt-5-mini" sx={{ fontSize: 12 }}>gpt-5-mini</MenuItem>
-                  <MenuItem value="gpt-4.1-mini" sx={{ fontSize: 12 }}>gpt-4.1-mini</MenuItem>
-                  <MenuItem value="gpt-4.1" sx={{ fontSize: 12 }}>gpt-4.1</MenuItem>
+                  {openaiModels.length > 0 ? (
+                    openaiModels.map((m) => (
+                      <MenuItem key={m.id} value={m.id} sx={{ fontSize: 12 }}>{m.id}</MenuItem>
+                    ))
+                  ) : (
+                    [
+                      <MenuItem key="gpt-4.1-mini" value="gpt-4.1-mini" sx={{ fontSize: 12 }}>gpt-4.1-mini</MenuItem>,
+                      <MenuItem key="gpt-4.1" value="gpt-4.1" sx={{ fontSize: 12 }}>gpt-4.1</MenuItem>,
+                      <MenuItem key="gpt-5-mini" value="gpt-5-mini" sx={{ fontSize: 12 }}>gpt-5-mini</MenuItem>,
+                    ]
+                  )}
                 </Select>
               )}
             </FormControl>

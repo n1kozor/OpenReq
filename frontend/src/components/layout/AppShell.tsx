@@ -28,6 +28,7 @@ import ImportExportDialog from "@/components/import/ImportExportDialog";
 import CodeGenDialog from "@/components/codegen/CodeGenDialog";
 import SDKGeneratorDialog from "@/components/sdk/SDKGeneratorDialog";
 import CollectionRunnerDialog from "@/components/collection/CollectionRunnerDialog";
+import DocGeneratorDialog from "@/components/collection/DocGeneratorDialog";
 import ScriptEditor from "@/components/request/ScriptEditor";
 import PanelGridLayout from "./PanelGridLayout";
 import AIAgentDrawer, { DRAWER_WIDTH, type ApplyScriptPayload } from "@/components/ai/AIAgentDrawer";
@@ -240,6 +241,12 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const [showAIAgent, setShowAIAgent] = useState(false);
   const [showTestFlowList, setShowTestFlowList] = useState(false);
   const [showRunner, setShowRunner] = useState<{ id: string; name: string } | null>(null);
+  const [showDocGen, setShowDocGen] = useState<{
+    collectionId: string;
+    collectionName: string;
+    folderId?: string;
+    folderName?: string;
+  } | null>(null);
   const didInitCollections = useRef(false);
   const didInitWorkspaces = useRef(false);
   const lastEnvWorkspaceId = useRef<string | null>(null);
@@ -1134,6 +1141,19 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     setShowRunner({ id: collectionId, name: col?.name ?? "Collection" });
   }, [collections]);
 
+  const handleGenerateDocs = useCallback(
+    (collectionId: string, collectionName: string, folderId?: string, folderName?: string) => {
+      const col = collections.find((c) => c.id === collectionId);
+      setShowDocGen({
+        collectionId,
+        collectionName: col?.name ?? (collectionName || "Collection"),
+        folderId,
+        folderName,
+      });
+    },
+    [collections],
+  );
+
   // ── Environment operations ──
   const handleCreateEnv = useCallback(async (name: string, envType: string, variables: { key: string; value: string; is_secret: boolean }[]) => {
     if (!currentWorkspaceId) {
@@ -1344,6 +1364,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onRenameItem={(id, name) => setShowRename({ id, name, type: "item" })}
         onDeleteItem={(id, name) => setShowDelete({ id, name, type: "item" })}
         onRunCollection={handleRunCollection}
+        onGenerateDocs={handleGenerateDocs}
         onOpenEnvironments={() => setShowEnvManager(true)}
         onOpenHistory={() => setShowHistory(true)}
         onOpenSettings={() => setView("settings")}
@@ -1886,6 +1907,18 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           environments={environments}
           selectedEnvId={selectedEnvId}
           onVariablesChanged={() => { loadGlobals(); loadEnvironments(); loadCollections(); }}
+        />
+      )}
+
+      {/* Documentation Generator */}
+      {showDocGen && (
+        <DocGeneratorDialog
+          open={!!showDocGen}
+          onClose={() => setShowDocGen(null)}
+          collectionId={showDocGen.collectionId}
+          collectionName={showDocGen.collectionName}
+          folderId={showDocGen.folderId}
+          folderName={showDocGen.folderName}
         />
       )}
 

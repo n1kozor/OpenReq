@@ -9,13 +9,14 @@ export default function ConditionNode({ data, selected }: NodeProps) {
   const d = data as Record<string, unknown>;
   const config = (d.config ?? {}) as Record<string, unknown>;
   const runStatus = d._runStatus as string | undefined;
+  const animating = d._animating as boolean | undefined;
   const branchTaken = d._branchTaken as string | undefined;
   const expression = (config.expression as string) || "";
 
   return (
     <Box
       sx={{
-        ...nodeStatusStyles(runStatus, selected, "#ec4899"),
+        ...nodeStatusStyles(runStatus, selected, "#ec4899", animating),
         minWidth: 180,
         position: "relative",
         borderRadius: 2,

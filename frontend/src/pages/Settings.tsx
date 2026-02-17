@@ -50,7 +50,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import { appSettingsApi, usersApi } from "@/api/endpoints";
-import type { User, OllamaModel } from "@/types";
+import type { User, OllamaModel, OpenAIModel } from "@/types";
 
 const LANGUAGES = [
   { code: "en", label: "English" },
@@ -85,6 +85,11 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
   const [hasKey, setHasKey] = useState(false);
   const [keyHint, setKeyHint] = useState<string | null>(null);
 
+  // OpenAI model state
+  const [openaiModel, setOpenaiModel] = useState("");
+  const [openaiModels, setOpenaiModels] = useState<OpenAIModel[]>([]);
+  const [openaiModelsLoading, setOpenaiModelsLoading] = useState(false);
+
   // Ollama state
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
   const [ollamaModel, setOllamaModel] = useState("");
@@ -116,6 +121,7 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
         setHasKey(data.has_openai_key);
         setKeyHint(data.openai_api_key_hint);
         setAiProvider(data.ai_provider || "openai");
+        if (data.openai_model) setOpenaiModel(data.openai_model);
         if (data.ollama_base_url) setOllamaBaseUrl(data.ollama_base_url);
         if (data.ollama_model) setOllamaModel(data.ollama_model);
       })
@@ -199,12 +205,29 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
     }
   };
 
+  const handleFetchOpenAIModels = async () => {
+    setOpenaiModelsLoading(true);
+    try {
+      const { data } = await appSettingsApi.getOpenAIModels();
+      setOpenaiModels(data);
+      if (data.length === 0) {
+        setKeyError(t("settings.openaiNoModels"));
+      }
+    } catch {
+      setKeyError(t("settings.openaiNoModels"));
+      setOpenaiModels([]);
+    } finally {
+      setOpenaiModelsLoading(false);
+    }
+  };
+
   const handleSaveProvider = async () => {
     setOllamaSaving(true);
     setOllamaError(null);
     try {
       const { data } = await appSettingsApi.update({
         ai_provider: aiProvider,
+        openai_model: aiProvider === "openai" ? openaiModel : undefined,
         ollama_base_url: aiProvider === "ollama" ? ollamaBaseUrl.trim() : undefined,
         ollama_model: aiProvider === "ollama" ? ollamaModel : undefined,
       });
@@ -495,6 +518,56 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
                     </Button>
                   )}
                 </Box>
+
+                {/* OpenAI Model Selection */}
+                <Box sx={{ display: "flex", gap: 1, alignItems: "center", mt: 1 }}>
+                  <FormControl size="small" sx={{ flex: 1 }}>
+                    <InputLabel>{t("settings.openaiModel")}</InputLabel>
+                    <Select
+                      value={openaiModel}
+                      onChange={(e) => setOpenaiModel(e.target.value)}
+                      label={t("settings.openaiModel")}
+                    >
+                      {openaiModels.map((m) => (
+                        <MenuItem key={m.id} value={m.id}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            {m.id}
+                            {m.owned_by && (
+                              <Typography variant="caption" color="text.secondary">
+                                ({m.owned_by})
+                              </Typography>
+                            )}
+                          </Box>
+                        </MenuItem>
+                      ))}
+                      {openaiModel && !openaiModels.find((m) => m.id === openaiModel) && (
+                        <MenuItem value={openaiModel}>{openaiModel}</MenuItem>
+                      )}
+                    </Select>
+                  </FormControl>
+                  <Button
+                    variant="outlined"
+                    onClick={handleFetchOpenAIModels}
+                    disabled={openaiModelsLoading || !hasKey}
+                    startIcon={
+                      openaiModelsLoading ? (
+                        <CircularProgress size={16} />
+                      ) : (
+                        <Refresh />
+                      )
+                    }
+                    sx={{ whiteSpace: "nowrap" }}
+                  >
+                    {t("settings.openaiModelFetch")}
+                  </Button>
+                </Box>
+
+                {/* Tool compatibility warning */}
+                <Alert severity="info" sx={{ borderRadius: 2, mt: 0.5 }}>
+                  <Typography variant="caption">
+                    {t("settings.openaiModelWarning")}
+                  </Typography>
+                </Alert>
               </Box>
             )}
 

@@ -22,11 +22,17 @@ class OllamaModelOut(BaseModel):
     modified_at: str | None = None
 
 
+class OpenAIModelOut(BaseModel):
+    id: str
+    owned_by: str | None = None
+
+
 def _build_settings_out(s) -> AppSettingsOut:
     return AppSettingsOut(
         has_openai_key=bool(s.openai_api_key),
         openai_api_key_hint=f"...{s.openai_api_key[-4:]}" if s.openai_api_key else None,
         ai_provider=s.ai_provider or "openai",
+        openai_model=s.openai_model,
         ollama_base_url=s.ollama_base_url,
         ollama_model=s.ollama_model,
         has_ollama_url=bool(s.ollama_base_url),
@@ -57,6 +63,8 @@ def update_app_settings(
         s.ollama_base_url = payload.ollama_base_url if payload.ollama_base_url else None
     if payload.ollama_model is not None:
         s.ollama_model = payload.ollama_model if payload.ollama_model else None
+    if payload.openai_model is not None:
+        s.openai_model = payload.openai_model if payload.openai_model else None
     db.commit()
     db.refresh(s)
     return _build_settings_out(s)
@@ -84,4 +92,41 @@ def get_ollama_models(
         ]
     except Exception as e:
         logger.warning("Failed to fetch Ollama models from %s: %s", url, e)
+        return []
+
+
+# Prefixes for chat-capable OpenAI models
+_OPENAI_CHAT_PREFIXES = ("gpt-", "o1-", "o3-", "o4-", "chatgpt-")
+
+
+@router.get("/openai-models", response_model=list[OpenAIModelOut])
+def get_openai_models(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Fetch available models from the OpenAI API using the stored API key."""
+    s = get_or_create_settings(db)
+    if not s.openai_api_key:
+        return []
+    try:
+        resp = httpx.get(
+            "https://api.openai.com/v1/models",
+            headers={"Authorization": f"Bearer {s.openai_api_key}"},
+            timeout=15.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        models = data.get("data", [])
+        result = [
+            OpenAIModelOut(
+                id=m.get("id", ""),
+                owned_by=m.get("owned_by"),
+            )
+            for m in models
+            if m.get("id", "").startswith(_OPENAI_CHAT_PREFIXES)
+        ]
+        result.sort(key=lambda m: m.id)
+        return result
+    except Exception as e:
+        logger.warning("Failed to fetch OpenAI models: %s", e)
         return []

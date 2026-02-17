@@ -16,6 +16,7 @@ import type {
   PostmanImportResult,
   AppSettings,
   OllamaModel,
+  OpenAIModel,
   CollectionRunSummary,
   CollectionRunDetail,
   AIConversation,
@@ -24,6 +25,8 @@ import type {
   TestFlowSummary,
   TestFlowRunSummary,
   TestFlowRunDetail,
+  TestFlowNodeData,
+  TestFlowEdgeData,
 } from "@/types";
 
 // ── Auth ──
@@ -74,6 +77,7 @@ export const appSettingsApi = {
   update: (data: {
     openai_api_key?: string;
     ai_provider?: string;
+    openai_model?: string;
     ollama_base_url?: string;
     ollama_model?: string;
   }) => client.patch<AppSettings>("/settings/", data),
@@ -81,6 +85,7 @@ export const appSettingsApi = {
     client.get<OllamaModel[]>("/settings/ollama-models", {
       params: baseUrl ? { base_url: baseUrl } : undefined,
     }),
+  getOpenAIModels: () => client.get<OpenAIModel[]>("/settings/openai-models"),
 };
 
 // ── Workspaces ──
@@ -839,5 +844,191 @@ export const testFlowsApi = {
     a.download = `flow-report-${runId.slice(0, 8)}.${format}`;
     a.click();
     URL.revokeObjectURL(url);
+  },
+
+  aiGenerateStream: (
+    flowId: string,
+    data: {
+      collection_id: string;
+      strategy: string;
+      extra_prompt?: string;
+      provider?: string;
+      model?: string;
+      request_ids?: string[];
+    },
+    callbacks: {
+      onProgress: (phase: string, data: Record<string, unknown>) => void;
+      onNode: (node: TestFlowNodeData) => void;
+      onEdge: (edge: TestFlowEdgeData) => void;
+      onComplete: (data: { node_count: number; edge_count: number }) => void;
+      onError: (message: string) => void;
+    },
+  ): AbortController => {
+    const ctrl = new AbortController();
+
+    fetch(`${API_URL}/api/v1/test-flows/${flowId}/ai-generate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("openreq-token")}`,
+      },
+      body: JSON.stringify(data),
+      signal: ctrl.signal,
+    })
+      .then(async (resp) => {
+        if (!resp.ok || !resp.body) {
+          callbacks.onError(`HTTP ${resp.status}`);
+          return;
+        }
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+
+          for (const part of parts) {
+            if (!part.trim()) continue;
+            let event = "";
+            let dataStr = "";
+            for (const line of part.split("\n")) {
+              if (line.startsWith("event: ")) event = line.slice(7);
+              else if (line.startsWith("data: ")) dataStr += line.slice(6);
+            }
+            if (!dataStr) continue;
+            try {
+              const parsed = JSON.parse(dataStr);
+              switch (event) {
+                case "progress":
+                  callbacks.onProgress(parsed.phase, parsed);
+                  break;
+                case "node":
+                  callbacks.onNode(parsed.node as TestFlowNodeData);
+                  break;
+                case "edge":
+                  callbacks.onEdge(parsed.edge as TestFlowEdgeData);
+                  break;
+                case "complete":
+                  callbacks.onComplete(parsed);
+                  break;
+                case "error":
+                  callbacks.onError(parsed.message);
+                  break;
+              }
+            } catch {
+              /* skip */
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError") callbacks.onError(err.message);
+      });
+
+    return ctrl;
+  },
+};
+
+// ── Documentation Generator ──
+export interface DocGenCallbacks {
+  onProgress: (phase: string, data: Record<string, unknown>) => void;
+  onChunk: (text: string) => void;
+  onComplete: (result: {
+    type: "html" | "zip";
+    html: string;
+    zip_base64?: string;
+    filename: string;
+  }) => void;
+  onError: (message: string) => void;
+}
+
+export const docsApi = {
+  generateStream: (
+    data: {
+      collection_id: string;
+      folder_id?: string | null;
+      doc_language?: string;
+      use_ai?: boolean;
+      extra_prompt?: string;
+      include_sdk?: boolean;
+      sdk_languages?: string[];
+      provider?: string;
+      model?: string;
+    },
+    callbacks: DocGenCallbacks,
+  ): AbortController => {
+    const ctrl = new AbortController();
+    const token = localStorage.getItem("openreq-token");
+
+    fetch(`${API_URL}/api/v1/docs/generate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+      signal: ctrl.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const err = await response
+            .json()
+            .catch(() => ({ detail: "Generation failed" }));
+          callbacks.onError(err.detail || "Documentation generation failed");
+          return;
+        }
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() || "";
+
+          for (const part of parts) {
+            if (!part.trim()) continue;
+            let event = "";
+            let dataStr = "";
+            for (const line of part.split("\n")) {
+              if (line.startsWith("event: ")) event = line.slice(7);
+              else if (line.startsWith("data: ")) dataStr += line.slice(6);
+            }
+            if (!event || !dataStr) continue;
+            try {
+              const parsed = JSON.parse(dataStr);
+              switch (event) {
+                case "progress":
+                  callbacks.onProgress(parsed.phase, parsed);
+                  break;
+                case "chunk":
+                  callbacks.onChunk(parsed.text);
+                  break;
+                case "complete":
+                  callbacks.onComplete(parsed);
+                  break;
+                case "error":
+                  callbacks.onError(parsed.message);
+                  break;
+              }
+            } catch {
+              /* skip malformed */
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        if (err.name !== "AbortError")
+          callbacks.onError(err.message || "Connection failed");
+      });
+
+    return ctrl;
   },
 };

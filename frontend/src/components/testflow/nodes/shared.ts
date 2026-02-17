@@ -4,6 +4,7 @@ export function nodeStatusStyles(
   runStatus: string | undefined,
   selected: boolean | undefined,
   accentColor: string,
+  animating?: boolean,
 ): SxProps<Theme> {
   const base: SxProps<Theme> = {
     border: selected ? `2px solid ${accentColor}` : "1px solid rgba(255,255,255,0.12)",
@@ -11,6 +12,11 @@ export function nodeStatusStyles(
     bgcolor: "background.paper",
     transition: "border-color 0.4s ease, box-shadow 0.4s ease, opacity 0.4s ease",
     fontSize: "0.85rem",
+    ...(animating && {
+      animation: "nodeAppear 0.5s ease-out",
+      borderColor: accentColor,
+      boxShadow: `0 0 20px ${accentColor}40`,
+    }),
   };
 
   if (runStatus === "running") {

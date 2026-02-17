@@ -60,6 +60,7 @@ def _run_migrations():
         ("collection_items", "pre_request_script", "TEXT"),
         ("collection_items", "post_response_script", "TEXT"),
         ("collection_items", "script_language", "VARCHAR(20)"),
+        ("app_settings", "openai_model", "VARCHAR(200)"),
     ]
     for table, column, col_type in migrations:
         if table in inspector.get_table_names():
