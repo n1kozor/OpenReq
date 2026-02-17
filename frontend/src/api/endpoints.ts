@@ -126,6 +126,8 @@ export const collectionsApi = {
   deleteItem: (itemId: string) => client.delete(`/collections/items/${itemId}`),
   reorder: (collectionId: string, items: { id: string; sort_order: number; parent_id?: string }[]) =>
     client.put(`/collections/${collectionId}/reorder`, { items }),
+  duplicate: (collectionId: string, name: string) =>
+    client.post<Collection>(`/collections/${collectionId}/duplicate`, { name }),
 };
 
 // ── Requests ──

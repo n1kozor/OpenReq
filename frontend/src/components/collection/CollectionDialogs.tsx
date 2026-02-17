@@ -330,6 +330,55 @@ export function ConfirmDeleteDialog({ open, itemName, onClose, onConfirm }: Conf
   );
 }
 
+// ── Duplicate Collection Dialog ──
+interface DuplicateCollectionDialogProps {
+  open: boolean;
+  originalName: string;
+  onClose: () => void;
+  onDuplicate: (newName: string) => void;
+}
+
+export function DuplicateCollectionDialog({ open, originalName, onClose, onDuplicate }: DuplicateCollectionDialogProps) {
+  const { t } = useTranslation();
+  const [name, setName] = useState(`${originalName} (Copy)`);
+  const isSameName = name.trim() === originalName;
+
+  useEffect(() => {
+    if (open) setName(`${originalName} (Copy)`);
+  }, [open, originalName]);
+
+  const handleDuplicate = () => {
+    if (!name.trim() || isSameName) return;
+    onDuplicate(name.trim());
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+      <DialogTitle>{t("collection.duplicateTitle")}</DialogTitle>
+      <DialogContent>
+        <TextField
+          autoFocus
+          fullWidth
+          label={t("collection.duplicateNameLabel")}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleDuplicate()}
+          error={isSameName}
+          helperText={isSameName ? t("collection.duplicateNameError") : ""}
+          sx={{ mt: 1 }}
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>{t("common.cancel")}</Button>
+        <Button variant="contained" onClick={handleDuplicate} disabled={!name.trim() || isSameName}>
+          {t("common.create")}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 // ── Save Request Dialog ──
 interface SaveRequestDialogProps {
   open: boolean;

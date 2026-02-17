@@ -38,6 +38,7 @@ import {
   SwapHoriz,
   SmartToy,
   AccountTree,
+  ContentCopy,
 } from "@mui/icons-material";
 import { List as VirtualList } from "react-window";
 import { useTranslation } from "react-i18next";
@@ -85,6 +86,7 @@ interface SidebarProps {
   onOpenImport: () => void;
   onOpenWebSocket: () => void;
   onExportCollection: (collectionId: string) => void;
+  onDuplicateCollection: (collectionId: string, currentName: string) => void;
   onExportFolder: (folderId: string, name: string) => void;
   onExportRequest: (requestId: string, name: string) => void;
   onRequestCollectionTree: (collectionId: string) => void;
@@ -124,6 +126,7 @@ export default function Sidebar({
   onOpenAIWizard,
   onOpenImport,
   onOpenWebSocket,
+  onDuplicateCollection,
   onExportCollection,
   onExportFolder,
   onExportRequest,
@@ -779,6 +782,15 @@ export default function Sidebar({
         >
           <FileDownload sx={{ mr: 1.5, fontSize: 16 }} />{" "}
           {t("collection.export")}
+        </MuiMenuItem>
+        <MuiMenuItem
+          onClick={() => {
+            setColMenuPos(null);
+            if (colMenuTarget) onDuplicateCollection(colMenuTarget.id, colMenuTarget.name);
+          }}
+        >
+          <ContentCopy sx={{ mr: 1.5, fontSize: 16 }} />{" "}
+          {t("collection.duplicate")}
         </MuiMenuItem>
         <Divider />
         <MuiMenuItem

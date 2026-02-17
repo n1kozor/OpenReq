@@ -107,7 +107,12 @@
     "exportRequest": "Export request to Postman format",
     "variables": "Collection Variables",
     "variablesHint": "Variables available to all requests in this collection. Environment variables override these.",
-    "addVariable": "Add Variable"
+    "addVariable": "Add Variable",
+    "duplicate": "Duplicate Collection",
+    "duplicateTitle": "Duplicate Collection",
+    "duplicateNameLabel": "New collection name",
+    "duplicateNameError": "Name must be different from the original",
+    "duplicated": "Collection duplicated!"
   },
   "collectionDetail": {
     "overview": "Overview",

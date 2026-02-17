@@ -107,7 +107,12 @@
     "exportRequest": "Anfrage in Postman-Format exportieren",
     "variables": "Sammlungsvariablen",
     "variablesHint": "Variablen, die für alle Anfragen in dieser Sammlung verfügbar sind. Umgebungsvariablen überschreiben diese.",
-    "addVariable": "Variable hinzufügen"
+    "addVariable": "Variable hinzufügen",
+    "duplicate": "Sammlung duplizieren",
+    "duplicateTitle": "Sammlung duplizieren",
+    "duplicateNameLabel": "Neuer Sammlungsname",
+    "duplicateNameError": "Der Name muss sich vom Original unterscheiden",
+    "duplicated": "Sammlung dupliziert!"
   },
   "collectionDetail": {
     "overview": "Übersicht",

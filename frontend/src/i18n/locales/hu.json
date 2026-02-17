@@ -107,7 +107,12 @@
     "exportRequest": "Kérés exportálása Postman formátumba",
     "variables": "Kollekció változók",
     "variablesHint": "A kollekció összes kérésében elérhető változók. A környezeti változók felülírják ezeket.",
-    "addVariable": "Változó hozzáadása"
+    "addVariable": "Változó hozzáadása",
+    "duplicate": "Gyűjtemény másolása",
+    "duplicateTitle": "Gyűjtemény másolása",
+    "duplicateNameLabel": "Új gyűjtemény neve",
+    "duplicateNameError": "A név nem egyezhet az eredetivel",
+    "duplicated": "Gyűjtemény másolva!"
   },
   "collectionDetail": {
     "overview": "Áttekintés",

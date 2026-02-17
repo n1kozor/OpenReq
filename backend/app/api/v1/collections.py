@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -138,6 +140,99 @@ def delete_collection(
     col = _get_accessible_collection(collection_id, db, current_user)
     db.delete(col)
     db.commit()
+
+
+class DuplicateCollectionRequest(BaseModel):
+    name: str
+
+
+@router.post("/{collection_id}/duplicate", response_model=CollectionOut, status_code=status.HTTP_201_CREATED)
+def duplicate_collection(
+    collection_id: str,
+    payload: DuplicateCollectionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from app.models.request import Request
+
+    original = _get_accessible_collection(collection_id, db, current_user)
+
+    new_name = payload.name.strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    if new_name == original.name:
+        raise HTTPException(status_code=400, detail="Name must be different from the original")
+
+    # Create new collection
+    new_col = Collection(
+        name=new_name,
+        description=original.description,
+        visibility=original.visibility,
+        owner_id=current_user.id,
+        workspace_id=original.workspace_id,
+        variables=dict(original.variables) if original.variables else None,
+        auth_type=original.auth_type,
+        auth_config=dict(original.auth_config) if original.auth_config else None,
+        pre_request_script=original.pre_request_script,
+        post_response_script=original.post_response_script,
+        script_language=original.script_language,
+    )
+    db.add(new_col)
+    db.flush()
+
+    # Load all items for this collection
+    items = (
+        db.query(CollectionItem)
+        .filter(CollectionItem.collection_id == collection_id)
+        .order_by(CollectionItem.sort_order)
+        .all()
+    )
+
+    # Map old item IDs to new item IDs
+    item_id_map: dict[str, str] = {}
+    for item in items:
+        item_id_map[item.id] = str(uuid.uuid4())
+
+    # Clone items and their linked requests
+    for item in items:
+        new_request_id = None
+        if item.request_id:
+            # Deep-clone the request
+            orig_req = db.query(Request).filter(Request.id == item.request_id).first()
+            if orig_req:
+                new_req = Request(
+                    name=orig_req.name,
+                    method=orig_req.method,
+                    url=orig_req.url,
+                    headers=dict(orig_req.headers) if orig_req.headers else None,
+                    body=orig_req.body,
+                    body_type=orig_req.body_type,
+                    auth_type=orig_req.auth_type,
+                    auth_config=dict(orig_req.auth_config) if orig_req.auth_config else None,
+                    query_params=dict(orig_req.query_params) if orig_req.query_params else None,
+                    pre_request_script=orig_req.pre_request_script,
+                    post_response_script=orig_req.post_response_script,
+                    form_data=list(orig_req.form_data) if orig_req.form_data else None,
+                    settings=dict(orig_req.settings) if orig_req.settings else None,
+                )
+                db.add(new_req)
+                db.flush()
+                new_request_id = new_req.id
+
+        new_item = CollectionItem(
+            id=item_id_map[item.id],
+            collection_id=new_col.id,
+            parent_id=item_id_map.get(item.parent_id) if item.parent_id else None,
+            is_folder=item.is_folder,
+            name=item.name,
+            sort_order=item.sort_order,
+            request_id=new_request_id,
+        )
+        db.add(new_item)
+
+    db.commit()
+    db.refresh(new_col)
+    return new_col
 
 
 @router.post("/{collection_id}/items", response_model=CollectionItemOut, status_code=status.HTTP_201_CREATED)

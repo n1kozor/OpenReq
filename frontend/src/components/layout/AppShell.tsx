@@ -15,6 +15,7 @@ import {
   RenameDialog,
   ConfirmDeleteDialog,
   SaveRequestDialog,
+  DuplicateCollectionDialog,
 } from "@/components/collection/CollectionDialogs";
 import EnvironmentManager from "@/components/environment/EnvironmentManager";
 import AICollectionWizard from "@/components/collection/AICollectionWizard";
@@ -204,6 +205,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const [showCreateFolder, setShowCreateFolder] = useState<string | null>(null);
   const [showRename, setShowRename] = useState<{ id: string; name: string; type: "collection" | "item" } | null>(null);
   const [showDelete, setShowDelete] = useState<{ id: string; name: string; type: "collection" | "item" } | null>(null);
+  const [showDuplicateCol, setShowDuplicateCol] = useState<{ id: string; name: string } | null>(null);
   const [showSaveRequest, setShowSaveRequest] = useState(false);
   const [saveTarget, setSaveTarget] = useState<{ collectionId?: string; folderId?: string } | null>(null);
   const [showEnvManager, setShowEnvManager] = useState(false);
@@ -852,6 +854,17 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     loadCollections();
   }, [showDelete, loadCollections]);
 
+  const handleDuplicateCollection = useCallback(async (newName: string) => {
+    if (!showDuplicateCol) return;
+    try {
+      await collectionsApi.duplicate(showDuplicateCol.id, newName);
+      loadCollections();
+      setSnack({ msg: t("collection.duplicated"), severity: "success" });
+    } catch {
+      setSnack({ msg: t("common.error"), severity: "error" });
+    }
+  }, [showDuplicateCol, loadCollections, t]);
+
   const handleNewRequest = useCallback((collectionId: string, folderId?: string) => {
     setSaveTarget({ collectionId, folderId });
     handleNewTab();
@@ -1036,6 +1049,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onEditCollection={(id, name, description, visibility, variables) => setShowEditCol({ id, name, description, visibility, variables })}
         onRenameCollection={(id, name) => setShowRename({ id, name, type: "collection" })}
         onDeleteCollection={(id, name) => setShowDelete({ id, name, type: "collection" })}
+        onDuplicateCollection={(id, name) => setShowDuplicateCol({ id, name })}
         onRenameItem={(id, name) => setShowRename({ id, name, type: "item" })}
         onDeleteItem={(id, name) => setShowDelete({ id, name, type: "item" })}
         onRunCollection={handleRunCollection}
@@ -1294,6 +1308,15 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           itemName={showDelete.name}
           onClose={() => setShowDelete(null)}
           onConfirm={handleDelete}
+        />
+      )}
+
+      {showDuplicateCol && (
+        <DuplicateCollectionDialog
+          open
+          originalName={showDuplicateCol.name}
+          onClose={() => setShowDuplicateCol(null)}
+          onDuplicate={handleDuplicateCollection}
         />
       )}
 
