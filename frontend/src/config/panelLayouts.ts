@@ -14,7 +14,6 @@ export const PANEL_CONSTRAINTS: Record<
   requestBuilder: { minW: 4, minH: 8, maxW: 12, maxH: 30 },
   scriptEditor: { minW: 4, minH: 4, maxW: 12, maxH: 20 },
   responsePanel: { minW: 4, minH: 6, maxW: 12, maxH: 40 },
-  webSocketPanel: { minW: 4, minH: 6, maxW: 12, maxH: 30 },
 };
 
 function applyConstraints(items: PanelLayoutItem[]): PanelLayoutItem[] {
@@ -33,7 +32,6 @@ export const LAYOUT_DEFAULT: PanelLayout = {
     { i: "requestBuilder", x: 0, y: 0, w: 12, h: 14 },
     { i: "scriptEditor", x: 0, y: 14, w: 12, h: 5 },
     { i: "responsePanel", x: 0, y: 19, w: 12, h: 15 },
-    { i: "webSocketPanel", x: 0, y: 34, w: 12, h: 12 },
   ]),
 };
 
@@ -43,8 +41,7 @@ export const LAYOUT_SIDE_BY_SIDE: PanelLayout = {
   items: applyConstraints([
     { i: "requestBuilder", x: 0, y: 0, w: 6, h: 16 },
     { i: "responsePanel", x: 6, y: 0, w: 6, h: 16 },
-    { i: "scriptEditor", x: 0, y: 16, w: 6, h: 8 },
-    { i: "webSocketPanel", x: 6, y: 16, w: 6, h: 8 },
+    { i: "scriptEditor", x: 0, y: 16, w: 12, h: 8 },
   ]),
 };
 
@@ -53,8 +50,7 @@ export const LAYOUT_WIDE_RESPONSE: PanelLayout = {
   nameKey: "layout.presetWideResponse",
   items: applyConstraints([
     { i: "requestBuilder", x: 0, y: 0, w: 12, h: 10 },
-    { i: "scriptEditor", x: 0, y: 10, w: 4, h: 6 },
-    { i: "webSocketPanel", x: 4, y: 10, w: 8, h: 6 },
+    { i: "scriptEditor", x: 0, y: 10, w: 12, h: 6 },
     { i: "responsePanel", x: 0, y: 16, w: 12, h: 20 },
   ]),
 };
@@ -64,8 +60,7 @@ export const LAYOUT_COMPACT: PanelLayout = {
   nameKey: "layout.presetCompact",
   items: applyConstraints([
     { i: "requestBuilder", x: 0, y: 0, w: 8, h: 12 },
-    { i: "scriptEditor", x: 8, y: 0, w: 4, h: 6 },
-    { i: "webSocketPanel", x: 8, y: 6, w: 4, h: 6 },
+    { i: "scriptEditor", x: 8, y: 0, w: 4, h: 12 },
     { i: "responsePanel", x: 0, y: 12, w: 12, h: 12 },
   ]),
 };
@@ -85,5 +80,4 @@ export const PANEL_META: Record<PanelId, { titleKey: string; icon: string }> = {
   requestBuilder: { titleKey: "layout.panelRequest", icon: "Send" },
   scriptEditor: { titleKey: "layout.panelScripts", icon: "Terminal" },
   responsePanel: { titleKey: "layout.panelResponse", icon: "Receipt" },
-  webSocketPanel: { titleKey: "layout.panelWebSocket", icon: "Cable" },
 };

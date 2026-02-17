@@ -1,7 +1,7 @@
 import { Box, Typography, Paper } from "@mui/material";
 import {
   Http, FolderOpen, CheckCircle, Code, Timer,
-  CallSplit, Loop, DataObject, SelectAll,
+  CallSplit, Loop, DataObject, SelectAll, Cable, Hub,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { DRAGGABLE_NODE_TYPES, NODE_TYPE_CONFIGS } from "./config/nodeTypes";
@@ -18,6 +18,8 @@ const ICON_MAP: Record<string, React.ReactElement> = {
   Loop: <Loop sx={{ fontSize: 16 }} />,
   DataObject: <DataObject sx={{ fontSize: 16 }} />,
   SelectAll: <SelectAll sx={{ fontSize: 16 }} />,
+  Cable: <Cable sx={{ fontSize: 16 }} />,
+  Hub: <Hub sx={{ fontSize: 16 }} />,
 };
 
 export default function TestFlowPalette() {

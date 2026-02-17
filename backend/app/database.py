@@ -51,6 +51,7 @@ def _run_migrations():
         ("app_settings", "ollama_model", "VARCHAR(200)"),
         ("ai_conversations", "is_shared", "BOOLEAN DEFAULT 0"),
         ("ai_conversations", "workspace_id", "VARCHAR(36)"),
+        ("requests", "protocol", "VARCHAR(20) DEFAULT 'http'"),
     ]
     for table, column, col_type in migrations:
         if table in inspector.get_table_names():

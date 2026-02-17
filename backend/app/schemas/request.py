@@ -19,6 +19,7 @@ class RequestCreate(BaseModel):
     post_response_script: str | None = None
     form_data: list[dict[str, Any]] | None = None
     settings: dict[str, Any] | None = None
+    protocol: str = "http"
 
 
 class RequestUpdate(BaseModel):
@@ -35,6 +36,7 @@ class RequestUpdate(BaseModel):
     post_response_script: str | None = None
     form_data: list[dict[str, Any]] | None = None
     settings: dict[str, Any] | None = None
+    protocol: str | None = None
 
 
 class RequestOut(BaseModel):
@@ -52,5 +54,6 @@ class RequestOut(BaseModel):
     post_response_script: str | None
     form_data: list | None = None
     settings: dict | None = None
+    protocol: str = "http"
 
     model_config = {"from_attributes": True}

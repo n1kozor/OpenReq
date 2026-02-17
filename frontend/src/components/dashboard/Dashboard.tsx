@@ -14,6 +14,7 @@ import {
   Http,
   History,
   Cable,
+  Hub,
   ChevronRight,
   Inventory2,
 } from "@mui/icons-material";
@@ -29,7 +30,8 @@ interface DashboardProps {
   onOpenImport: () => void;
   onOpenAIWizard: () => void;
   onOpenHistory: () => void;
-  onOpenWebSocket: () => void;
+  onNewWebSocket: () => void;
+  onNewGraphQL: () => void;
   onOpenCollection: (collectionId: string) => void;
 }
 
@@ -41,7 +43,8 @@ export default function Dashboard({
   onOpenImport,
   onOpenAIWizard,
   onOpenHistory,
-  onOpenWebSocket,
+  onNewWebSocket,
+  onNewGraphQL,
   onOpenCollection,
 }: DashboardProps) {
   const { t } = useTranslation();
@@ -91,9 +94,16 @@ export default function Dashboard({
     },
     {
       icon: <Cable />,
-      label: t("websocket.title"),
+      label: t("dashboard.newWebSocket"),
       description: t("dashboard.webSocketDesc"),
-      onClick: onOpenWebSocket,
+      onClick: onNewWebSocket,
+      color: "#14b8a6",
+    },
+    {
+      icon: <Hub />,
+      label: t("dashboard.newGraphQL"),
+      description: t("dashboard.graphqlDesc"),
+      onClick: onNewGraphQL,
       color: "#e879f9",
     },
   ];

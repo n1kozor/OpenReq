@@ -2,7 +2,9 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | 
 
 export type AuthType = "none" | "bearer" | "api_key" | "basic" | "oauth2";
 
-export type BodyType = "none" | "json" | "xml" | "text" | "form-data" | "x-www-form-urlencoded";
+export type BodyType = "none" | "json" | "xml" | "text" | "form-data" | "x-www-form-urlencoded" | "graphql";
+
+export type Protocol = "http" | "websocket" | "graphql";
 
 export type Role = "admin" | "editor" | "viewer";
 
@@ -98,6 +100,7 @@ export interface CollectionItem {
   request_id: string | null;
   sort_order: number;
   method?: string | null;
+  protocol?: Protocol;
   children?: CollectionItem[];
 }
 
@@ -116,6 +119,7 @@ export interface ApiRequest {
   post_response_script: string | null;
   form_data: FormDataItemSaved[] | null;
   settings: RequestSettings | null;
+  protocol: Protocol;
 }
 
 export interface FormDataItemSaved {
@@ -245,6 +249,7 @@ export interface RequestSettings {
   disableCookieJar: boolean;
   useServerCipherSuite: boolean;
   disabledTlsProtocols: string[];
+  graphql_variables?: string;
 }
 
 export const defaultRequestSettings: RequestSettings = {
@@ -265,6 +270,7 @@ export interface RequestTab {
   id: string;
   name: string;
   tabType?: TabType;
+  protocol?: Protocol;
   method: HttpMethod;
   url: string;
   isDirty: boolean;
@@ -292,6 +298,12 @@ export interface RequestTab {
   response: ProxyResponse | null;
   scriptResult: ScriptResult | null;
   preRequestResult: ScriptResult | null;
+  // GraphQL-specific
+  graphqlQuery?: string;
+  graphqlVariables?: string;
+  // WebSocket-specific (runtime only)
+  wsMessages?: WebSocketMessage[];
+  wsConnected?: boolean;
 }
 
 // ── Collection Runner Types ──
@@ -358,7 +370,7 @@ export interface CollectionRunDetail extends CollectionRunSummary {
 
 // ── Panel Layout Types ──
 
-export type PanelId = "requestBuilder" | "scriptEditor" | "responsePanel" | "webSocketPanel";
+export type PanelId = "requestBuilder" | "scriptEditor" | "responsePanel";
 
 export interface PanelLayoutItem {
   i: PanelId;
@@ -427,7 +439,9 @@ export type TestFlowNodeType =
   | "condition"
   | "loop"
   | "set_variable"
-  | "group";
+  | "group"
+  | "websocket"
+  | "graphql";
 
 export interface TestFlowNodeConfig {
   request_id?: string;
@@ -459,6 +473,16 @@ export interface TestFlowNodeConfig {
   condition?: string;
   max_iterations?: number;
   assignments?: { key: string; value: string }[];
+  // WebSocket node
+  ws_url?: string;
+  ws_message?: string;
+  ws_timeout_ms?: number;
+  ws_wait_response?: boolean;
+  // GraphQL node
+  graphql_url?: string;
+  graphql_query?: string;
+  graphql_variables?: string;
+  headers?: Record<string, string>;
   color?: string;
   width?: number;
   height?: number;

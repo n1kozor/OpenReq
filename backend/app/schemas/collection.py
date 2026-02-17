@@ -48,5 +48,6 @@ class CollectionItemOut(BaseModel):
     request_id: str | None
     sort_order: int
     method: str | None = None
+    protocol: str | None = None
 
     model_config = {"from_attributes": True}

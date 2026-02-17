@@ -25,7 +25,7 @@ import {
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 
-import { testFlowsApi } from "@/api/endpoints";
+import { testFlowsApi, requestsApi } from "@/api/endpoints";
 import type { Collection, CollectionItem, Environment, TestFlow, TestFlowNodeData, TestFlowEdgeData } from "@/types";
 import { NODE_TYPE_CONFIGS } from "./config/nodeTypes";
 import { edgeTypes, defaultEdgeOptions } from "./config/edgeTypes";
@@ -43,6 +43,8 @@ import ConditionNode from "./nodes/ConditionNode";
 import LoopNode from "./nodes/LoopNode";
 import SetVariableNode from "./nodes/SetVariableNode";
 import GroupNode from "./nodes/GroupNode";
+import WebSocketNode from "./nodes/WebSocketNode";
+import GraphQLNode from "./nodes/GraphQLNode";
 
 const nodeTypes = {
   http_request: HttpRequestNode,
@@ -54,6 +56,8 @@ const nodeTypes = {
   loop: LoopNode,
   set_variable: SetVariableNode,
   group: GroupNode,
+  websocket: WebSocketNode,
+  graphql: GraphQLNode,
 };
 
 interface TestFlowCanvasProps {
@@ -188,8 +192,8 @@ export default function TestFlowCanvas({
     if (!onOpenRequest) return;
     const d = node.data as Record<string, unknown>;
     const config = (d.config ?? {}) as Record<string, unknown>;
-    // Open the request tab for http_request nodes that reference a saved request
-    if (node.type === "http_request" && config.request_id) {
+    // Open the request tab for nodes that reference a saved request
+    if ((node.type === "http_request" || node.type === "websocket" || node.type === "graphql") && config.request_id) {
       onOpenRequest(config.request_id as string, config.collection_id as string | undefined);
     }
   }, [onOpenRequest]);
@@ -259,19 +263,96 @@ export default function TestFlowCanvas({
             };
             setNodes((nds) => [...nds, newNode]);
           } else if (item.request_id) {
-            // Request → http_request node
+            // Request → node type based on protocol
+            const protocol = item.protocol ?? "http";
+            const nodeType = protocol === "websocket" ? "websocket"
+              : protocol === "graphql" ? "graphql"
+              : "http_request";
+            const nodeConfig: Record<string, unknown> = {
+              request_id: item.request_id,
+              request_name_hint: item.name,
+            };
+            if (nodeType === "http_request") {
+              nodeConfig.method = item.method || "GET";
+            }
+
+            // Fetch full request data to populate node config
+            // Use local copies to avoid race conditions when multiple items are dropped quickly
+            if (nodeType === "websocket" || nodeType === "graphql") {
+              const capturedId = id;
+              const capturedType = nodeType;
+              const capturedName = item.name;
+              const capturedRequestId = item.request_id;
+              requestsApi.get(capturedRequestId).then(({ data: req }) => {
+                const asyncConfig: Record<string, unknown> = {
+                  request_id: capturedRequestId,
+                  request_name_hint: capturedName,
+                };
+                if (capturedType === "websocket") {
+                  asyncConfig.ws_url = req.url || "";
+                  asyncConfig.ws_message = "";
+                  asyncConfig.ws_timeout_ms = 5000;
+                  asyncConfig.ws_wait_response = true;
+                } else {
+                  asyncConfig.graphql_url = req.url || "";
+                  asyncConfig.graphql_query = req.body || "";
+                  asyncConfig.graphql_variables = req.settings?.graphql_variables || "{}";
+                }
+                const newNode: Node = {
+                  id: capturedId,
+                  type: capturedType,
+                  position,
+                  data: {
+                    node_type: capturedType,
+                    label: capturedName,
+                    config: asyncConfig,
+                  },
+                };
+                setNodes((nds) => [...nds, newNode]);
+                setIsDirty(true);
+                setSelectedNodeId(capturedId);
+                pushHistory();
+              }).catch(() => {
+                const fallbackConfig: Record<string, unknown> = {
+                  request_id: capturedRequestId,
+                  request_name_hint: capturedName,
+                };
+                if (capturedType === "websocket") {
+                  fallbackConfig.ws_url = "";
+                  fallbackConfig.ws_message = "";
+                  fallbackConfig.ws_timeout_ms = 5000;
+                  fallbackConfig.ws_wait_response = true;
+                } else {
+                  fallbackConfig.graphql_url = "";
+                  fallbackConfig.graphql_query = "";
+                  fallbackConfig.graphql_variables = "{}";
+                }
+                const newNode: Node = {
+                  id: capturedId,
+                  type: capturedType,
+                  position,
+                  data: {
+                    node_type: capturedType,
+                    label: capturedName,
+                    config: fallbackConfig,
+                  },
+                };
+                setNodes((nds) => [...nds, newNode]);
+                setIsDirty(true);
+                setSelectedNodeId(capturedId);
+                pushHistory();
+              });
+              return; // async path handles setIsDirty etc.
+            }
+
             const newNode: Node = {
               id,
-              type: "http_request",
+              type: nodeType,
               position,
               data: {
-                node_type: "http_request",
+                node_type: nodeType,
                 label: item.name,
-                config: {
-                  request_id: item.request_id,
-                  request_name_hint: item.name,
-                  method: item.method || "GET",
-                },
+                config: nodeConfig,
               },
             };
             setNodes((nds) => [...nds, newNode]);

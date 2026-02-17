@@ -7,7 +7,7 @@ import {
   type LayoutItem,
 } from "react-grid-layout";
 import { Box } from "@mui/material";
-import { Send, Terminal, Receipt, Cable } from "@mui/icons-material";
+import { Send, Terminal, Receipt } from "@mui/icons-material";
 import DraggablePanel from "./DraggablePanel";
 import LayoutToolbar from "./LayoutToolbar";
 import {
@@ -30,16 +30,13 @@ const PANEL_ICONS: Record<string, React.ReactNode> = {
   Send: <Send sx={{ fontSize: 14 }} />,
   Terminal: <Terminal sx={{ fontSize: 14 }} />,
   Receipt: <Receipt sx={{ fontSize: 14 }} />,
-  Cable: <Cable sx={{ fontSize: 14 }} />,
 };
 
 interface PanelGridLayoutProps {
-  showWebSocket: boolean;
   children: {
     requestBuilder: React.ReactNode;
     scriptEditor: React.ReactNode;
     responsePanel: React.ReactNode;
-    webSocketPanel: React.ReactNode;
   };
 }
 
@@ -92,7 +89,6 @@ function toRglLayout(items: PanelLayoutItem[], minimizedPanels: PanelId[], visib
 }
 
 export default function PanelGridLayout({
-  showWebSocket,
   children,
 }: PanelGridLayoutProps) {
   const { width, containerRef, mounted } = useContainerWidth({ initialWidth: 1200 });
@@ -120,10 +116,8 @@ export default function PanelGridLayout({
   }, [layoutState]);
 
   const visiblePanelIds: PanelId[] = useMemo(() => {
-    const ids: PanelId[] = ["requestBuilder", "scriptEditor", "responsePanel"];
-    if (showWebSocket) ids.push("webSocketPanel");
-    return ids;
-  }, [showWebSocket]);
+    return ["requestBuilder", "scriptEditor", "responsePanel"] as PanelId[];
+  }, []);
 
   const rglLayout = useMemo(
     () => toRglLayout(layoutState.items, layoutState.minimizedPanels, visiblePanelIds),
@@ -227,7 +221,6 @@ export default function PanelGridLayout({
     requestBuilder: children.requestBuilder,
     scriptEditor: children.scriptEditor,
     responsePanel: children.responsePanel,
-    webSocketPanel: children.webSocketPanel,
   };
 
   return (

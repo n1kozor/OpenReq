@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { Box, Toolbar, Snackbar, Alert } from "@mui/material";
+import { Box, Toolbar, Snackbar, Alert, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import TopBar from "./TopBar";
 import Sidebar from "./Sidebar";
 import TabBar from "./TabBar";
 import RequestBuilder from "@/components/request/RequestBuilder";
 import ResponsePanel from "@/components/request/ResponsePanel";
+import WebSocketBuilder from "@/components/request/WebSocketBuilder";
+import GraphQLBuilder from "@/components/request/GraphQLBuilder";
 import CollectionDetail from "@/components/collection/CollectionDetail";
 import Dashboard from "@/components/dashboard/Dashboard";
 import {
@@ -26,7 +28,6 @@ import CodeGenDialog from "@/components/codegen/CodeGenDialog";
 import SDKGeneratorDialog from "@/components/sdk/SDKGeneratorDialog";
 import CollectionRunnerDialog from "@/components/collection/CollectionRunnerDialog";
 import ScriptEditor from "@/components/request/ScriptEditor";
-import WebSocketPanel from "@/components/websocket/WebSocketPanel";
 import PanelGridLayout from "./PanelGridLayout";
 import AIAgentDrawer, { DRAWER_WIDTH, type ApplyScriptPayload } from "@/components/ai/AIAgentDrawer";
 import TestFlowCanvas from "@/components/testflow/TestFlowCanvas";
@@ -48,6 +49,7 @@ import type {
   HttpMethod,
   BodyType,
   AuthType,
+  Protocol,
   Collection,
   CollectionItem,
   Environment,
@@ -82,17 +84,18 @@ const defaultOAuthConfig: OAuthConfig = {
   accessToken: "",
 };
 
-function createNewTab(): RequestTab {
+function createNewTab(protocol: Protocol = "http"): RequestTab {
   return {
     id: `tab-${tabCounter++}`,
-    name: "New Request",
-    method: "GET",
-    url: "",
+    name: protocol === "websocket" ? "New WebSocket" : protocol === "graphql" ? "New GraphQL" : "New Request",
+    method: protocol === "graphql" ? "POST" : "GET",
+    url: protocol === "websocket" ? "wss://" : "",
+    protocol,
     isDirty: false,
     headers: [newPair()],
     queryParams: [newPair()],
     body: "",
-    bodyType: "none",
+    bodyType: protocol === "graphql" ? "graphql" : "none",
     formData: [newPair()],
     authType: "none",
     bearerToken: "",
@@ -111,6 +114,10 @@ function createNewTab(): RequestTab {
     response: null,
     scriptResult: null,
     preRequestResult: null,
+    graphqlQuery: protocol === "graphql" ? "query {\n  \n}" : "",
+    graphqlVariables: protocol === "graphql" ? "{}" : "",
+    wsMessages: [],
+    wsConnected: false,
   };
 }
 
@@ -120,6 +127,8 @@ function stripRuntimeTab(tab: RequestTab): RequestTab {
     response: null,
     scriptResult: null,
     preRequestResult: null,
+    wsMessages: [],
+    wsConnected: false,
     // Strip File objects from formData (not serializable)
     formData: tab.formData.map((f) => ({ ...f, file: null })),
   };
@@ -208,13 +217,13 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const [showDuplicateCol, setShowDuplicateCol] = useState<{ id: string; name: string } | null>(null);
   const [showSaveRequest, setShowSaveRequest] = useState(false);
   const [saveTarget, setSaveTarget] = useState<{ collectionId?: string; folderId?: string } | null>(null);
+  const [cloneSource, setCloneSource] = useState<{ requestId: string; name: string } | null>(null);
   const [showEnvManager, setShowEnvManager] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showWorkspaces, setShowWorkspaces] = useState(false);
   const [showAIWizard, setShowAIWizard] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showCodeGen, setShowCodeGen] = useState(false);
-  const [showWebSocket, setShowWebSocket] = useState(false);
   const [showSDK, setShowSDK] = useState(false);
   const [showAIAgent, setShowAIAgent] = useState(false);
   const [showTestFlowList, setShowTestFlowList] = useState(false);
@@ -384,8 +393,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch, isDirty: true } : t)));
   }, []);
 
-  const handleNewTab = useCallback(() => {
-    const t = createNewTab();
+  const handleNewTab = useCallback((protocol: Protocol = "http") => {
+    const t = createNewTab(protocol);
     setTabs((prev) => [...prev, t]);
     setActiveTabId(t.id);
     setView("request");
@@ -438,6 +447,141 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       return [...prev, copy];
     });
   }, []);
+
+  // ── Rename tab (and persist to backend if saved) ──
+  const handleRenameTab = useCallback(async (id: string, newName: string) => {
+    const tab = tabs.find((t) => t.id === id);
+    if (!tab) return;
+    updateTab(id, { name: newName });
+    if (tab.savedRequestId) {
+      try {
+        // Update both the request name and the collection item name
+        await requestsApi.update(tab.savedRequestId, { name: newName });
+        // Find the collection item that references this request and rename it too
+        for (const [, items] of Object.entries(collectionItems)) {
+          const flat = items.flatMap(function flatten(it: CollectionItem): CollectionItem[] {
+            return [it, ...(it.children ?? []).flatMap(flatten)];
+          });
+          const found = flat.find((i) => i.request_id === tab.savedRequestId);
+          if (found) {
+            await collectionsApi.updateItem(found.id, { name: newName });
+            break;
+          }
+        }
+        updateTab(id, { isDirty: false });
+        loadCollections();
+      } catch {
+        setSnack({ msg: t("request.saveFailed"), severity: "error" });
+      }
+    }
+  }, [tabs, updateTab, loadCollections, collectionItems]);
+
+  // ── Clone request (create copy in same collection) ──
+  const handleCloneRequest = useCallback(async (tabId: string) => {
+    const tab = tabs.find((t) => t.id === tabId);
+    if (!tab?.savedRequestId) return;
+    try {
+      const { data: srcReq } = await requestsApi.get(tab.savedRequestId);
+      const cloneName = `${srcReq.name} (copy)`;
+      const { data: newReq } = await requestsApi.create({
+        name: cloneName,
+        method: srcReq.method,
+        url: srcReq.url,
+        headers: srcReq.headers,
+        body: srcReq.body,
+        body_type: srcReq.body_type,
+        auth_type: srcReq.auth_type,
+        auth_config: srcReq.auth_config,
+        query_params: srcReq.query_params,
+        pre_request_script: srcReq.pre_request_script,
+        post_response_script: srcReq.post_response_script,
+        form_data: srcReq.form_data as any,
+        settings: srcReq.settings as any,
+        protocol: srcReq.protocol,
+      });
+      // Find collection item that references the saved request to get collectionId
+      let targetCollectionId: string | undefined;
+      for (const [colId, items] of Object.entries(collectionItems)) {
+        const flat = items.flatMap(function flatten(it: CollectionItem): CollectionItem[] {
+          return [it, ...(it.children ?? []).flatMap(flatten)];
+        });
+        const found = flat.find((i) => i.request_id === tab.savedRequestId);
+        if (found) {
+          targetCollectionId = colId;
+          // Create the collection item in the same folder as the original
+          await collectionsApi.createItem(colId, {
+            name: cloneName,
+            request_id: newReq.id,
+            parent_id: found.parent_id || undefined,
+          });
+          break;
+        }
+      }
+      // Open the cloned request in a new tab
+      const newTab = createNewTab(tab.protocol);
+      const clonedTab: RequestTab = {
+        ...tab,
+        id: newTab.id,
+        name: cloneName,
+        savedRequestId: newReq.id,
+        collectionId: targetCollectionId,
+        isDirty: false,
+        response: null,
+        scriptResult: null,
+        preRequestResult: null,
+      };
+      setTabs((prev) => [...prev, clonedTab]);
+      setActiveTabId(clonedTab.id);
+      loadCollections();
+      setSnack({ msg: t("request.saved"), severity: "success" });
+    } catch {
+      setSnack({ msg: t("request.saveFailed"), severity: "error" });
+    }
+  }, [tabs, collectionItems, createNewTab, loadCollections]);
+
+  // ── Clone item from sidebar — opens Save dialog for destination pick ──
+  const handleCloneItem = useCallback((_itemId: string, requestId: string, name: string) => {
+    setCloneSource({ requestId, name: `${name} (copy)` });
+    setShowSaveRequest(true);
+  }, []);
+
+  // ── Clone save handler — called from SaveRequestDialog when cloneSource is set ──
+  const handleCloneSave = useCallback(async (name: string, collectionId: string, folderId?: string) => {
+    if (!cloneSource) return;
+    try {
+      const { data: srcReq } = await requestsApi.get(cloneSource.requestId);
+      const { data: newReq } = await requestsApi.create({
+        name,
+        method: srcReq.method,
+        url: srcReq.url,
+        headers: srcReq.headers,
+        body: srcReq.body,
+        body_type: srcReq.body_type,
+        auth_type: srcReq.auth_type,
+        auth_config: srcReq.auth_config,
+        query_params: srcReq.query_params,
+        pre_request_script: srcReq.pre_request_script,
+        post_response_script: srcReq.post_response_script,
+        form_data: srcReq.form_data as any,
+        settings: srcReq.settings as any,
+        protocol: srcReq.protocol,
+      });
+      await collectionsApi.createItem(collectionId, {
+        name,
+        request_id: newReq.id,
+        parent_id: folderId || undefined,
+      });
+      setCloneSource(null);
+      setShowSaveRequest(false);
+      setSaveTarget(null);
+      loadCollections();
+      setSnack({ msg: t("request.saved"), severity: "success" });
+    } catch {
+      setSnack({ msg: t("request.saveFailed"), severity: "error" });
+      setCloneSource(null);
+      setShowSaveRequest(false);
+    }
+  }, [cloneSource, loadCollections]);
 
   // ── Helper: build auth config from tab fields ──
   const buildAuthConfig = useCallback((tab: RequestTab) => {
@@ -494,7 +638,19 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       (h) => h.enabled && h.key.toLowerCase() === "content-type",
     );
 
-    if (tab.bodyType === "json" || tab.bodyType === "xml" || tab.bodyType === "text") {
+    // GraphQL: build JSON body from query + variables
+    if (tab.protocol === "graphql") {
+      let variables: Record<string, unknown> = {};
+      try {
+        if (tab.graphqlVariables?.trim()) {
+          variables = JSON.parse(tab.graphqlVariables);
+        }
+      } catch { /* ignore parse errors */ }
+      bodyToSend = JSON.stringify({ query: tab.graphqlQuery || "", variables });
+      if (!hasUserContentType) {
+        headers["Content-Type"] = "application/json";
+      }
+    } else if (tab.bodyType === "json" || tab.bodyType === "xml" || tab.bodyType === "text") {
       bodyToSend = tab.body || undefined;
       if (bodyToSend && !hasUserContentType) {
         if (tab.bodyType === "json") headers["Content-Type"] = "application/json";
@@ -563,11 +719,11 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     setLoading(true);
     try {
       const { data: response } = await proxyApi.send({
-        method: tab.method,
+        method: tab.protocol === "graphql" ? "POST" : tab.method,
         url: resolvedUrl,
         headers: Object.keys(headers).length > 0 ? headers : undefined,
         body: bodyToSend,
-        body_type: tab.bodyType,
+        body_type: tab.protocol === "graphql" ? "json" : tab.bodyType,
         form_data: formDataToSend,
         query_params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
         auth_type: authType === "oauth2" ? "bearer" : authType,
@@ -585,7 +741,9 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         scriptResult: response.script_result ?? null,
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t("request.failed");
+      // Extract server error detail from axios response, fall back to generic message
+      const axiosDetail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const message = axiosDetail || (err instanceof Error ? err.message : t("request.failed"));
       setSnack({ msg: message, severity: "error" });
     } finally {
       setLoading(false);
@@ -651,11 +809,17 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       use_server_cipher_suite: rs.useServerCipherSuite,
       disabled_tls_protocols: rs.disabledTlsProtocols,
     };
+    // GraphQL-specific settings
+    const graphqlSettings = tab.protocol === "graphql" ? {
+      graphql_variables: tab.graphqlVariables || "{}",
+    } : {};
+
     return {
       headers, queryParams,
       auth_config: Object.keys(authConfig).length > 0 ? authConfig : null,
       form_data: formData,
-      settings,
+      settings: { ...settings, ...graphqlSettings },
+      protocol: tab.protocol ?? "http",
     };
   }, []);
 
@@ -664,17 +828,19 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     const tab = tabs.find((t) => t.id === activeTabId);
     if (!tab?.savedRequestId) return;
 
-    const { headers, queryParams, auth_config, form_data, settings } = buildTabPayload(tab);
+    const { headers, queryParams, auth_config, form_data, settings, protocol } = buildTabPayload(tab);
     try {
       await requestsApi.update(tab.savedRequestId, {
-        name: tab.name, method: tab.method, url: tab.url,
-        headers, body: tab.body, body_type: tab.bodyType,
+        name: tab.name, method: tab.protocol === "graphql" ? "POST" : tab.method, url: tab.url,
+        headers, body: tab.protocol === "graphql" ? (tab.graphqlQuery || "") : tab.body,
+        body_type: tab.protocol === "graphql" ? "graphql" : tab.bodyType,
         auth_type: tab.authType, auth_config: auth_config as Record<string, string>,
         query_params: queryParams,
         pre_request_script: tab.preRequestScript || null,
         post_response_script: tab.postResponseScript || null,
         form_data: form_data as any,
         settings: settings as any,
+        protocol,
       });
       updateTab(activeTabId, { isDirty: false });
       setSnack({ msg: t("request.saved"), severity: "success" });
@@ -689,17 +855,19 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     const tab = tabs.find((t) => t.id === activeTabId);
     if (!tab) return;
 
-    const { headers, queryParams, auth_config, form_data, settings } = buildTabPayload(tab);
+    const { headers, queryParams, auth_config, form_data, settings, protocol } = buildTabPayload(tab);
     try {
       const { data: req } = await requestsApi.create({
-        name, method: tab.method, url: tab.url,
-        headers, body: tab.body, body_type: tab.bodyType,
+        name, method: tab.protocol === "graphql" ? "POST" : tab.method, url: tab.url,
+        headers, body: tab.protocol === "graphql" ? (tab.graphqlQuery || "") : tab.body,
+        body_type: tab.protocol === "graphql" ? "graphql" : tab.bodyType,
         auth_type: tab.authType, auth_config: auth_config as Record<string, string>,
         query_params: queryParams,
         pre_request_script: tab.preRequestScript || null,
         post_response_script: tab.postResponseScript || null,
         form_data: form_data as any,
         settings: settings as any,
+        protocol,
       });
       await collectionsApi.createItem(collectionId, { name, request_id: req.id, parent_id: folderId || undefined });
       updateTab(activeTabId, { name, savedRequestId: req.id, collectionId, isDirty: false });
@@ -721,7 +889,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
     try {
       const { data: req } = await requestsApi.get(requestId);
-      const tab = createNewTab();
+      const protocol = (req.protocol ?? "http") as Protocol;
+      const tab = createNewTab(protocol);
       tab.name = req.name;
       tab.method = req.method;
       tab.url = req.url;
@@ -802,6 +971,15 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           useServerCipherSuite: s.use_server_cipher_suite ?? s.useServerCipherSuite ?? false,
           disabledTlsProtocols: s.disabled_tls_protocols ?? s.disabledTlsProtocols ?? [],
         };
+        // Restore GraphQL variables from settings
+        if (protocol === "graphql") {
+          tab.graphqlVariables = s.graphql_variables || "{}";
+        }
+      }
+
+      // Restore GraphQL query from body
+      if (protocol === "graphql" && req.body) {
+        tab.graphqlQuery = req.body;
       }
 
       setTabs((prev) => [...prev, tab]);
@@ -836,10 +1014,18 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       ));
     } else {
       await collectionsApi.updateItem(showRename.id, { name });
-      const requestId = Object.values(collectionItems)
-        .flat()
-        .find((item) => item.id === showRename.id)?.request_id;
+      // Deep search for the item (may be nested in folders)
+      let requestId: string | null = null;
+      for (const items of Object.values(collectionItems)) {
+        const flat = items.flatMap(function flatten(it: CollectionItem): CollectionItem[] {
+          return [it, ...(it.children ?? []).flatMap(flatten)];
+        });
+        const found = flat.find((i) => i.id === showRename.id);
+        if (found?.request_id) { requestId = found.request_id; break; }
+      }
       if (requestId) {
+        // Also update the request entity name
+        await requestsApi.update(requestId, { name });
         setTabs((prev) => prev.map((t) =>
           t.savedRequestId === requestId ? { ...t, name } : t
         ));
@@ -1070,7 +1256,6 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onOpenWorkspaces={() => setShowWorkspaces(true)}
         onOpenAIWizard={() => setShowAIWizard(true)}
         onOpenImport={() => setShowImport(true)}
-        onOpenWebSocket={() => setShowWebSocket(true)}
         onExportCollection={async (colId) => {
           try {
             const { data } = await importExportApi.exportPostman(colId);
@@ -1116,6 +1301,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
             setSnack({ msg: t("common.error"), severity: "error" });
           }
         }}
+        onCloneItem={handleCloneItem}
         onRequestCollectionTree={loadCollectionTree}
         onRequestAllCollectionItems={loadAllCollectionItems}
         onMoveItem={handleMoveItem}
@@ -1146,7 +1332,39 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
               onDuplicateTab={handleDuplicateTab}
               onCloseOtherTabs={handleCloseOtherTabs}
               onCloseAllTabs={handleCloseAllTabs}
+              onRenameTab={handleRenameTab}
+              onCloneRequest={handleCloneRequest}
             />
+
+            {/* Request name bar — shown for request tabs (http/ws/gql) */}
+            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.name && (
+              <Box sx={{
+                px: 2, py: 0.5,
+                display: "flex", alignItems: "center", gap: 1,
+                borderBottom: "1px solid", borderColor: "divider",
+                bgcolor: "background.default",
+                minHeight: 28,
+              }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                    fontSize: "0.82rem",
+                    color: "text.primary",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {activeTab.name}
+                </Typography>
+                {activeTab.savedRequestId && (
+                  <Typography variant="caption" sx={{ color: "text.disabled", fontSize: "0.7rem" }}>
+                    {activeTab.protocol === "websocket" ? "WebSocket" : activeTab.protocol === "graphql" ? "GraphQL" : activeTab.method}
+                  </Typography>
+                )}
+              </Box>
+            )}
 
             {/* Dashboard: when no tabs are open */}
             {tabs.length === 0 && (
@@ -1158,7 +1376,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                 onOpenImport={() => setShowImport(true)}
                 onOpenAIWizard={() => setShowAIWizard(true)}
                 onOpenHistory={() => setShowHistory(true)}
-                onOpenWebSocket={() => setShowWebSocket(true)}
+                onNewWebSocket={() => handleNewTab("websocket")}
+                onNewGraphQL={() => handleNewTab("graphql")}
                 onOpenCollection={handleOpenCollection}
               />
             )}
@@ -1201,9 +1420,78 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
               </ReactFlowProvider>
             )}
 
-            {/* Request Builder: normal request tab */}
-            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && (
-              <PanelGridLayout showWebSocket={showWebSocket}>
+            {/* WebSocket Builder */}
+            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.protocol === "websocket" && (
+              <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+                <WebSocketBuilder
+                  url={activeTab.url}
+                  headers={activeTab.headers}
+                  authType={activeTab.authType}
+                  bearerToken={activeTab.bearerToken}
+                  basicUsername={activeTab.basicUsername}
+                  basicPassword={activeTab.basicPassword}
+                  apiKeyName={activeTab.apiKeyName}
+                  apiKeyValue={activeTab.apiKeyValue}
+                  apiKeyPlacement={activeTab.apiKeyPlacement}
+                  oauthConfig={activeTab.oauthConfig}
+                  wsMessages={activeTab.wsMessages ?? []}
+                  wsConnected={activeTab.wsConnected ?? false}
+                  onUrlChange={(u) => updateTab(activeTabId, { url: u })}
+                  onHeadersChange={(h) => updateTab(activeTabId, { headers: h })}
+                  onAuthTypeChange={(a) => updateTab(activeTabId, { authType: a })}
+                  onBearerTokenChange={(v) => updateTab(activeTabId, { bearerToken: v })}
+                  onBasicUsernameChange={(v) => updateTab(activeTabId, { basicUsername: v })}
+                  onBasicPasswordChange={(v) => updateTab(activeTabId, { basicPassword: v })}
+                  onApiKeyNameChange={(v) => updateTab(activeTabId, { apiKeyName: v })}
+                  onApiKeyValueChange={(v) => updateTab(activeTabId, { apiKeyValue: v })}
+                  onApiKeyPlacementChange={(v) => updateTab(activeTabId, { apiKeyPlacement: v })}
+                  onOAuthConfigChange={(config) => updateTab(activeTabId, { oauthConfig: config })}
+                  onWsMessagesChange={(msgs) => updateTab(activeTabId, { wsMessages: msgs })}
+                  onWsConnectedChange={(connected) => updateTab(activeTabId, { wsConnected: connected })}
+                  onSave={() => activeTab.savedRequestId ? handleQuickSave() : setShowSaveRequest(true)}
+                />
+              </Box>
+            )}
+
+            {/* GraphQL Builder */}
+            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.protocol === "graphql" && (
+              <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+                <GraphQLBuilder
+                  url={activeTab.url}
+                  graphqlQuery={activeTab.graphqlQuery ?? ""}
+                  graphqlVariables={activeTab.graphqlVariables ?? "{}"}
+                  headers={activeTab.headers}
+                  authType={activeTab.authType}
+                  bearerToken={activeTab.bearerToken}
+                  basicUsername={activeTab.basicUsername}
+                  basicPassword={activeTab.basicPassword}
+                  apiKeyName={activeTab.apiKeyName}
+                  apiKeyValue={activeTab.apiKeyValue}
+                  apiKeyPlacement={activeTab.apiKeyPlacement}
+                  oauthConfig={activeTab.oauthConfig}
+                  loading={loading}
+                  response={activeTab.response}
+                  onUrlChange={(u) => updateTab(activeTabId, { url: u })}
+                  onGraphqlQueryChange={(q) => updateTab(activeTabId, { graphqlQuery: q })}
+                  onGraphqlVariablesChange={(v) => updateTab(activeTabId, { graphqlVariables: v })}
+                  onHeadersChange={(h) => updateTab(activeTabId, { headers: h })}
+                  onAuthTypeChange={(a) => updateTab(activeTabId, { authType: a })}
+                  onBearerTokenChange={(v) => updateTab(activeTabId, { bearerToken: v })}
+                  onBasicUsernameChange={(v) => updateTab(activeTabId, { basicUsername: v })}
+                  onBasicPasswordChange={(v) => updateTab(activeTabId, { basicPassword: v })}
+                  onApiKeyNameChange={(v) => updateTab(activeTabId, { apiKeyName: v })}
+                  onApiKeyValueChange={(v) => updateTab(activeTabId, { apiKeyValue: v })}
+                  onApiKeyPlacementChange={(v) => updateTab(activeTabId, { apiKeyPlacement: v })}
+                  onOAuthConfigChange={(config) => updateTab(activeTabId, { oauthConfig: config })}
+                  onSend={handleSend}
+                  onSave={() => activeTab.savedRequestId ? handleQuickSave() : setShowSaveRequest(true)}
+                />
+              </Box>
+            )}
+
+            {/* HTTP Request Builder: normal request tab */}
+            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && (activeTab.protocol ?? "http") === "http" && (
+              <PanelGridLayout>
                 {{
                   requestBuilder: (
                     <RequestBuilder
@@ -1268,9 +1556,6 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                   responsePanel: (
                     <ResponsePanel response={activeTab.response} />
                   ),
-                  webSocketPanel: (
-                    <WebSocketPanel open={true} />
-                  ),
                 }}
               </PanelGridLayout>
             )}
@@ -1333,10 +1618,10 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
       <SaveRequestDialog
         open={showSaveRequest}
-        onClose={() => { setShowSaveRequest(false); setSaveTarget(null); }}
+        onClose={() => { setShowSaveRequest(false); setSaveTarget(null); setCloneSource(null); }}
         collections={collections.map((c) => ({ id: c.id, name: c.name }))}
-        onSave={handleSaveRequest}
-        defaultName={activeTab?.name ?? ""}
+        onSave={cloneSource ? handleCloneSave : handleSaveRequest}
+        defaultName={cloneSource ? cloneSource.name : (activeTab?.name ?? "")}
         collectionTrees={collectionTrees}
         onRequestCollectionTree={loadCollectionTree}
         defaultCollectionId={saveTarget?.collectionId ?? activeTab?.collectionId}

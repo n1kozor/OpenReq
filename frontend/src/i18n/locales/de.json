@@ -144,7 +144,10 @@
     "aiGenerate": "KI-Generierung",
     "aiGenerateDesc": "Sammlung aus Doku oder URL generieren",
     "historyDesc": "Vergangene Anfragen anzeigen",
-    "webSocketDesc": "Mit WebSocket-Servern verbinden",
+    "webSocketDesc": "WebSocket-Anfrage erstellen",
+    "graphqlDesc": "GraphQL-Anfrage erstellen",
+    "newWebSocket": "Neues WebSocket",
+    "newGraphQL": "Neues GraphQL",
     "quickActions": "Schnellaktionen",
     "recentCollections": "Neueste Sammlungen",
     "totalCollections": "Sammlungen",
@@ -396,7 +399,26 @@
     "disconnectedMsg": "Getrennt",
     "messageInput": "Nachricht eingeben... (Enter zum Senden, Shift+Enter für neue Zeile)",
     "noMessages": "Noch keine Nachrichten. Verbinden Sie sich mit einem WebSocket-Server.",
-    "clearMessages": "Nachrichten löschen"
+    "clearMessages": "Nachrichten löschen",
+    "urlPlaceholder": "ws://localhost:8080",
+    "savedMessage": "WebSocket-Anfrage gespeichert",
+    "headers": "Header",
+    "messages": "Nachrichten",
+    "sendMessage": "Nachricht senden"
+  },
+  "protocol": {
+    "http": "HTTP",
+    "websocket": "WebSocket",
+    "graphql": "GraphQL",
+    "select": "Protokoll auswählen"
+  },
+  "graphql": {
+    "query": "Abfrage",
+    "variables": "Variablen",
+    "send": "Abfrage senden",
+    "queryPlaceholder": "# Schreiben Sie Ihre GraphQL-Abfrage hier\nquery {\n  \n}",
+    "variablesPlaceholder": "{\n  \n}",
+    "saved": "GraphQL-Anfrage gespeichert"
   },
   "pathParam": {
     "enterValue": "Wert für {{name}} eingeben",
@@ -427,6 +449,9 @@
     "panelScripts": "Skripte",
     "panelResponse": "Antwort",
     "panelWebSocket": "WebSocket",
+    "newHttp": "Neue HTTP-Anfrage",
+    "newWebSocket": "Neues WebSocket",
+    "newGraphQL": "Neues GraphQL",
     "savePreset": "Als Vorlage speichern",
     "savePresetTitle": "Benutzerdefinierte Vorlage speichern",
     "presetName": "Vorlagenname",
@@ -686,6 +711,7 @@
     "closeAll": "Alle schließen",
     "close": "Schließen",
     "duplicate": "Duplizieren",
+    "cloneRequest": "In Sammlung klonen",
     "openInNewTab": "In neuem Tab öffnen",
     "noItems": "Noch keine Einträge",
     "deleteConfirm": "<strong>{{name}}</strong> löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
@@ -740,7 +766,9 @@
       "condition": "Bedingung",
       "loop": "Schleife",
       "setVariable": "Variable setzen",
-      "group": "Gruppe"
+      "group": "Gruppe",
+      "websocket": "WebSocket",
+      "graphql": "GraphQL"
     },
     "nodeDescriptions": {
       "httpRequest": "HTTP-Anfrage ausführen",
@@ -751,7 +779,9 @@
       "condition": "Basierend auf Bedingung verzweigen",
       "loop": "Schritte mehrfach wiederholen",
       "setVariable": "Variablen setzen oder ändern",
-      "group": "Knoten visuell gruppieren"
+      "group": "Knoten visuell gruppieren",
+      "websocket": "WebSocket-Nachricht verbinden und senden",
+      "graphql": "GraphQL-Abfrage ausführen"
     },
     "nodeConfig": {
       "selectRequest": "Anfrage auswählen",
@@ -793,7 +823,14 @@
       "conditionSubtitle": "Ausdrucksprüfung",
       "assertionSubtitle": "Antwortprüfung",
       "loopBody": "Schleifenkörper",
-      "loopDone": "Fertig"
+      "loopDone": "Fertig",
+      "wsUrl": "WebSocket-URL",
+      "wsMessage": "Nachricht",
+      "wsTimeout": "Timeout (ms)",
+      "wsWaitResponse": "Auf Antwort warten",
+      "gqlUrl": "GraphQL-Endpunkt-URL",
+      "gqlQuery": "Abfrage",
+      "gqlVariables": "Variablen (JSON)"
     },
     "nodeHelp": {
       "httpRequest": "Führt eine gespeicherte HTTP-Anfrage aus. Verbinden Sie mit einem Überprüfungs-Knoten zur Antwortvalidierung oder mit einem Bedingungs-Knoten für benutzerdefinierte Flusssteuerung.",
@@ -803,7 +840,9 @@
       "loop": "Wiederholt alle verbundenen 'Schleifenkörper'-Knoten. Zählmodus: feste Anzahl von Iterationen. Bedingungsmodus: Wiederholung solange der Ausdruck wahr ist (mit Zugriff auf Antwortdaten).",
       "script": "Führt JavaScript- oder Python-Code für benutzerdefinierte Datentransformation, Variablenmanipulation oder komplexe Überprüfungen aus.",
       "delay": "Pausiert die Ausführung für die angegebene Anzahl von Millisekunden, bevor zum nächsten Knoten fortgefahren wird.",
-      "setVariable": "Setzt Flussvariablen, auf die nachfolgende Knoten über die {{Variablenname}}-Syntax zugreifen können."
+      "setVariable": "Setzt Flussvariablen, auf die nachfolgende Knoten über die {{Variablenname}}-Syntax zugreifen können.",
+      "websocket": "Verbindet sich mit einem WebSocket-Server, sendet eine Nachricht und wartet optional auf eine Antwort. Unterstützt Variablenersetzung in URL und Nachricht.",
+      "graphql": "Sendet eine GraphQL-Abfrage an einen Endpunkt per HTTP POST. Variablen werden als JSON zusammen mit der Abfrage gesendet. Nutzt den HTTP-Proxy zur Ausführung."
     },
     "execution": {
       "pending": "Ausstehend",

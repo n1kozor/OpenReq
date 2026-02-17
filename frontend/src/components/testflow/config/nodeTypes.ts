@@ -92,11 +92,31 @@ export const NODE_TYPE_CONFIGS: Record<TestFlowNodeType, NodeTypeConfig> = {
     descriptionKey: "testFlow.nodeDescriptions.group",
     defaultConfig: { color: "#3b82f6", width: 400, height: 300 },
   },
+  websocket: {
+    type: "websocket",
+    icon: "Cable",
+    color: "#14b8a6",
+    defaultLabel: "WebSocket",
+    labelKey: "testFlow.nodes.websocket",
+    descriptionKey: "testFlow.nodeDescriptions.websocket",
+    defaultConfig: { ws_url: "", ws_message: "", ws_timeout_ms: 5000, ws_wait_response: true },
+  },
+  graphql: {
+    type: "graphql",
+    icon: "Hub",
+    color: "#e879f9",
+    defaultLabel: "GraphQL",
+    labelKey: "testFlow.nodes.graphql",
+    descriptionKey: "testFlow.nodeDescriptions.graphql",
+    defaultConfig: { graphql_url: "", graphql_query: "", graphql_variables: "{}" },
+  },
 };
 
 export const DRAGGABLE_NODE_TYPES: TestFlowNodeType[] = [
   "http_request",
   "collection",
+  "websocket",
+  "graphql",
   "assertion",
   "script",
   "delay",

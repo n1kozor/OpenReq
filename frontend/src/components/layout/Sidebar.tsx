@@ -32,7 +32,6 @@ import {
   PlayArrow,
   AutoAwesome,
   FileDownload,
-  Cable,
   Code,
   Search,
   SwapHoriz,
@@ -84,11 +83,11 @@ interface SidebarProps {
   onOpenWorkspaces: () => void;
   onOpenAIWizard: () => void;
   onOpenImport: () => void;
-  onOpenWebSocket: () => void;
   onExportCollection: (collectionId: string) => void;
   onDuplicateCollection: (collectionId: string, currentName: string) => void;
   onExportFolder: (folderId: string, name: string) => void;
   onExportRequest: (requestId: string, name: string) => void;
+  onCloneItem: (itemId: string, requestId: string, name: string) => void;
   onRequestCollectionTree: (collectionId: string) => void;
   onRequestAllCollectionItems: () => void;
   onMoveItem: (collectionId: string, itemId: string, parentId: string | null) => void;
@@ -125,11 +124,11 @@ export default function Sidebar({
   onOpenWorkspaces,
   onOpenAIWizard,
   onOpenImport,
-  onOpenWebSocket,
   onDuplicateCollection,
   onExportCollection,
   onExportFolder,
   onExportRequest,
+  onCloneItem,
   onRequestCollectionTree,
   onRequestAllCollectionItems,
   onMoveItem,
@@ -161,6 +160,23 @@ export default function Sidebar({
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [dragOverTarget, setDragOverTarget] = useState<{ type: "collection" | "folder"; id: string } | null>(null);
   const dragMime = "application/openreq-item";
+
+  // Safety cleanup: if a drag ends anywhere (e.g. drop into TestBuilder canvas),
+  // onDragEnd on the item might not fire. Listen at document level.
+  // Registered once with empty deps — no stale closure, uses state setters directly.
+  useEffect(() => {
+    const cleanup = () => {
+      setDraggingItemId(null);
+      setDragOverTarget(null);
+      dragPayloadRef.current = null;
+    };
+    document.addEventListener("dragend", cleanup);
+    document.addEventListener("drop", cleanup);
+    return () => {
+      document.removeEventListener("dragend", cleanup);
+      document.removeEventListener("drop", cleanup);
+    };
+  }, []);
 
   const handleColMenu = (e: React.MouseEvent, col: Collection) => {
     e.preventDefault();
@@ -226,7 +242,6 @@ export default function Sidebar({
     { icon: <Workspaces sx={{ fontSize: 17 }} />, label: t("nav.workspace"), onClick: onOpenWorkspaces },
     { icon: <Dns sx={{ fontSize: 17 }} />, label: t("nav.environments"), onClick: onOpenEnvironments },
     { icon: <History sx={{ fontSize: 17 }} />, label: t("nav.history"), onClick: onOpenHistory },
-    { icon: <Cable sx={{ fontSize: 17 }} />, label: t("websocket.title"), onClick: onOpenWebSocket },
     { icon: <Code sx={{ fontSize: 17 }} />, label: t("codegen.generateCode"), onClick: onOpenCodeGen },
     { icon: <AccountTree sx={{ fontSize: 17 }} />, label: t("nav.testBuilder"), onClick: onOpenTestBuilder },
     { icon: <SwapHoriz sx={{ fontSize: 17 }} />, label: t("importExport.title"), onClick: onOpenImport },
@@ -592,7 +607,8 @@ export default function Sidebar({
                     dragPayloadRef.current = payload;
                     e.dataTransfer.setData(dragMime, JSON.stringify(payload));
                     e.dataTransfer.effectAllowed = "move";
-                    setDraggingItemId(item.id);
+                    // Defer state update so VirtualList re-render doesn't cancel the drag
+                    requestAnimationFrame(() => setDraggingItemId(item.id));
                   }}
                   onDragEnd={() => {
                     dragPayloadRef.current = null;
@@ -643,7 +659,6 @@ export default function Sidebar({
                       mx: 1,
                       backgroundColor: isDragTarget ? alpha(theme.palette.primary.main, 0.12) : "transparent",
                       opacity: draggingItemId === item.id ? 0.6 : 1,
-                      pointerEvents: draggingItemId && draggingItemId !== item.id ? "none" : "auto",
                     }}
                     onClick={() => {
                       if (item.is_folder) {
@@ -677,15 +692,15 @@ export default function Sidebar({
                             px: 0.4,
                             py: 0.2,
                             borderRadius: 0.5,
-                            color: METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary,
+                            color: item.protocol === "websocket" ? "#14b8a6" : item.protocol === "graphql" ? "#e879f9" : (METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary),
                             backgroundColor: alpha(
-                              METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary,
+                              item.protocol === "websocket" ? "#14b8a6" : item.protocol === "graphql" ? "#e879f9" : (METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary),
                               0.12,
                             ),
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {item.method?.toUpperCase().slice(0, 3) ?? "GET"}
+                          {item.protocol === "websocket" ? "WS" : item.protocol === "graphql" ? "GQL" : (item.method?.toUpperCase().slice(0, 3) ?? "GET")}
                         </Box>
                       )}
                     </ListItemIcon>
@@ -846,6 +861,17 @@ export default function Sidebar({
             }}
           >
             <FileDownload sx={{ mr: 1.5, fontSize: 16 }} /> {t("collection.exportRequest")}
+          </MuiMenuItem>
+        )}
+        {!itemMenuTarget?.is_folder && itemMenuTarget?.request_id && (
+          <MuiMenuItem
+            onClick={() => {
+              setItemMenuPos(null);
+              if (itemMenuTarget?.request_id)
+                onCloneItem(itemMenuTarget.id, itemMenuTarget.request_id, itemMenuTarget.name);
+            }}
+          >
+            <ContentCopy sx={{ mr: 1.5, fontSize: 16, color: "info.main" }} /> {t("common.cloneRequest")}
           </MuiMenuItem>
         )}
         <Divider />

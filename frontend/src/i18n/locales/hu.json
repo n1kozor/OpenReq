@@ -144,7 +144,10 @@
     "aiGenerate": "AI generálás",
     "aiGenerateDesc": "Kollekció generálása dokumentációból vagy URL-ből",
     "historyDesc": "Korábbi kérések megtekintése",
-    "webSocketDesc": "Csatlakozás WebSocket szerverekhez",
+    "webSocketDesc": "WebSocket kérés létrehozása",
+    "graphqlDesc": "GraphQL kérés létrehozása",
+    "newWebSocket": "Új WebSocket",
+    "newGraphQL": "Új GraphQL",
     "quickActions": "Gyors műveletek",
     "recentCollections": "Legutóbbi kollekciók",
     "totalCollections": "Kollekciók",
@@ -396,7 +399,26 @@
     "disconnectedMsg": "Lecsatlakozva",
     "messageInput": "Üzenet írása... (Enter a küldéshez, Shift+Enter új sor)",
     "noMessages": "Még nincsenek üzenetek. Csatlakozz egy WebSocket szerverhez a kezdéshez.",
-    "clearMessages": "Üzenetek törlése"
+    "clearMessages": "Üzenetek törlése",
+    "urlPlaceholder": "ws://localhost:8080",
+    "savedMessage": "WebSocket kérés mentve",
+    "headers": "Fejlécek",
+    "messages": "Üzenetek",
+    "sendMessage": "Üzenet küldése"
+  },
+  "protocol": {
+    "http": "HTTP",
+    "websocket": "WebSocket",
+    "graphql": "GraphQL",
+    "select": "Protokoll kiválasztása"
+  },
+  "graphql": {
+    "query": "Lekérdezés",
+    "variables": "Változók",
+    "send": "Lekérdezés küldése",
+    "queryPlaceholder": "# Írd ide a GraphQL lekérdezésedet\nquery {\n  \n}",
+    "variablesPlaceholder": "{\n  \n}",
+    "saved": "GraphQL kérés mentve"
   },
   "pathParam": {
     "enterValue": "{{name}} értékének megadása",
@@ -427,6 +449,9 @@
     "panelScripts": "Szkriptek",
     "panelResponse": "Válasz",
     "panelWebSocket": "WebSocket",
+    "newHttp": "Új HTTP kérés",
+    "newWebSocket": "Új WebSocket",
+    "newGraphQL": "Új GraphQL",
     "savePreset": "Mentés előbeállításként",
     "savePresetTitle": "Egyéni elrendezés mentése",
     "presetName": "Előbeállítás neve",
@@ -686,6 +711,7 @@
     "closeAll": "Összes bezárása",
     "close": "Bezárás",
     "duplicate": "Másolás",
+    "cloneRequest": "Klónozás gyűjteménybe",
     "openInNewTab": "Megnyitás új fülön",
     "noItems": "Még nincsenek elemek",
     "deleteConfirm": "<strong>{{name}}</strong> törlése? Ez a művelet nem vonható vissza.",
@@ -740,7 +766,9 @@
       "condition": "Feltétel",
       "loop": "Ciklus",
       "setVariable": "Változó beállítás",
-      "group": "Csoport"
+      "group": "Csoport",
+      "websocket": "WebSocket",
+      "graphql": "GraphQL"
     },
     "nodeDescriptions": {
       "httpRequest": "HTTP kérés végrehajtása",
@@ -751,7 +779,9 @@
       "condition": "Elágazás feltétel alapján",
       "loop": "Lépések ismétlése többször",
       "setVariable": "Változók beállítása vagy módosítása",
-      "group": "Csomópontok vizuális csoportosítása"
+      "group": "Csomópontok vizuális csoportosítása",
+      "websocket": "WebSocket üzenet csatlakoztatása és küldése",
+      "graphql": "GraphQL lekérdezés végrehajtása"
     },
     "nodeConfig": {
       "selectRequest": "Kérés kiválasztása",
@@ -793,7 +823,14 @@
       "conditionSubtitle": "Kifejezés ellenőrzés",
       "assertionSubtitle": "Válasz ellenőrzés",
       "loopBody": "Ciklus törzs",
-      "loopDone": "Kész"
+      "loopDone": "Kész",
+      "wsUrl": "WebSocket URL",
+      "wsMessage": "Üzenet",
+      "wsTimeout": "Időtúllépés (ms)",
+      "wsWaitResponse": "Válaszra várakozás",
+      "gqlUrl": "GraphQL végpont URL",
+      "gqlQuery": "Lekérdezés",
+      "gqlVariables": "Változók (JSON)"
     },
     "nodeHelp": {
       "httpRequest": "Egy mentett HTTP kérést hajt végre. Csatlakoztasd egy Ellenőrzés csomóponthoz a válasz validálásához, vagy egy Feltétel csomóponthoz egyedi folyamatvezérléshez.",
@@ -803,7 +840,9 @@
       "loop": "Megismétli az összes csatlakoztatott 'Ciklus törzs' csomópontot. Számláló mód: fix számú ismétlés. Feltétel mód: ismétlés amíg a kifejezés igaz (hozzáféréssel a válaszadatokhoz).",
       "script": "JavaScript vagy Python kódot futtat egyedi adatátalakításhoz, változó-kezeléshez vagy összetett ellenőrzésekhez.",
       "delay": "Szünetelteti a végrehajtást a megadott ezredmásodpercig, mielőtt továbblépne a következő csomópontra.",
-      "setVariable": "Folyamatváltozókat állít be, amelyeket az alsóbb csomópontok {{változó_név}} szintaxissal érhetnek el."
+      "setVariable": "Folyamatváltozókat állít be, amelyeket az alsóbb csomópontok {{változó_név}} szintaxissal érhetnek el.",
+      "websocket": "WebSocket szerverhez csatlakozik, üzenetet küld, és opcionálisan vár a válaszra. Támogatja a változó-helyettesítést az URL-ben és az üzenetben.",
+      "graphql": "GraphQL lekérdezést küld egy végpontra HTTP POST-on keresztül. A változók JSON-ként kerülnek küldésre a lekérdezés mellett. A HTTP proxyt használja a végrehajtáshoz."
     },
     "execution": {
       "pending": "Várakozik",

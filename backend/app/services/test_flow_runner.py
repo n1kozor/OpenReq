@@ -546,6 +546,122 @@ async def _exec_script(
     }
 
 
+async def _exec_websocket(
+    config: dict,
+    flow_vars: dict[str, str],
+    environment_id: str | None,
+) -> dict:
+    """Execute a WebSocket node: connect, send message, optionally wait for response."""
+    import websockets
+
+    ws_url = config.get("ws_url", "")
+    ws_message = config.get("ws_message", "")
+    ws_timeout_ms = config.get("ws_timeout_ms", 5000)
+    ws_wait_response = config.get("ws_wait_response", True)
+    ws_headers = config.get("headers", {})
+
+    # Variable substitution
+    for key, val in flow_vars.items():
+        placeholder = "{{" + key + "}}"
+        ws_url = ws_url.replace(placeholder, val)
+        ws_message = ws_message.replace(placeholder, val)
+        ws_headers = {k: v.replace(placeholder, val) for k, v in ws_headers.items()}
+
+    if not ws_url:
+        return {"status": "error", "error": "No WebSocket URL specified"}
+
+    start = time.perf_counter()
+    try:
+        async with websockets.connect(
+            ws_url,
+            additional_headers=ws_headers if ws_headers else None,
+            open_timeout=ws_timeout_ms / 1000,
+        ) as ws:
+            response_body = ""
+            if ws_message:
+                await ws.send(ws_message)
+                if ws_wait_response:
+                    try:
+                        response_body = await asyncio.wait_for(
+                            ws.recv(), timeout=ws_timeout_ms / 1000
+                        )
+                    except asyncio.TimeoutError:
+                        response_body = "(timeout waiting for response)"
+            elif ws_wait_response:
+                try:
+                    response_body = await asyncio.wait_for(
+                        ws.recv(), timeout=ws_timeout_ms / 1000
+                    )
+                except asyncio.TimeoutError:
+                    response_body = "(timeout waiting for response)"
+
+        elapsed = (time.perf_counter() - start) * 1000
+        return {
+            "status": "success",
+            "node_type": "websocket",
+            "status_code": 101,
+            "response_body": str(response_body),
+            "elapsed_ms": round(elapsed, 2),
+        }
+    except Exception as exc:
+        elapsed = (time.perf_counter() - start) * 1000
+        return {
+            "status": "error",
+            "node_type": "websocket",
+            "error": str(exc),
+            "elapsed_ms": round(elapsed, 2),
+        }
+
+
+async def _exec_graphql(
+    db: Session,
+    config: dict,
+    flow_vars: dict[str, str],
+    environment_id: str | None,
+    collection_id: str | None,
+) -> dict:
+    """Execute a GraphQL node: POST query+variables to endpoint, reuse HTTP executor."""
+    gql_url = config.get("graphql_url", "")
+    gql_query = config.get("graphql_query", "")
+    gql_variables = config.get("graphql_variables", "{}")
+
+    # Variable substitution
+    for key, val in flow_vars.items():
+        placeholder = "{{" + key + "}}"
+        gql_url = gql_url.replace(placeholder, val)
+        gql_query = gql_query.replace(placeholder, val)
+        gql_variables = gql_variables.replace(placeholder, val)
+
+    if not gql_url:
+        return {"status": "error", "error": "No GraphQL URL specified"}
+
+    # Build inline HTTP request config
+    try:
+        vars_parsed = json.loads(gql_variables) if gql_variables.strip() else {}
+    except json.JSONDecodeError:
+        vars_parsed = {}
+
+    body = json.dumps({"query": gql_query, "variables": vars_parsed})
+    headers = dict(config.get("headers", {}))
+    headers.setdefault("Content-Type", "application/json")
+
+    inline_config = {
+        "inline_request": {
+            "method": "POST",
+            "url": gql_url,
+            "headers": headers,
+            "body": body,
+            "body_type": "json",
+        }
+    }
+
+    result = await _exec_http_request(
+        db, inline_config, flow_vars, environment_id, collection_id
+    )
+    result["node_type"] = "graphql"
+    return result
+
+
 async def _exec_delay(config: dict) -> dict:
     delay_ms = config.get("delay_ms", 1000)
     await asyncio.sleep(delay_ms / 1000)
@@ -722,6 +838,14 @@ async def run_test_flow_stream(
                 )
             elif node.node_type == "set_variable":
                 result = _exec_set_variable(config, flow_vars, node_results)
+            elif node.node_type == "websocket":
+                result = await _exec_websocket(
+                    config, flow_vars, environment_id
+                )
+            elif node.node_type == "graphql":
+                result = await _exec_graphql(
+                    db, config, flow_vars, environment_id, None
+                )
             elif node.node_type == "loop":
                 result = await _exec_loop(
                     db, node, config, flow_vars, node_results,
@@ -900,6 +1024,12 @@ async def _exec_loop(
                     r = _exec_condition(
                         cfg, flow_vars, node_results, incoming, body_nid, nodes,
                         iteration=i,
+                    )
+                elif body_node.node_type == "websocket":
+                    r = await _exec_websocket(cfg, flow_vars, environment_id)
+                elif body_node.node_type == "graphql":
+                    r = await _exec_graphql(
+                        db, cfg, flow_vars, environment_id, None
                     )
                 else:
                     r = {"status": "success", "node_type": body_node.node_type}

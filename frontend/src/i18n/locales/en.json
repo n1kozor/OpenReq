@@ -144,7 +144,10 @@
     "aiGenerate": "AI Generate",
     "aiGenerateDesc": "Generate collection from docs or URL",
     "historyDesc": "View past request history",
-    "webSocketDesc": "Connect to WebSocket servers",
+    "webSocketDesc": "Create a WebSocket request",
+    "graphqlDesc": "Create a GraphQL request",
+    "newWebSocket": "New WebSocket",
+    "newGraphQL": "New GraphQL",
     "quickActions": "Quick Actions",
     "recentCollections": "Recent Collections",
     "totalCollections": "Collections",
@@ -396,7 +399,26 @@
     "disconnectedMsg": "Disconnected",
     "messageInput": "Type a message... (Enter to send, Shift+Enter for new line)",
     "noMessages": "No messages yet. Connect to a WebSocket server to start.",
-    "clearMessages": "Clear Messages"
+    "clearMessages": "Clear Messages",
+    "urlPlaceholder": "ws://localhost:8080",
+    "savedMessage": "WebSocket request saved",
+    "headers": "Headers",
+    "messages": "Messages",
+    "sendMessage": "Send Message"
+  },
+  "protocol": {
+    "http": "HTTP",
+    "websocket": "WebSocket",
+    "graphql": "GraphQL",
+    "select": "Select Protocol"
+  },
+  "graphql": {
+    "query": "Query",
+    "variables": "Variables",
+    "send": "Send Query",
+    "queryPlaceholder": "# Write your GraphQL query here\nquery {\n  \n}",
+    "variablesPlaceholder": "{\n  \n}",
+    "saved": "GraphQL request saved"
   },
   "pathParam": {
     "enterValue": "Enter value for {{name}}",
@@ -427,6 +449,9 @@
     "panelScripts": "Scripts",
     "panelResponse": "Response",
     "panelWebSocket": "WebSocket",
+    "newHttp": "New HTTP Request",
+    "newWebSocket": "New WebSocket",
+    "newGraphQL": "New GraphQL",
     "savePreset": "Save as Preset",
     "savePresetTitle": "Save Custom Preset",
     "presetName": "Preset Name",
@@ -686,6 +711,7 @@
     "closeAll": "Close All",
     "close": "Close",
     "duplicate": "Duplicate",
+    "cloneRequest": "Clone to Collection",
     "openInNewTab": "Open in New Tab",
     "noItems": "No items yet",
     "deleteConfirm": "Delete <strong>{{name}}</strong>? This action cannot be undone.",
@@ -740,7 +766,9 @@
       "condition": "Condition",
       "loop": "Loop",
       "setVariable": "Set Variable",
-      "group": "Group"
+      "group": "Group",
+      "websocket": "WebSocket",
+      "graphql": "GraphQL"
     },
     "nodeDescriptions": {
       "httpRequest": "Execute an HTTP request",
@@ -751,7 +779,9 @@
       "condition": "Branch based on condition",
       "loop": "Repeat steps multiple times",
       "setVariable": "Set or modify variables",
-      "group": "Group nodes visually"
+      "group": "Group nodes visually",
+      "websocket": "Connect and send a WebSocket message",
+      "graphql": "Execute a GraphQL query"
     },
     "nodeConfig": {
       "selectRequest": "Select Request",
@@ -793,7 +823,14 @@
       "conditionSubtitle": "Expression Check",
       "assertionSubtitle": "Response Check",
       "loopBody": "Loop Body",
-      "loopDone": "Done"
+      "loopDone": "Done",
+      "wsUrl": "WebSocket URL",
+      "wsMessage": "Message",
+      "wsTimeout": "Timeout (ms)",
+      "wsWaitResponse": "Wait for response",
+      "gqlUrl": "GraphQL Endpoint URL",
+      "gqlQuery": "Query",
+      "gqlVariables": "Variables (JSON)"
     },
     "nodeHelp": {
       "httpRequest": "Executes a saved HTTP request. Connect to an Assertion node to validate the response, or to a Condition node for custom flow control.",
@@ -803,7 +840,9 @@
       "loop": "Repeats all connected 'Loop Body' nodes. Count mode: fixed number of iterations. Condition mode: repeats while the expression is true (with access to response data).",
       "script": "Runs JavaScript or Python code for custom data transformation, variable manipulation, or complex assertions.",
       "delay": "Pauses execution for the specified number of milliseconds before continuing to the next node.",
-      "setVariable": "Sets flow variables that downstream nodes can access via {{variable_name}} syntax."
+      "setVariable": "Sets flow variables that downstream nodes can access via {{variable_name}} syntax.",
+      "websocket": "Connects to a WebSocket server, sends a message, and optionally waits for a response. Supports variable substitution in URL and message.",
+      "graphql": "Sends a GraphQL query to an endpoint via HTTP POST. Variables are sent as JSON alongside the query. Reuses HTTP proxy for execution."
     },
     "execution": {
       "pending": "Pending",

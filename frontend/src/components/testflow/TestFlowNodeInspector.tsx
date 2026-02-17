@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import {
   Box, Typography, TextField, Select, MenuItem, FormControl, InputLabel,
   IconButton, Button, Divider, InputAdornment, Autocomplete, Alert,
+  Checkbox, FormControlLabel,
 } from "@mui/material";
 import { Close, Add, Delete, Search } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
@@ -170,6 +171,92 @@ export default function TestFlowNodeInspector({
             value={(config.color as string) || "#3b82f6"}
             onChange={(e) => updateConfig({ color: e.target.value })}
           />
+        )}
+
+        {nodeType === "websocket" && (
+          <>
+            <NodeHelpBox text={t("testFlow.nodeHelp.websocket")} />
+            <TextField
+              label={t("testFlow.nodeConfig.wsUrl")}
+              size="small"
+              fullWidth
+              value={(config.ws_url as string) || ""}
+              onChange={(e) => updateConfig({ ws_url: e.target.value })}
+              placeholder="wss://echo.websocket.org"
+              sx={{ "& input": { fontFamily: "monospace", fontSize: "0.8rem" } }}
+            />
+            <TextField
+              label={t("testFlow.nodeConfig.wsMessage")}
+              size="small"
+              fullWidth
+              multiline
+              minRows={2}
+              maxRows={6}
+              value={(config.ws_message as string) || ""}
+              onChange={(e) => updateConfig({ ws_message: e.target.value })}
+              placeholder='{"action": "subscribe"}'
+              sx={{ "& textarea": { fontFamily: "monospace", fontSize: "0.8rem" } }}
+            />
+            <TextField
+              label={t("testFlow.nodeConfig.wsTimeout")}
+              type="number"
+              size="small"
+              fullWidth
+              value={(config.ws_timeout_ms as number) ?? 5000}
+              onChange={(e) => updateConfig({ ws_timeout_ms: Number(e.target.value) })}
+              slotProps={{ htmlInput: { min: 100, max: 60000 } }}
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  checked={(config.ws_wait_response as boolean) ?? true}
+                  onChange={(e) => updateConfig({ ws_wait_response: e.target.checked })}
+                />
+              }
+              label={t("testFlow.nodeConfig.wsWaitResponse")}
+              sx={{ "& .MuiFormControlLabel-label": { fontSize: "0.8rem" } }}
+            />
+          </>
+        )}
+
+        {nodeType === "graphql" && (
+          <>
+            <NodeHelpBox text={t("testFlow.nodeHelp.graphql")} />
+            <TextField
+              label={t("testFlow.nodeConfig.gqlUrl")}
+              size="small"
+              fullWidth
+              value={(config.graphql_url as string) || ""}
+              onChange={(e) => updateConfig({ graphql_url: e.target.value })}
+              placeholder="https://api.example.com/graphql"
+              sx={{ "& input": { fontFamily: "monospace", fontSize: "0.8rem" } }}
+            />
+            <TextField
+              label={t("testFlow.nodeConfig.gqlQuery")}
+              size="small"
+              fullWidth
+              multiline
+              minRows={4}
+              maxRows={10}
+              value={(config.graphql_query as string) || ""}
+              onChange={(e) => updateConfig({ graphql_query: e.target.value })}
+              placeholder={"query {\n  users {\n    id\n    name\n  }\n}"}
+              sx={{ "& textarea": { fontFamily: "monospace", fontSize: "0.75rem" } }}
+            />
+            <TextField
+              label={t("testFlow.nodeConfig.gqlVariables")}
+              size="small"
+              fullWidth
+              multiline
+              minRows={2}
+              maxRows={6}
+              value={(config.graphql_variables as string) || "{}"}
+              onChange={(e) => updateConfig({ graphql_variables: e.target.value })}
+              placeholder='{}'
+              sx={{ "& textarea": { fontFamily: "monospace", fontSize: "0.75rem" } }}
+            />
+          </>
         )}
 
         <Divider />

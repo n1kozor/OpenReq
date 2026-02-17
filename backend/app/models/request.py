@@ -43,6 +43,7 @@ class Request(Base):
     post_response_script: Mapped[str | None] = mapped_column(Text, default=None)
     form_data: Mapped[list | None] = mapped_column(JSON, default=None)
     settings: Mapped[dict | None] = mapped_column(JSON, default=None)
+    protocol: Mapped[str] = mapped_column(String(20), default="http")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

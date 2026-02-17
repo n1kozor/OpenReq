@@ -214,6 +214,7 @@ def duplicate_collection(
                     post_response_script=orig_req.post_response_script,
                     form_data=list(orig_req.form_data) if orig_req.form_data else None,
                     settings=dict(orig_req.settings) if orig_req.settings else None,
+                    protocol=orig_req.protocol or "http",
                 )
                 db.add(new_req)
                 db.flush()
@@ -270,17 +271,20 @@ def list_items(
         .order_by(CollectionItem.sort_order)
         .all()
     )
-    # Batch-load methods for items that have a request
+    # Batch-load methods and protocols for items that have a request
     request_ids = [i.request_id for i in items if i.request_id]
     methods: dict[str, str] = {}
+    protocols: dict[str, str] = {}
     if request_ids:
-        rows = db.query(Request.id, Request.method).filter(Request.id.in_(request_ids)).all()
+        rows = db.query(Request.id, Request.method, Request.protocol).filter(Request.id.in_(request_ids)).all()
         methods = {r.id: r.method.value if hasattr(r.method, "value") else r.method for r in rows}
+        protocols = {r.id: (r.protocol or "http") for r in rows}
     result = []
     for item in items:
         out = CollectionItemOut.model_validate(item)
         if item.request_id and item.request_id in methods:
             out.method = methods[item.request_id]
+            out.protocol = protocols.get(item.request_id, "http")
         result.append(out)
     return result
 
