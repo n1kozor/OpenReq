@@ -1,10 +1,14 @@
 import json
 import logging
+import re
 from dataclasses import dataclass
 
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
+
+# Default context window size for Ollama models (tokens)
+OLLAMA_DEFAULT_NUM_CTX = 32768
 
 
 @dataclass
@@ -127,6 +131,44 @@ TOOLS = [
 ]
 
 
+def _try_parse_endpoints_from_content(content: str) -> list[dict] | None:
+    """Try to extract endpoints JSON from plain text response (Ollama fallback).
+
+    When Ollama fails to produce a proper tool_call, it often dumps the JSON
+    in the message content instead. This tries to find and parse it.
+    """
+    # Try direct JSON parse first
+    try:
+        data = json.loads(content)
+        if isinstance(data, dict) and "endpoints" in data:
+            return data["endpoints"]
+        if isinstance(data, list) and len(data) > 0 and "url" in data[0]:
+            return data
+    except (json.JSONDecodeError, TypeError, KeyError):
+        pass
+
+    # Try to find JSON block in markdown code fences or raw JSON
+    json_patterns = [
+        re.compile(r"```(?:json)?\s*\n({[\s\S]*?})\n\s*```"),  # fenced code block
+        re.compile(r"```(?:json)?\s*\n(\[[\s\S]*?\])\n\s*```"),  # fenced array
+        re.compile(r"(\{[\s\S]*\"endpoints\"\s*:\s*\[[\s\S]*\])"),  # raw object with endpoints
+    ]
+    for pattern in json_patterns:
+        match = pattern.search(content)
+        if match:
+            try:
+                data = json.loads(match.group(1))
+                if isinstance(data, dict) and "endpoints" in data:
+                    return data["endpoints"]
+                if isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
+                    return data
+            except (json.JSONDecodeError, TypeError, KeyError):
+                continue
+
+    logger.warning("Could not parse endpoints from AI content response (length=%d)", len(content))
+    return None
+
+
 URL_RESEARCH_PROMPT = """You are an expert API documentation researcher with web search capabilities.
 
 Search the web for the API documentation at: {url}
@@ -212,6 +254,11 @@ def generate_collection_from_docs(
         )
     extra_text = "\n\n" + "\n\n".join(extra_parts) if extra_parts else ""
 
+    # Build extra kwargs for Ollama (increase context window)
+    extra_kwargs = {}
+    if config.provider == "ollama":
+        extra_kwargs["extra_body"] = {"options": {"num_ctx": OLLAMA_DEFAULT_NUM_CTX}}
+
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -228,15 +275,21 @@ def generate_collection_from_docs(
         tools=TOOLS,
         tool_choice={"type": "function", "function": {"name": "create_api_collection"}},
         temperature=0.7 if config.provider == "ollama" else 1,
+        **extra_kwargs,
     )
 
     message = response.choices[0].message
+    endpoints = None
 
     if message.tool_calls:
         tool_call = message.tool_calls[0]
         args = json.loads(tool_call.function.arguments)
         endpoints = args.get("endpoints", [])
+    elif message.content:
+        # Fallback: Ollama sometimes returns JSON in content instead of tool_calls
+        endpoints = _try_parse_endpoints_from_content(message.content)
 
+    if endpoints is not None:
         # Safety net: ensure all URLs are absolute
         for ep in endpoints:
             url = ep.get("url", "")

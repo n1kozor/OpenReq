@@ -26,11 +26,15 @@ OpenReq is a Postman-like API testing tool with collections, requests, environme
 CRITICAL RULES (MUST FOLLOW)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-1. LANGUAGE: ALWAYS respond in the SAME language the user writes in.
-   - If the user writes in Hungarian → respond entirely in Hungarian.
-   - If the user writes in English → respond entirely in English.
-   - If the user writes in German → respond entirely in German.
-   - NEVER switch languages unless the user does first.
+1. LANGUAGE — THIS IS THE MOST IMPORTANT RULE:
+   - Detect the language of the user's LATEST message.
+   - Respond ENTIRELY in that SAME language. Every single word of your response must be in that language.
+   - If the user writes in Hungarian → your ENTIRE response must be in Hungarian. All explanations, descriptions, and prose in Hungarian.
+   - If the user writes in English → your ENTIRE response must be in English.
+   - If the user writes in German → your ENTIRE response must be in German.
+   - NEVER mix languages in a single response. Do NOT insert English words/phrases into a Hungarian response or vice versa.
+   - Code examples (variable names, test names, API calls) stay in English as they are code, but all surrounding text/explanations must match the user's language.
+   - If you are unsure, default to English.
 
 2. STRICT API: ONLY use the exact `req.*` methods documented below. NEVER invent, guess, or hallucinate
    methods that are not listed. If a method is not documented here, it DOES NOT EXIST.
@@ -204,7 +208,7 @@ BEST PRACTICES
 YOUR ROLE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-- ALWAYS respond in the user's language (Hungarian, English, German, etc.)
+- ALWAYS respond ENTIRELY in the user's language — never mix languages (see Rule #1 above)
 - Help users write pre-request and post-response test scripts
 - Explain API responses, status codes, and headers
 - Debug failing tests and suggest fixes
@@ -362,11 +366,32 @@ def build_collections_summary(db: Session, user_id: str) -> str | None:
     return "\n".join(lines)
 
 
+def _detect_language(text: str) -> str:
+    """Simple heuristic to detect message language for Ollama language reminders."""
+    lower = text.lower()
+    # Hungarian markers
+    hu_markers = ["szia", "kérem", "köszön", "legyen", "hogyan", "miért", "szeretnék", "kell",
+                  "hogy", "már", "még", "aztán", "majd", "nem", "igen", "tudnál", "légy",
+                  "ö", "ü", "á", "é", "ű", "ő", "ú", "í"]
+    de_markers = ["bitte", "danke", "können", "möchte", "warum", "wie", "nicht", "schreiben",
+                  "ä", "ö", "ü", "ß"]
+
+    hu_score = sum(1 for m in hu_markers if m in lower)
+    de_score = sum(1 for m in de_markers if m in lower)
+
+    if hu_score >= 2:
+        return "Hungarian"
+    if de_score >= 2:
+        return "German"
+    return "English"
+
+
 def build_messages(
     history: list[AIChatMessage],
     user_content: str,
     context_text: str | None = None,
     collections_summary: str | None = None,
+    is_ollama: bool = False,
 ) -> list[dict]:
     """Build OpenAI-compatible messages array with system prompt + history + user message."""
     messages: list[dict] = [{"role": "system", "content": AGENT_SYSTEM_PROMPT}]
@@ -384,6 +409,11 @@ def build_messages(
         full_content = f"{context_text}\n\n---\n\n{user_content}"
     else:
         full_content = user_content
+
+    # For Ollama: add an explicit language reminder to improve compliance
+    if is_ollama:
+        lang = _detect_language(user_content)
+        full_content += f"\n\n[SYSTEM REMINDER: Respond ENTIRELY in {lang}. Do NOT mix languages.]"
 
     messages.append({"role": "user", "content": full_content})
     return messages
@@ -405,11 +435,18 @@ async def stream_chat_response(
 
     model = _get_model(config)
 
+    # Increase context window for Ollama models
+    extra_kwargs = {}
+    if config.provider == "ollama":
+        from app.services.ai_generator import OLLAMA_DEFAULT_NUM_CTX
+        extra_kwargs["extra_body"] = {"options": {"num_ctx": OLLAMA_DEFAULT_NUM_CTX}}
+
     stream = await client.chat.completions.create(
         model=model,
         messages=messages,
         temperature=0.7 if config.provider == "ollama" else 1,
         stream=True,
+        **extra_kwargs,
     )
 
     async for chunk in stream:

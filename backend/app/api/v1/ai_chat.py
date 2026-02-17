@@ -319,6 +319,7 @@ async def send_message(
         user_content=payload.content.strip(),
         context_text=context_text,
         collections_summary=collections_summary,
+        is_ollama=config.provider == "ollama",
     )
 
     # Store db session info for saving assistant response after streaming
