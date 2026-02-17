@@ -27,6 +27,7 @@ import { useTranslation } from "react-i18next";
 import KeyValueEditor from "@/components/common/KeyValueEditor";
 import AuthEditor from "./AuthEditor";
 import type { KeyValuePair, AuthType, OAuthConfig, WebSocketMessage } from "@/types";
+import { API_URL } from "@/api/client";
 
 interface WebSocketBuilderProps {
   url: string;
@@ -83,8 +84,11 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
   }, []);
 
   const getWsProxyUrl = () => {
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-    return apiUrl.replace("http", "ws") + "/api/v1/ws-proxy";
+    if (API_URL) {
+      return API_URL.replace("http", "ws") + "/api/v1/ws-proxy";
+    }
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}/api/v1/ws-proxy`;
   };
 
   const handleConnect = useCallback(() => {

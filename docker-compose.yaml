@@ -1,19 +1,18 @@
 services:
-  api:
+  openreq:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
-    container_name: openreq-api
+    container_name: openreq
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     environment:
       - DATABASE_URL=sqlite:///./data/openreq.db
       - ALLOW_REGISTRATION=true
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-change-me-in-production}
       - JWT_ALGORITHM=HS256
       - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
-      - CORS_ORIGINS=http://localhost:5173
-      - ENVIRONMENT=development
+      - ENVIRONMENT=production
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -23,29 +22,6 @@ services:
       retries: 3
     volumes:
       - openreq-data:/app/data
-    networks:
-      - openreq-network
-
-  web:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
-    container_name: openreq-web
-    ports:
-      - "5173:80"
-    depends_on:
-      api:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - openreq-network
-
-networks:
-  openreq-network:
-    name: openreq-network
-    driver: bridge
 
 volumes:
   openreq-data:

@@ -21,6 +21,7 @@ import {
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import type { WebSocketMessage } from "@/types";
+import { API_URL } from "@/api/client";
 
 interface WebSocketPanelProps {
   open?: boolean;
@@ -45,8 +46,11 @@ export default function WebSocketPanel(_props: WebSocketPanelProps) {
   }, [messages]);
 
   const getWsProxyUrl = () => {
-    const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-    return apiUrl.replace("http", "ws") + "/api/v1/ws-proxy";
+    if (API_URL) {
+      return API_URL.replace("http", "ws") + "/api/v1/ws-proxy";
+    }
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}/api/v1/ws-proxy`;
   };
 
   const handleConnect = useCallback(() => {
