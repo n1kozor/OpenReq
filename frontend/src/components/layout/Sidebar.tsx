@@ -38,6 +38,7 @@ import {
   SmartToy,
   AccountTree,
   ContentCopy,
+  Lock,
 } from "@mui/icons-material";
 import { List as VirtualList } from "react-window";
 import { useTranslation } from "react-i18next";
@@ -66,10 +67,11 @@ interface SidebarProps {
   collectionItems: Record<string, CollectionItem[]>;
   collectionTrees: Record<string, CollectionItem[]>;
   collectionTreeLoading: Record<string, boolean>;
-  onSelectRequest: (requestId: string, collectionId: string) => void;
+  onSelectRequest: (requestId: string, collectionId: string, collectionItemId?: string) => void;
   onOpenCollection: (collectionId: string) => void;
   onNewCollection: () => void;
-  onNewFolder: (collectionId: string) => void;
+  onNewFolder: (collectionId: string, parentId?: string) => void;
+  onOpenFolder: (folderId: string, collectionId: string) => void;
   onNewRequest: (collectionId: string, folderId?: string) => void;
   onEditCollection: (collectionId: string, name: string, description: string, visibility: "private" | "shared", variables: Record<string, string> | null) => void;
   onRenameCollection: (collectionId: string, currentName: string) => void;
@@ -111,6 +113,7 @@ export default function Sidebar({
   onOpenCollection,
   onNewCollection,
   onNewFolder,
+  onOpenFolder,
   onNewRequest,
   onEditCollection,
   onRenameCollection,
@@ -154,6 +157,7 @@ export default function Sidebar({
   const [colMenuTarget, setColMenuTarget] = useState<Collection | null>(null);
   const [itemMenuPos, setItemMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [itemMenuTarget, setItemMenuTarget] = useState<CollectionItem | null>(null);
+  const [itemMenuCollectionId, setItemMenuCollectionId] = useState<string | null>(null);
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState(0);
   const dragPayloadRef = useRef<{ itemId: string; collectionId: string } | null>(null);
@@ -192,11 +196,12 @@ export default function Sidebar({
     setColMenuTarget(col);
   };
 
-  const handleItemContext = (e: React.MouseEvent, item: CollectionItem) => {
+  const handleItemContext = (e: React.MouseEvent, item: CollectionItem, collectionId: string) => {
     e.preventDefault();
     e.stopPropagation();
     setItemMenuPos({ top: e.clientY, left: e.clientX });
     setItemMenuTarget(item);
+    setItemMenuCollectionId(collectionId);
   };
 
   const searchTerm = search.trim().toLowerCase();
@@ -662,19 +667,27 @@ export default function Sidebar({
                     }}
                     onClick={() => {
                       if (item.is_folder) {
-                        if (!row.forceOpen) {
-                          setFolderOpen((prev) => ({
-                            ...prev,
-                            [item.id]: !(prev[item.id] === true),
-                          }));
-                        }
+                        onOpenFolder(item.id, row.collectionId);
                       } else if (item.request_id) {
-                        onSelectRequest(item.request_id, row.collectionId);
+                        onSelectRequest(item.request_id, row.collectionId, item.id);
                       }
                     }}
-                    onContextMenu={(e) => handleItemContext(e, item)}
+                    onContextMenu={(e) => handleItemContext(e, item, row.collectionId)}
                   >
-                    <ListItemIcon sx={{ minWidth: item.is_folder ? 22 : 38 }}>
+                    <ListItemIcon
+                      sx={{ minWidth: item.is_folder ? 22 : 38, cursor: item.is_folder ? "pointer" : undefined }}
+                      onClick={(e) => {
+                        if (item.is_folder) {
+                          e.stopPropagation();
+                          if (!row.forceOpen) {
+                            setFolderOpen((prev) => ({
+                              ...prev,
+                              [item.id]: !(prev[item.id] === true),
+                            }));
+                          }
+                        }
+                      }}
+                    >
                       {item.is_folder ? (
                         open || row.forceOpen ? (
                           <ExpandMore sx={{ fontSize: 15, color: "text.secondary" }} />
@@ -714,6 +727,9 @@ export default function Sidebar({
                         color: item.is_folder ? "text.primary" : "text.secondary",
                       }}
                     />
+                    {item.is_folder && item.auth_type && item.auth_type !== "none" && item.auth_type !== "inherit" && (
+                      <Lock sx={{ fontSize: 12, color: "warning.main", ml: 0.5, flexShrink: 0 }} />
+                    )}
                   </ListItemButton>
                 </Box>
               );
@@ -843,6 +859,35 @@ export default function Sidebar({
         onClose={() => setItemMenuPos(null)}
       >
         {itemMenuTarget?.is_folder ? (
+          <>
+          <MuiMenuItem
+            onClick={() => {
+              setItemMenuPos(null);
+              if (itemMenuTarget && itemMenuCollectionId)
+                onNewFolder(itemMenuCollectionId, itemMenuTarget.id);
+            }}
+          >
+            <CreateNewFolder sx={{ mr: 1.5, fontSize: 16 }} /> {t("collection.addFolder")}
+          </MuiMenuItem>
+          <MuiMenuItem
+            onClick={() => {
+              setItemMenuPos(null);
+              if (itemMenuTarget && itemMenuCollectionId)
+                onNewRequest(itemMenuCollectionId, itemMenuTarget.id);
+            }}
+          >
+            <NoteAdd sx={{ mr: 1.5, fontSize: 16 }} /> {t("collection.addRequest")}
+          </MuiMenuItem>
+          <Divider />
+          <MuiMenuItem
+            onClick={() => {
+              setItemMenuPos(null);
+              if (itemMenuTarget && itemMenuCollectionId)
+                onOpenFolder(itemMenuTarget.id, itemMenuCollectionId);
+            }}
+          >
+            <Lock sx={{ mr: 1.5, fontSize: 16, color: "warning.main" }} /> {t("folder.editAuth")}
+          </MuiMenuItem>
           <MuiMenuItem
             onClick={() => {
               setItemMenuPos(null);
@@ -852,6 +897,7 @@ export default function Sidebar({
           >
             <FileDownload sx={{ mr: 1.5, fontSize: 16 }} /> {t("collection.exportFolder")}
           </MuiMenuItem>
+          </>
         ) : (
           <MuiMenuItem
             onClick={() => {

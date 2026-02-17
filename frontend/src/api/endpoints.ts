@@ -103,6 +103,10 @@ export const workspacesApi = {
   listAvailable: () => client.get<Workspace[]>("/workspaces/available"),
   join: (workspaceId: string) =>
     client.post(`/workspaces/join/${workspaceId}`),
+  getGlobals: (workspaceId: string) =>
+    client.get<{ globals: Record<string, string> }>(`/workspaces/${workspaceId}/globals`),
+  updateGlobals: (workspaceId: string, globals: Record<string, string>) =>
+    client.put<{ globals: Record<string, string> }>(`/workspaces/${workspaceId}/globals`, { globals }),
 };
 
 // ── Collections ──
@@ -117,11 +121,13 @@ export const collectionsApi = {
   delete: (id: string) => client.delete(`/collections/${id}`),
   listItems: (collectionId: string) =>
     client.get<CollectionItem[]>(`/collections/${collectionId}/items`),
+  getItem: (itemId: string) =>
+    client.get<CollectionItem>(`/collections/items/${itemId}`),
   createItem: (collectionId: string, data: {
     name: string; is_folder?: boolean; parent_id?: string; request_id?: string; sort_order?: number;
   }) =>
     client.post<CollectionItem>(`/collections/${collectionId}/items`, data),
-  updateItem: (itemId: string, data: { name?: string; sort_order?: number; parent_id?: string }) =>
+  updateItem: (itemId: string, data: { name?: string; sort_order?: number; parent_id?: string; auth_type?: string | null; auth_config?: Record<string, string> | null }) =>
     client.patch<CollectionItem>(`/collections/items/${itemId}`, data),
   deleteItem: (itemId: string) => client.delete(`/collections/items/${itemId}`),
   reorder: (collectionId: string, items: { id: string; sort_order: number; parent_id?: string }[]) =>
@@ -171,6 +177,7 @@ export const proxyApi = {
     auth_config?: Record<string, string>;
     environment_id?: string;
     collection_id?: string;
+    collection_item_id?: string;
     pre_request_script?: string;
     post_response_script?: string;
     script_language?: string;
@@ -399,13 +406,13 @@ export const importExportApi = {
     client.get(`/import-export/export/postman/request/${requestId}`),
 
   previewPostmanImport: (
-    collectionFile: File,
-    environmentFiles: File[],
+    collectionFile?: File,
+    environmentFiles?: File[],
     globalsFile?: File,
   ) => {
     const formData = new FormData();
-    formData.append("collection_file", collectionFile);
-    environmentFiles.forEach((f) => formData.append("environment_files", f));
+    if (collectionFile) formData.append("collection_file", collectionFile);
+    (environmentFiles || []).forEach((f) => formData.append("environment_files", f));
     if (globalsFile) formData.append("globals_file", globalsFile);
     return client.post<PostmanImportPreview>("/import-export/import/postman/preview", formData, {
       headers: { "Content-Type": "multipart/form-data" },
@@ -413,14 +420,14 @@ export const importExportApi = {
   },
 
   importPostmanFull: (
-    collectionFile: File,
+    collectionFile: File | undefined,
     workspaceId: string,
     environmentFiles: File[],
     globalsFile?: File,
     envTypeMapping?: Record<string, string>,
   ) => {
     const formData = new FormData();
-    formData.append("collection_file", collectionFile);
+    if (collectionFile) formData.append("collection_file", collectionFile);
     formData.append("workspace_id", workspaceId);
     environmentFiles.forEach((f) => formData.append("environment_files", f));
     if (globalsFile) formData.append("globals_file", globalsFile);

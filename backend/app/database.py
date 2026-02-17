@@ -52,6 +52,14 @@ def _run_migrations():
         ("ai_conversations", "is_shared", "BOOLEAN DEFAULT 0"),
         ("ai_conversations", "workspace_id", "VARCHAR(36)"),
         ("requests", "protocol", "VARCHAR(20) DEFAULT 'http'"),
+        ("workspaces", "globals", "TEXT DEFAULT '{}'"),
+        ("collection_items", "auth_type", "VARCHAR(20)"),
+        ("collection_items", "auth_config", "TEXT"),
+        ("collection_items", "description", "TEXT"),
+        ("collection_items", "variables", "TEXT"),
+        ("collection_items", "pre_request_script", "TEXT"),
+        ("collection_items", "post_response_script", "TEXT"),
+        ("collection_items", "script_language", "VARCHAR(20)"),
     ]
     for table, column, col_type in migrations:
         if table in inspector.get_table_names():

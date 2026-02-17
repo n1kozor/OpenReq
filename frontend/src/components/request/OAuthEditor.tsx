@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   Box,
-  TextField,
   Select,
   MenuItem,
   Typography,
@@ -13,20 +12,23 @@ import {
   Alert,
   CircularProgress,
   Chip,
-  InputAdornment,
   IconButton,
 } from "@mui/material";
 import { Visibility, VisibilityOff, Key, OpenInNew } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { oauthApi } from "@/api/endpoints";
+import { VariableValueCell } from "@/components/common/KeyValueEditor";
 import type { OAuthConfig } from "@/types";
+import type { VariableInfo, VariableGroup } from "@/hooks/useVariableGroups";
 
 interface OAuthEditorProps {
   config: OAuthConfig;
   onChange: (config: OAuthConfig) => void;
+  resolvedVariables?: Map<string, VariableInfo>;
+  variableGroups?: VariableGroup[];
 }
 
-export default function OAuthEditor({ config, onChange }: OAuthEditorProps) {
+export default function OAuthEditor({ config, onChange, resolvedVariables, variableGroups }: OAuthEditorProps) {
   const { t } = useTranslation();
   const [showSecret, setShowSecret] = useState(false);
   const [showToken, setShowToken] = useState(false);
@@ -61,7 +63,6 @@ export default function OAuthEditor({ config, onChange }: OAuthEditorProps) {
           setError(data.error || t("oauth.tokenFailed"));
         }
       } else if (config.grantType === "authorization_code") {
-        // Open auth URL in new window
         const params = new URLSearchParams({
           response_type: "code",
           client_id: config.clientId,
@@ -148,25 +149,31 @@ export default function OAuthEditor({ config, onChange }: OAuthEditorProps) {
 
       {config.grantType === "authorization_code" && (
         <>
-          <TextField
-            fullWidth
-            size="small"
-            label={t("oauth.authUrl")}
-            placeholder="https://provider.com/oauth/authorize"
-            value={config.authUrl}
-            onChange={(e) => update({ authUrl: e.target.value })}
-            InputProps={{ sx: { fontFamily: "monospace", fontSize: 13 } }}
-          />
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+              {t("oauth.authUrl")}
+            </Typography>
+            <VariableValueCell
+              value={config.authUrl}
+              onChange={(v) => update({ authUrl: v })}
+              placeholder="https://provider.com/oauth/authorize"
+              resolvedVariables={resolvedVariables}
+              variableGroups={variableGroups}
+            />
+          </Box>
 
-          <TextField
-            fullWidth
-            size="small"
-            label={t("oauth.redirectUri")}
-            placeholder="http://localhost:5173/oauth/callback"
-            value={config.redirectUri}
-            onChange={(e) => update({ redirectUri: e.target.value })}
-            InputProps={{ sx: { fontFamily: "monospace", fontSize: 13 } }}
-          />
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+              {t("oauth.redirectUri")}
+            </Typography>
+            <VariableValueCell
+              value={config.redirectUri}
+              onChange={(v) => update({ redirectUri: v })}
+              placeholder="http://localhost:5173/oauth/callback"
+              resolvedVariables={resolvedVariables}
+              variableGroups={variableGroups}
+            />
+          </Box>
 
           <FormControlLabel
             control={
@@ -189,60 +196,62 @@ export default function OAuthEditor({ config, onChange }: OAuthEditorProps) {
         </>
       )}
 
-      <TextField
-        fullWidth
-        size="small"
-        label={t("oauth.tokenUrl")}
-        placeholder="https://provider.com/oauth/token"
-        value={config.tokenUrl}
-        onChange={(e) => update({ tokenUrl: e.target.value })}
-        InputProps={{ sx: { fontFamily: "monospace", fontSize: 13 } }}
-      />
+      <Box>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+          {t("oauth.tokenUrl")}
+        </Typography>
+        <VariableValueCell
+          value={config.tokenUrl}
+          onChange={(v) => update({ tokenUrl: v })}
+          placeholder="https://provider.com/oauth/token"
+          resolvedVariables={resolvedVariables}
+        />
+      </Box>
 
-      <TextField
-        fullWidth
-        size="small"
-        label={t("oauth.clientId")}
-        value={config.clientId}
-        onChange={(e) => update({ clientId: e.target.value })}
-        InputProps={{ sx: { fontFamily: "monospace", fontSize: 13 } }}
-      />
+      <Box>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+          {t("oauth.clientId")}
+        </Typography>
+        <VariableValueCell
+          value={config.clientId}
+          onChange={(v) => update({ clientId: v })}
+          placeholder={t("oauth.clientId")}
+          resolvedVariables={resolvedVariables}
+        />
+      </Box>
 
-      <TextField
-        fullWidth
-        size="small"
-        label={t("oauth.clientSecret")}
-        value={config.clientSecret}
-        onChange={(e) => update({ clientSecret: e.target.value })}
-        type={showSecret ? "text" : "password"}
-        InputProps={{
-          sx: { fontFamily: "monospace", fontSize: 13 },
-          endAdornment: (
-            <InputAdornment position="end">
-              <IconButton
-                size="small"
-                onClick={() => setShowSecret(!showSecret)}
-              >
-                {showSecret ? (
-                  <VisibilityOff fontSize="small" />
-                ) : (
-                  <Visibility fontSize="small" />
-                )}
-              </IconButton>
-            </InputAdornment>
-          ),
-        }}
-      />
+      <Box>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+          {t("oauth.clientSecret")}
+        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Box sx={{ flex: 1 }}>
+            <VariableValueCell
+              value={config.clientSecret}
+              onChange={(v) => update({ clientSecret: v })}
+              placeholder={t("oauth.clientSecret")}
+              resolvedVariables={resolvedVariables}
+              variableGroups={variableGroups}
+              masked={!showSecret}
+            />
+          </Box>
+          <IconButton size="small" onClick={() => setShowSecret(!showSecret)}>
+            {showSecret ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+          </IconButton>
+        </Box>
+      </Box>
 
-      <TextField
-        fullWidth
-        size="small"
-        label={t("oauth.scope")}
-        placeholder="read write"
-        value={config.scope}
-        onChange={(e) => update({ scope: e.target.value })}
-        InputProps={{ sx: { fontFamily: "monospace", fontSize: 13 } }}
-      />
+      <Box>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+          {t("oauth.scope")}
+        </Typography>
+        <VariableValueCell
+          value={config.scope}
+          onChange={(v) => update({ scope: v })}
+          placeholder="read write"
+          resolvedVariables={resolvedVariables}
+        />
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ fontSize: 12 }}>
@@ -252,15 +261,18 @@ export default function OAuthEditor({ config, onChange }: OAuthEditorProps) {
 
       {config.grantType === "authorization_code" && (
         <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
-          <TextField
-            fullWidth
-            size="small"
-            label={t("oauth.authorizationCodeInput")}
-            placeholder={t("oauth.pasteCode")}
-            value={authCode}
-            onChange={(e) => setAuthCode(e.target.value)}
-            InputProps={{ sx: { fontFamily: "monospace", fontSize: 13 } }}
-          />
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+              {t("oauth.authorizationCodeInput")}
+            </Typography>
+            <VariableValueCell
+              value={authCode}
+              onChange={setAuthCode}
+              placeholder={t("oauth.pasteCode")}
+              resolvedVariables={resolvedVariables}
+              variableGroups={variableGroups}
+            />
+          </Box>
           <Button
             variant="outlined"
             size="small"
@@ -305,30 +317,21 @@ export default function OAuthEditor({ config, onChange }: OAuthEditorProps) {
           <Typography variant="caption" color="text.secondary">
             {t("oauth.currentToken")}
           </Typography>
-          <TextField
-            fullWidth
-            size="small"
-            value={config.accessToken}
-            onChange={(e) => update({ accessToken: e.target.value })}
-            type={showToken ? "text" : "password"}
-            InputProps={{
-              sx: { fontFamily: "monospace", fontSize: 12 },
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    onClick={() => setShowToken(!showToken)}
-                  >
-                    {showToken ? (
-                      <VisibilityOff fontSize="small" />
-                    ) : (
-                      <Visibility fontSize="small" />
-                    )}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Box sx={{ flex: 1 }}>
+              <VariableValueCell
+                value={config.accessToken}
+                onChange={(v) => update({ accessToken: v })}
+                placeholder={t("oauth.currentToken")}
+                resolvedVariables={resolvedVariables}
+              variableGroups={variableGroups}
+                masked={!showToken}
+              />
+            </Box>
+            <IconButton size="small" onClick={() => setShowToken(!showToken)}>
+              {showToken ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+            </IconButton>
+          </Box>
         </Box>
       )}
     </Box>

@@ -172,6 +172,9 @@ async def _exec_http_request(
         if req.settings:
             request_settings = RequestSettings(**req.settings)
 
+        # Look up CollectionItem for auth inheritance
+        ci = db.query(CollectionItem).filter(CollectionItem.request_id == request_id).first()
+
         proxy_req = ProxyRequest(
             method=req.method,
             url=req.url,
@@ -184,6 +187,7 @@ async def _exec_http_request(
             auth_config=req.auth_config or {},
             environment_id=environment_id,
             collection_id=collection_id,
+            collection_item_id=ci.id if ci else None,
             pre_request_script=req.pre_request_script,
             post_response_script=req.post_response_script,
             request_settings=request_settings,
@@ -283,6 +287,7 @@ async def _exec_collection(
             auth_config=req.auth_config or {},
             environment_id=environment_id,
             collection_id=coll_id,
+            collection_item_id=item.id,
             pre_request_script=req.pre_request_script,
             post_response_script=req.post_response_script,
             request_settings=request_settings,

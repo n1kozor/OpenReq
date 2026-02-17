@@ -100,6 +100,7 @@ interface CollectionRunnerDialogProps {
   collectionName: string;
   environments: Environment[];
   selectedEnvId: string | null;
+  onVariablesChanged?: () => void;
 }
 
 type Phase = "config" | "running" | "done";
@@ -111,6 +112,7 @@ export default function CollectionRunnerDialog({
   collectionName,
   environments,
   selectedEnvId,
+  onVariablesChanged,
 }: CollectionRunnerDialogProps) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -266,6 +268,7 @@ export default function CollectionRunnerDialog({
     params.set("delay_ms", String(delayMs));
 
     const token = localStorage.getItem("openreq-token");
+    let hadVariableChanges = false;
 
     try {
       const response = await fetch(
@@ -339,6 +342,18 @@ export default function CollectionRunnerDialog({
                 next.set(event.iteration, arr);
                 return next;
               });
+              // Track if any script modified persisted variables
+              if (!hadVariableChanges && event.response) {
+                const sr = [event.response.pre_request_result, event.response.script_result];
+                for (const r of sr) {
+                  if (!r) continue;
+                  if ((r.globals_updates && Object.keys(r.globals_updates).length > 0) ||
+                      (r.environment_updates && Object.keys(r.environment_updates).length > 0) ||
+                      (r.collection_var_updates && Object.keys(r.collection_var_updates).length > 0)) {
+                    hadVariableChanges = true;
+                  }
+                }
+              }
             } else if (event.type === "done") {
               setPhase("done");
             }
@@ -353,12 +368,14 @@ export default function CollectionRunnerDialog({
     } catch (err: any) {
       if (err?.name === "AbortError") {
         setPhase("done");
+        if (hadVariableChanges) onVariablesChanged?.();
         return;
       }
       setErrorMsg(err?.message ?? String(err));
       setPhase("config");
     }
-  }, [collectionId, envId, iterations, delayMs]);
+    if (hadVariableChanges) onVariablesChanged?.();
+  }, [collectionId, envId, iterations, delayMs, onVariablesChanged]);
 
   const handleStop = useCallback(() => {
     setWasStopped(true);

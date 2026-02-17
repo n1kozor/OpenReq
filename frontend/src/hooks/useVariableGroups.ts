@@ -4,11 +4,11 @@ import type { EnvironmentVariable } from "@/types";
 export interface VariableInfo {
   key: string;
   value: string;
-  source: "environment" | "collection";
+  source: "globals" | "collection" | "environment";
 }
 
 export interface VariableGroup {
-  source: "environment" | "collection";
+  source: "globals" | "collection" | "environment";
   label: string;
   items: VariableInfo[];
 }
@@ -21,12 +21,26 @@ interface UseVariableGroupsResult {
 export function useVariableGroups(
   envVariables: EnvironmentVariable[],
   collectionVariables: Record<string, string>,
+  globalsVariables?: Record<string, string> | null,
 ): UseVariableGroupsResult {
   return useMemo(() => {
     const groups: VariableGroup[] = [];
     const resolved = new Map<string, VariableInfo>();
 
-    // Collection variables first (lower priority — env overrides)
+    // Globals first (lowest priority — everything overrides)
+    const globalsItems: VariableInfo[] = [];
+    if (globalsVariables) {
+      for (const [key, value] of Object.entries(globalsVariables)) {
+        const info: VariableInfo = { key, value, source: "globals" };
+        globalsItems.push(info);
+        resolved.set(key, info);
+      }
+    }
+    if (globalsItems.length > 0) {
+      groups.push({ source: "globals", label: "variable.globals", items: globalsItems });
+    }
+
+    // Collection variables (override globals)
     const colItems: VariableInfo[] = [];
     for (const [key, value] of Object.entries(collectionVariables)) {
       const info: VariableInfo = { key, value, source: "collection" };
@@ -37,7 +51,7 @@ export function useVariableGroups(
       groups.push({ source: "collection", label: "variable.collection", items: colItems });
     }
 
-    // Environment variables (higher priority — override collection)
+    // Environment variables (highest priority — override everything)
     const envItems: VariableInfo[] = [];
     for (const v of envVariables) {
       const info: VariableInfo = { key: v.key, value: v.is_secret ? "******" : v.value, source: "environment" };
@@ -49,5 +63,5 @@ export function useVariableGroups(
     }
 
     return { groups, resolved };
-  }, [envVariables, collectionVariables]);
+  }, [envVariables, collectionVariables, globalsVariables]);
 }

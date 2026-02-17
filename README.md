@@ -67,7 +67,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-The app will be available at `http://localhost:5173` with the API at `http://localhost:8000`.
+The app will be available at `http://localhost:8000` with the API at `http://localhost:8000/api`.
 
 ### Manual Setup
 

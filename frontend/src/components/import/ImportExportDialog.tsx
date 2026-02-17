@@ -164,12 +164,12 @@ export default function ImportExportDialog({
   // ── Postman wizard handlers ──
 
   const handlePreview = async () => {
-    if (!collectionFile) return;
+    if (!collectionFile && envFiles.length === 0 && !globalsFile) return;
     setLoading(true);
     setError(null);
     try {
       const { data } = await importExportApi.previewPostmanImport(
-        collectionFile,
+        collectionFile || undefined,
         envFiles,
         globalsFile || undefined,
       );
@@ -188,12 +188,13 @@ export default function ImportExportDialog({
   };
 
   const handleFullImport = async () => {
-    if (!collectionFile || !workspaceId) return;
+    if (!workspaceId) return;
+    if (!collectionFile && envFiles.length === 0 && !globalsFile) return;
     setPmStep("importing");
     setError(null);
     try {
       const { data } = await importExportApi.importPostmanFull(
-        collectionFile,
+        collectionFile || undefined,
         workspaceId,
         envFiles,
         globalsFile || undefined,
@@ -413,7 +414,7 @@ export default function ImportExportDialog({
           <Button
             variant="contained"
             onClick={handlePreview}
-            disabled={!collectionFile || loading}
+            disabled={(!collectionFile && envFiles.length === 0 && !globalsFile) || loading}
             startIcon={loading ? <CircularProgress size={16} /> : <ArrowForward />}
             sx={{ mt: 1 }}
           >
@@ -430,6 +431,7 @@ export default function ImportExportDialog({
       return (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {/* Collection Summary */}
+          {preview.collection && (
           <Box sx={{ p: 2, borderRadius: 1.5, border: 1, borderColor: "divider" }}>
             <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
               {t("postmanImport.collectionSummary", { name: preview.collection.name })}
@@ -468,6 +470,7 @@ export default function ImportExportDialog({
               )}
             </Box>
           </Box>
+          )}
 
           {/* Environments */}
           {preview.environments.length > 0 && (
@@ -630,13 +633,15 @@ export default function ImportExportDialog({
           </Alert>
 
           <Box sx={{ p: 2, borderRadius: 1.5, border: 1, borderColor: "divider" }}>
-            <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
-              {t("postmanImport.collectionCreated", {
-                name: result.collection.name,
-                requests: result.collection.total_requests,
-                folders: result.collection.total_folders,
-              })}
-            </Typography>
+            {result.collection && (
+              <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                {t("postmanImport.collectionCreated", {
+                  name: result.collection.name,
+                  requests: result.collection.total_requests,
+                  folders: result.collection.total_folders,
+                })}
+              </Typography>
+            )}
 
             {result.environments.length > 0 && (
               <Box sx={{ mt: 1 }}>
@@ -661,7 +666,7 @@ export default function ImportExportDialog({
               </Typography>
             )}
 
-            {result.collection.collection_variables_count > 0 && (
+            {result.collection?.collection_variables_count != null && result.collection.collection_variables_count > 0 && (
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontSize: "0.8rem" }}>
                 {t("postmanImport.collectionVariablesStored", { count: result.collection.collection_variables_count })}
               </Typography>

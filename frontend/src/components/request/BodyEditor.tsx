@@ -13,7 +13,6 @@ import {
   TableHead,
   TableRow,
   Checkbox,
-  TextField,
   IconButton,
   Chip,
 } from "@mui/material";
@@ -22,7 +21,7 @@ import Editor, { type Monaco } from "@monaco-editor/react";
 import { useTheme } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
 import KeyValueEditor from "@/components/common/KeyValueEditor";
-import { newPair } from "@/components/common/KeyValueEditor";
+import { newPair, VariableValueCell } from "@/components/common/KeyValueEditor";
 import { registerVariableProviders, getVariableTheme } from "@/utils/monacoVariables";
 import type { BodyType, KeyValuePair } from "@/types";
 import type { VariableGroup, VariableInfo } from "@/hooks/useVariableGroups";
@@ -159,6 +158,8 @@ export default function BodyEditor({
           onChange={onFormDataChange}
           keyLabel={t("environment.key")}
           valueLabel={t("common.value")}
+          resolvedVariables={resolvedVariables}
+          variableGroups={variableGroups}
         />
       )}
 
@@ -206,36 +207,22 @@ export default function BodyEditor({
                     </Select>
                   </TableCell>
                   <TableCell>
-                    <TextField
-                      size="small"
-                      fullWidth
-                      variant="standard"
-                      placeholder={t("environment.key")}
+                    <VariableValueCell
                       value={pair.key}
-                      onChange={(e) =>
-                        handleFormDataFieldChange(pair.id, "key", e.target.value)
-                      }
-                      InputProps={{
-                        disableUnderline: true,
-                        sx: { fontSize: "0.82rem", fontFamily: "monospace" },
-                      }}
+                      onChange={(v) => handleFormDataFieldChange(pair.id, "key", v)}
+                      placeholder={t("environment.key")}
+                      resolvedVariables={resolvedVariables}
+                      variableGroups={variableGroups}
                     />
                   </TableCell>
                   <TableCell>
                     {(pair.type || "text") === "text" ? (
-                      <TextField
-                        size="small"
-                        fullWidth
-                        variant="standard"
-                        placeholder={t("common.value")}
+                      <VariableValueCell
                         value={pair.value}
-                        onChange={(e) =>
-                          handleFormDataFieldChange(pair.id, "value", e.target.value)
-                        }
-                        InputProps={{
-                          disableUnderline: true,
-                          sx: { fontSize: "0.82rem", fontFamily: "monospace" },
-                        }}
+                        onChange={(v) => handleFormDataFieldChange(pair.id, "value", v)}
+                        placeholder={t("common.value")}
+                        resolvedVariables={resolvedVariables}
+                        variableGroups={variableGroups}
                       />
                     ) : (
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>

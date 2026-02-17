@@ -15,6 +15,7 @@ from app.models.collection import Collection, CollectionItem
 from app.models.request import Request, HttpMethod, AuthType
 from app.models.user import User
 from app.models.environment import Environment, EnvironmentVariable, EnvironmentType
+from app.models.workspace import Workspace
 from app.services.import_export import (
     parse_postman_collection,
     parse_postman_environment,
@@ -34,6 +35,7 @@ router = APIRouter()
 
 AUTH_TYPE_MAP = {
     "none": AuthType.NONE,
+    "inherit": AuthType.INHERIT,
     "bearer": AuthType.BEARER,
     "basic": AuthType.BASIC,
     "api_key": AuthType.API_KEY,
@@ -52,6 +54,7 @@ def _create_items_recursive(
     sort_order = sort_start
     for item in items:
         if item.get("type") == "folder":
+            folder_auth = item.get("auth_type", "none")
             folder = CollectionItem(
                 id=str(uuid.uuid4()),
                 collection_id=collection_id,
@@ -59,6 +62,13 @@ def _create_items_recursive(
                 is_folder=True,
                 parent_id=parent_id,
                 sort_order=sort_order,
+                auth_type=folder_auth if folder_auth != "none" else None,
+                auth_config=item.get("auth_config") or None,
+                description=item.get("description") or None,
+                variables=item.get("variables") or None,
+                pre_request_script=item.get("pre_request_script") or None,
+                post_response_script=item.get("post_response_script") or None,
+                script_language=item.get("script_language") or None,
             )
             db.add(folder)
             db.flush()
@@ -76,6 +86,16 @@ def _create_items_recursive(
 
             auth_type = AUTH_TYPE_MAP.get(item.get("auth_type", "none"), AuthType.NONE)
 
+            # Detect GraphQL protocol
+            body_type = item.get("body_type", "none")
+            protocol = "http"
+            settings = None
+            if body_type == "graphql":
+                protocol = "graphql"
+                gql_vars = item.get("graphql_variables")
+                if gql_vars:
+                    settings = {"graphql_variables": gql_vars}
+
             req = Request(
                 id=str(uuid.uuid4()),
                 name=item.get("name", "Request"),
@@ -83,12 +103,15 @@ def _create_items_recursive(
                 url=item.get("url", ""),
                 headers=item.get("headers") or {},
                 body=item.get("body"),
-                body_type=item.get("body_type", "none"),
+                body_type=body_type,
                 auth_type=auth_type,
                 auth_config=item.get("auth_config") or {},
                 query_params=item.get("query_params") or {},
                 pre_request_script=item.get("pre_request_script") or None,
                 post_response_script=item.get("post_response_script") or None,
+                form_data=item.get("form_data") or None,
+                protocol=protocol,
+                settings=settings,
             )
             db.add(req)
             db.flush()
@@ -101,6 +124,7 @@ def _create_items_recursive(
                 parent_id=parent_id,
                 request_id=req.id,
                 sort_order=sort_order,
+                description=item.get("description") or None,
             )
             db.add(ci)
             sort_order += 1
@@ -130,6 +154,8 @@ async def import_postman(
         raise HTTPException(status_code=400, detail=f"Failed to parse Postman collection: {e}")
 
     col_vars = {v["key"]: v["value"] for v in parsed.get("variables", [])}
+    scripts = parsed.get("scripts", {})
+    col_auth_type = parsed.get("auth_type", "none")
 
     col = Collection(
         name=parsed["name"],
@@ -137,6 +163,11 @@ async def import_postman(
         owner_id=current_user.id,
         workspace_id=workspace_id,
         variables=col_vars if col_vars else {},
+        auth_type=col_auth_type if col_auth_type != "none" else None,
+        auth_config=parsed.get("auth_config") or None,
+        pre_request_script=scripts.get("pre_request") or None,
+        post_response_script=scripts.get("post_response") or None,
+        script_language="javascript" if (scripts.get("pre_request") or scripts.get("post_response")) else None,
     )
     db.add(col)
     db.flush()
@@ -202,25 +233,43 @@ async def _read_json(file: UploadFile) -> dict:
 
 @router.post("/import/postman/preview")
 async def preview_postman_import(
-    collection_file: UploadFile = File(...),
+    collection_file: UploadFile | None = File(default=None),
     environment_files: list[UploadFile] = File(default=[]),
     globals_file: UploadFile | None = File(default=None),
     current_user: User = Depends(get_current_user),
 ):
-    """Analyze Postman files and return a preview without creating anything."""
-    # Parse collection
-    try:
-        col_data = await _read_json(collection_file)
-    except (json.JSONDecodeError, Exception):
-        raise HTTPException(status_code=400, detail="Invalid JSON in collection file")
+    """Analyze Postman files and return a preview without creating anything.
 
-    try:
-        parsed = parse_postman_collection(col_data)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to parse collection: {e}")
+    All file parameters are optional, but at least one must be provided.
+    """
+    # Parse collection (optional)
+    col_preview = None
+    var_refs: set[str] = set()
+    scripts_count = 0
+    if collection_file:
+        try:
+            col_data = await _read_json(collection_file)
+        except (json.JSONDecodeError, Exception):
+            raise HTTPException(status_code=400, detail="Invalid JSON in collection file")
 
-    total_requests, total_folders, scripts_count = _count_items(parsed["items"])
-    var_refs = _extract_variable_references(parsed["items"])
+        try:
+            parsed = parse_postman_collection(col_data)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to parse collection: {e}")
+
+        total_requests, total_folders, scripts_count = _count_items(parsed["items"])
+        var_refs = _extract_variable_references(parsed["items"])
+
+        col_preview = {
+            "name": parsed["name"],
+            "description": parsed.get("description", ""),
+            "total_requests": total_requests,
+            "total_folders": total_folders,
+            "collection_variables_count": len(parsed.get("variables", [])),
+            "has_pre_request_script": bool(parsed.get("scripts", {}).get("pre_request")),
+            "has_post_response_script": bool(parsed.get("scripts", {}).get("post_response")),
+            "request_scripts_count": scripts_count,
+        }
 
     # Parse environments
     env_previews = []
@@ -274,16 +323,7 @@ async def preview_postman_import(
     variables_provided = sorted(all_env_vars)
 
     return {
-        "collection": {
-            "name": parsed["name"],
-            "description": parsed.get("description", ""),
-            "total_requests": total_requests,
-            "total_folders": total_folders,
-            "collection_variables_count": len(parsed.get("variables", [])),
-            "has_pre_request_script": bool(parsed.get("scripts", {}).get("pre_request")),
-            "has_post_response_script": bool(parsed.get("scripts", {}).get("post_response")),
-            "request_scripts_count": scripts_count,
-        },
+        "collection": col_preview,
         "environments": env_previews,
         "globals": globals_preview,
         "variables_used_in_collection": variables_used,
@@ -295,15 +335,18 @@ async def preview_postman_import(
 
 @router.post("/import/postman/full")
 async def import_postman_full(
-    collection_file: UploadFile = File(...),
     workspace_id: str = Form(...),
+    collection_file: UploadFile | None = File(default=None),
     environment_files: list[UploadFile] = File(default=[]),
     globals_file: UploadFile | None = File(default=None),
     env_type_mapping: str | None = Form(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Import a full Postman workspace: collection + environments + globals."""
+    """Import a full Postman workspace: collection + environments + globals.
+
+    All file parameters are optional, but at least one must be provided.
+    """
     type_mapping = {}
     if env_type_mapping:
         try:
@@ -311,32 +354,50 @@ async def import_postman_full(
         except json.JSONDecodeError:
             pass
 
-    # 1. Parse and create collection
-    try:
-        col_data = await _read_json(collection_file)
-    except (json.JSONDecodeError, Exception):
-        raise HTTPException(status_code=400, detail="Invalid JSON in collection file")
+    # 1. Parse and create collection (optional)
+    col_info = None
+    scripts_count = 0
+    if collection_file:
+        try:
+            col_data = await _read_json(collection_file)
+        except (json.JSONDecodeError, Exception):
+            raise HTTPException(status_code=400, detail="Invalid JSON in collection file")
 
-    try:
-        parsed = parse_postman_collection(col_data)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to parse collection: {e}")
+        try:
+            parsed = parse_postman_collection(col_data)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to parse collection: {e}")
 
-    col_vars = {v["key"]: v["value"] for v in parsed.get("variables", [])}
+        col_vars = {v["key"]: v["value"] for v in parsed.get("variables", [])}
+        scripts = parsed.get("scripts", {})
+        col_auth_type = parsed.get("auth_type", "none")
 
-    col = Collection(
-        name=parsed["name"],
-        description=parsed.get("description", ""),
-        owner_id=current_user.id,
-        workspace_id=workspace_id,
-        variables=col_vars if col_vars else {},
-    )
-    db.add(col)
-    db.flush()
+        col = Collection(
+            name=parsed["name"],
+            description=parsed.get("description", ""),
+            owner_id=current_user.id,
+            workspace_id=workspace_id,
+            variables=col_vars if col_vars else {},
+            auth_type=col_auth_type if col_auth_type != "none" else None,
+            auth_config=parsed.get("auth_config") or None,
+            pre_request_script=scripts.get("pre_request") or None,
+            post_response_script=scripts.get("post_response") or None,
+            script_language="javascript" if (scripts.get("pre_request") or scripts.get("post_response")) else None,
+        )
+        db.add(col)
+        db.flush()
 
-    _create_items_recursive(db, col.id, parsed["items"])
+        _create_items_recursive(db, col.id, parsed["items"])
 
-    total_requests, total_folders, scripts_count = _count_items(parsed["items"])
+        total_requests, total_folders, scripts_count = _count_items(parsed["items"])
+
+        col_info = {
+            "id": col.id,
+            "name": col.name,
+            "total_requests": total_requests,
+            "total_folders": total_folders,
+            "collection_variables_count": len(col_vars),
+        }
 
     # 2. Create environments from env files
     created_envs = []
@@ -376,48 +437,31 @@ async def import_postman_full(
         except Exception as e:
             errors.append(f"Environment '{ef.filename}': {e}")
 
-    # 3. Create globals environment
+    # 3. Save globals to workspace.globals (not as a separate environment)
     globals_info = None
     if globals_file:
         try:
             globals_data = await _read_json(globals_file)
             globals_parsed = parse_postman_environment(globals_data)
-            globals_env = Environment(
-                id=str(uuid.uuid4()),
-                name=f"{globals_parsed['name']} (Globals)",
-                env_type=EnvironmentType.DEV,
-                workspace_id=workspace_id,
-            )
-            db.add(globals_env)
-            db.flush()
+            ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+            if ws:
+                globals_dict = {v["key"]: v["value"] for v in globals_parsed["variables"]}
+                # Merge with existing globals (imported values overwrite)
+                existing = ws.globals or {}
+                existing.update(globals_dict)
+                ws.globals = existing
 
-            for var in globals_parsed["variables"]:
-                db.add(EnvironmentVariable(
-                    id=str(uuid.uuid4()),
-                    environment_id=globals_env.id,
-                    key=var["key"],
-                    value=var["value"],
-                    is_secret=var["is_secret"],
-                ))
-
-            globals_info = {
-                "id": globals_env.id,
-                "name": globals_env.name,
-                "variables_count": len(globals_parsed["variables"]),
-            }
+                globals_info = {
+                    "name": globals_parsed["name"],
+                    "variables_count": len(globals_parsed["variables"]),
+                }
         except Exception as e:
             errors.append(f"Globals: {e}")
 
     db.commit()
 
     return {
-        "collection": {
-            "id": col.id,
-            "name": col.name,
-            "total_requests": total_requests,
-            "total_folders": total_folders,
-            "collection_variables_count": len(col_vars),
-        },
+        "collection": col_info,
         "environments": created_envs,
         "globals": globals_info,
         "request_scripts_count": scripts_count,
@@ -560,6 +604,50 @@ async def export_curl(
     return {"curl": curl}
 
 
+# ── Export helpers ──
+
+def _build_export_tree(db: Session, items: list[CollectionItem], parent_id: str | None = None) -> list[dict]:
+    """Build export tree from CollectionItem list, including all folder/request metadata."""
+    result = []
+    for item in items:
+        if item.parent_id != parent_id:
+            continue
+        if item.is_folder:
+            result.append({
+                "name": item.name,
+                "is_folder": True,
+                "description": item.description,
+                "auth_type": item.auth_type,
+                "auth_config": item.auth_config,
+                "variables": item.variables,
+                "pre_request_script": item.pre_request_script,
+                "post_response_script": item.post_response_script,
+                "script_language": item.script_language,
+                "children": _build_export_tree(db, items, item.id),
+            })
+        elif item.request_id:
+            req = db.query(Request).filter(Request.id == item.request_id).first()
+            if req:
+                result.append({
+                    "name": item.name,
+                    "description": item.description,
+                    "method": req.method.value,
+                    "url": req.url,
+                    "headers": req.headers,
+                    "body": req.body,
+                    "body_type": req.body_type,
+                    "form_data": req.form_data,
+                    "auth_type": req.auth_type.value,
+                    "auth_config": req.auth_config,
+                    "query_params": req.query_params,
+                    "pre_request_script": req.pre_request_script,
+                    "post_response_script": req.post_response_script,
+                    "settings": req.settings,
+                    "protocol": req.protocol,
+                })
+    return result
+
+
 # ── Export Postman Collection ──
 
 @router.get("/export/postman/{collection_id}")
@@ -577,36 +665,14 @@ async def export_postman(
         CollectionItem.collection_id == collection_id
     ).order_by(CollectionItem.sort_order).all()
 
-    # Build tree structure
-    def build_export_items(parent_id: str | None = None) -> list[dict]:
-        result = []
-        for item in items:
-            if item.parent_id != parent_id:
-                continue
-            if item.is_folder:
-                result.append({
-                    "name": item.name,
-                    "is_folder": True,
-                    "children": build_export_items(item.id),
-                })
-            elif item.request_id:
-                req = db.query(Request).filter(Request.id == item.request_id).first()
-                if req:
-                    result.append({
-                        "name": item.name,
-                        "method": req.method.value,
-                        "url": req.url,
-                        "headers": req.headers,
-                        "body": req.body,
-                        "body_type": req.body_type,
-                        "auth_type": req.auth_type.value,
-                        "auth_config": req.auth_config,
-                        "query_params": req.query_params,
-                    })
-        return result
-
-    export_items = build_export_items()
-    postman_json = export_to_postman(col.name, col.description or "", export_items, col.variables or None)
+    export_items = _build_export_tree(db, items)
+    postman_json = export_to_postman(
+        col.name, col.description or "", export_items, col.variables or None,
+        collection_auth_type=col.auth_type,
+        collection_auth_config=col.auth_config,
+        collection_pre_request_script=col.pre_request_script,
+        collection_post_response_script=col.post_response_script,
+    )
 
     return postman_json
 
@@ -634,34 +700,7 @@ async def export_postman_folder(
         CollectionItem.collection_id == folder.collection_id
     ).order_by(CollectionItem.sort_order).all()
 
-    def build_export_items(parent_id: str | None = None) -> list[dict]:
-        result = []
-        for item in items:
-            if item.parent_id != parent_id:
-                continue
-            if item.is_folder:
-                result.append({
-                    "name": item.name,
-                    "is_folder": True,
-                    "children": build_export_items(item.id),
-                })
-            elif item.request_id:
-                req = db.query(Request).filter(Request.id == item.request_id).first()
-                if req:
-                    result.append({
-                        "name": item.name,
-                        "method": req.method.value,
-                        "url": req.url,
-                        "headers": req.headers,
-                        "body": req.body,
-                        "body_type": req.body_type,
-                        "auth_type": req.auth_type.value,
-                        "auth_config": req.auth_config,
-                        "query_params": req.query_params,
-                    })
-        return result
-
-    export_items = build_export_items(folder.id)
+    export_items = _build_export_tree(db, items, folder.id)
     postman_json = export_to_postman(
         f"{col.name} - {folder.name}",
         col.description or "",
@@ -684,16 +723,25 @@ async def export_postman_request(
     if not req:
         raise HTTPException(status_code=404, detail="Request not found")
 
+    # Find associated CollectionItem for description
+    ci = db.query(CollectionItem).filter(CollectionItem.request_id == request_id).first()
+
     export_items = [{
         "name": req.name,
+        "description": ci.description if ci else None,
         "method": req.method.value,
         "url": req.url,
         "headers": req.headers,
         "body": req.body,
         "body_type": req.body_type,
+        "form_data": req.form_data,
         "auth_type": req.auth_type.value,
         "auth_config": req.auth_config,
         "query_params": req.query_params,
+        "pre_request_script": req.pre_request_script,
+        "post_response_script": req.post_response_script,
+        "settings": req.settings,
+        "protocol": req.protocol,
     }]
     postman_json = export_to_postman(req.name, "", export_items, None)
     return postman_json

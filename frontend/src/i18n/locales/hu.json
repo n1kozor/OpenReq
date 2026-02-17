@@ -51,6 +51,8 @@
     "header": "Fejléc",
     "queryParam": "Query Paraméter",
     "noAuth": "Ez a kérés nem használ hitelesítést.",
+    "inherit": "Öröklés a szülőtől",
+    "inheritDescription": "A hitelesítés a szülő mappától vagy a gyűjteménytől öröklődik.",
     "noBody": "Ennek a kérésnek nincs törzse.",
     "parameter": "Paraméter",
     "requestName": "Kérés neve",
@@ -132,6 +134,19 @@
     "preview": "Előnézet",
     "markdownSupported": "Markdown támogatott"
   },
+  "folder": {
+    "editAuth": "Hitelesítés szerkesztése",
+    "detail": "Mappa beállítások",
+    "saved": "Mappa mentve!",
+    "saveFailed": "Mappa mentése sikertelen",
+    "overview": "Áttekintés",
+    "name": "Mappa neve",
+    "description": "Leírás",
+    "variables": "Mappa változók",
+    "preRequest": "Pre-request szkript",
+    "tests": "Tesztek",
+    "noDescription": "Nincs leírás. Kattintson a hozzáadáshoz."
+  },
   "dashboard": {
     "welcome": "Üdv újra!",
     "subtitle": "Mit szeretnél csinálni?",
@@ -172,7 +187,8 @@
     "variablesSaved": "Változók elmentve!",
     "insertVariable": "Változó beszúrása",
     "envOverride": "Környezet",
-    "useGlobal": "Globális"
+    "useGlobal": "Globális",
+    "globalsDescription": "Workspace szintű változók, minden kérésben elérhetők. Legalacsonyabb prioritás — a kollekció és környezeti változók felülírják."
   },
   "workspace": {
     "new": "Új munkaterület",
@@ -364,6 +380,7 @@
   "variable": {
     "environment": "Környezet",
     "collection": "Gyűjtemény",
+    "globals": "Globális",
     "unresolved": "Feloldatlan változó",
     "source": "Forrás",
     "value": "Érték"

@@ -68,6 +68,7 @@ interface TestFlowCanvasProps {
   collectionItems: Record<string, CollectionItem[]>;
   onLoadAllItems?: () => void;
   onOpenRequest?: (requestId: string, collectionId?: string) => void;
+  onVariablesChanged?: () => void;
 }
 
 let nodeCounter = 0;
@@ -80,6 +81,7 @@ export default function TestFlowCanvas({
   collectionItems,
   onLoadAllItems,
   onOpenRequest,
+  onVariablesChanged,
 }: TestFlowCanvasProps) {
   const { t } = useTranslation();
   const reactFlowInstance = useReactFlow();
@@ -740,6 +742,8 @@ export default function TestFlowCanvas({
       onDone: (sum, finalVars) => {
         setIsRunning(false);
         setSummary(sum);
+        // Refresh cached variables — scripts may have modified globals/env/collection vars
+        onVariablesChanged?.();
         // Auto-save run report using ref (not stale nodes closure)
         if (flow) {
           const s = sum as Record<string, number>;

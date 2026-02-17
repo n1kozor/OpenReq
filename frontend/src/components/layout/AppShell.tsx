@@ -9,6 +9,7 @@ import ResponsePanel from "@/components/request/ResponsePanel";
 import WebSocketBuilder from "@/components/request/WebSocketBuilder";
 import GraphQLBuilder from "@/components/request/GraphQLBuilder";
 import CollectionDetail from "@/components/collection/CollectionDetail";
+import FolderDetail from "@/components/collection/FolderDetail";
 import Dashboard from "@/components/dashboard/Dashboard";
 import {
   CreateCollectionDialog,
@@ -152,6 +153,16 @@ function createTestFlowTab(flowId: string, flowName: string): RequestTab {
   };
 }
 
+function createFolderTab(folderId: string, folderName: string, parentCollectionId: string): RequestTab {
+  return {
+    ...createNewTab(),
+    tabType: "folder",
+    collectionId: folderId,
+    parentCollectionId,
+    name: folderName,
+  };
+}
+
 function restoreTabs(): RequestTab[] {
   try {
     const raw = localStorage.getItem(TABS_STORAGE_KEY);
@@ -204,6 +215,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     () => localStorage.getItem("openreq-env") ?? null
   );
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [workspaceGlobals, setWorkspaceGlobals] = useState<Record<string, string>>({});
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(
     () => localStorage.getItem("openreq-workspace") ?? null
   );
@@ -211,7 +223,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   // Dialog state
   const [showCreateCol, setShowCreateCol] = useState(false);
   const [showEditCol, setShowEditCol] = useState<{ id: string; name: string; description?: string; visibility: "private" | "shared"; variables?: Record<string, string> | null } | null>(null);
-  const [showCreateFolder, setShowCreateFolder] = useState<string | null>(null);
+  const [showCreateFolder, setShowCreateFolder] = useState<{ collectionId: string; parentId: string | null } | null>(null);
   const [showRename, setShowRename] = useState<{ id: string; name: string; type: "collection" | "item" } | null>(null);
   const [showDelete, setShowDelete] = useState<{ id: string; name: string; type: "collection" | "item" } | null>(null);
   const [showDuplicateCol, setShowDuplicateCol] = useState<{ id: string; name: string } | null>(null);
@@ -237,9 +249,11 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
   // Active tab's collection variables for variable highlighting
   const activeCollectionVars = useMemo(() => {
-    if (!activeTab?.collectionId) return {};
-    return collections.find((c) => c.id === activeTab.collectionId)?.variables ?? {};
-  }, [activeTab?.collectionId, collections]);
+    // For folder tabs, use parentCollectionId to find the actual collection
+    const colId = activeTab?.tabType === "folder" ? activeTab.parentCollectionId : activeTab?.collectionId;
+    if (!colId) return {};
+    return collections.find((c) => c.id === colId)?.variables ?? {};
+  }, [activeTab?.collectionId, activeTab?.parentCollectionId, activeTab?.tabType, collections]);
 
   // Variable groups for ScriptEditor (RequestBuilder computes its own)
   const activeEnvIdResolved = activeTab?.envOverrideId ?? selectedEnvId;
@@ -250,6 +264,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const { groups: scriptVarGroups, resolved: scriptVarResolved } = useVariableGroups(
     activeEnvVariables,
     activeCollectionVars,
+    workspaceGlobals,
   );
 
   // ── Load data ──
@@ -343,6 +358,14 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     } catch { /* ignore */ }
   }, [currentWorkspaceId]);
 
+  const loadGlobals = useCallback(async () => {
+    if (!currentWorkspaceId) { setWorkspaceGlobals({}); return; }
+    try {
+      const { data } = await workspacesApi.getGlobals(currentWorkspaceId);
+      setWorkspaceGlobals(data.globals || {});
+    } catch { setWorkspaceGlobals({}); }
+  }, [currentWorkspaceId]);
+
   const loadWorkspaces = useCallback(async () => {
     try {
       const { data } = await workspacesApi.list();
@@ -375,7 +398,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     if (lastEnvWorkspaceId.current === currentWorkspaceId) return;
     lastEnvWorkspaceId.current = currentWorkspaceId;
     loadEnvironments();
-  }, [loadEnvironments, currentWorkspaceId]);
+    loadGlobals();
+  }, [loadEnvironments, loadGlobals, currentWorkspaceId]);
 
   // Persist tabs + view to localStorage
   useEffect(() => {
@@ -730,6 +754,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         auth_config: Object.keys(authConfig).length > 0 ? authConfig : undefined,
         environment_id: tab.envOverrideId ?? selectedEnvId ?? undefined,
         collection_id: tab.collectionId,
+        collection_item_id: tab.collectionItemId,
         pre_request_script: tab.preRequestScript?.trim() || undefined,
         post_response_script: tab.postResponseScript?.trim() || undefined,
         script_language: tab.scriptLanguage || "javascript",
@@ -740,6 +765,19 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         preRequestResult: response.pre_request_result ?? null,
         scriptResult: response.script_result ?? null,
       });
+
+      // Reload cached variable scopes if scripts modified them
+      const allResults = [response.pre_request_result, response.script_result];
+      let needGlobals = false, needEnv = false, needCol = false;
+      for (const sr of allResults) {
+        if (!sr) continue;
+        if (sr.globals_updates && Object.keys(sr.globals_updates).length > 0) needGlobals = true;
+        if (sr.environment_updates && Object.keys(sr.environment_updates).length > 0) needEnv = true;
+        if (sr.collection_var_updates && Object.keys(sr.collection_var_updates).length > 0) needCol = true;
+      }
+      if (needGlobals) loadGlobals();
+      if (needEnv) loadEnvironments();
+      if (needCol) loadCollections();
     } catch (err: unknown) {
       // Extract server error detail from axios response, fall back to generic message
       const axiosDetail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -748,7 +786,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     } finally {
       setLoading(false);
     }
-  }, [tabs, activeTabId, selectedEnvId, updateTab, buildAuthConfig, fileToBase64]);
+  }, [tabs, activeTabId, selectedEnvId, updateTab, buildAuthConfig, fileToBase64, loadGlobals, loadEnvironments, loadCollections]);
 
   // ── Save helpers ──
   const buildTabPayload = useCallback((tab: RequestTab) => {
@@ -879,7 +917,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   }, [tabs, activeTabId, buildTabPayload, updateTab, loadCollections]);
 
   // ── Load request from collection ──
-  const handleSelectRequest = useCallback(async (requestId: string, collectionId?: string) => {
+  const handleSelectRequest = useCallback(async (requestId: string, collectionId?: string, collectionItemId?: string) => {
     const existingTab = tabs.find((t) => t.savedRequestId === requestId);
     if (existingTab) {
       setActiveTabId(existingTab.id);
@@ -896,6 +934,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       tab.url = req.url;
       tab.savedRequestId = req.id;
       tab.collectionId = collectionId;
+      tab.collectionItemId = collectionItemId;
       tab.isDirty = false;
       if (req.headers) {
         tab.headers = Object.entries(req.headers).map(([key, value]) => ({
@@ -999,9 +1038,14 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
   const handleCreateFolder = useCallback(async (name: string) => {
     if (!showCreateFolder) return;
-    await collectionsApi.createItem(showCreateFolder, { name, is_folder: true });
+    await collectionsApi.createItem(showCreateFolder.collectionId, {
+      name,
+      is_folder: true,
+      parent_id: showCreateFolder.parentId || undefined,
+    });
     loadCollections();
-  }, [showCreateFolder, loadCollections]);
+    loadCollectionTree(showCreateFolder.collectionId);
+  }, [showCreateFolder, loadCollections, loadCollectionTree]);
 
   const handleRename = useCallback(async (name: string) => {
     if (!showRename) return;
@@ -1201,6 +1245,56 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     setShowTestFlowList(false);
   }, [tabs]);
 
+  // ── Open folder detail tab ──
+  const handleOpenFolder = useCallback((folderId: string, collectionId: string) => {
+    const existing = tabs.find((t) => t.tabType === "folder" && t.collectionId === folderId);
+    if (existing) {
+      setActiveTabId(existing.id);
+      setView("request");
+      return;
+    }
+    // Find folder name from loaded items
+    const items = collectionItems[collectionId] ?? [];
+    const findFolder = (list: CollectionItem[]): CollectionItem | null => {
+      for (const item of list) {
+        if (item.id === folderId) return item;
+        if (item.children) {
+          const found = findFolder(item.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    const folder = findFolder(items);
+    const tab = createFolderTab(folderId, folder?.name || "Folder", collectionId);
+    setTabs((prev) => [...prev, tab]);
+    setActiveTabId(tab.id);
+    setView("request");
+  }, [tabs, collectionItems]);
+
+  // ── Save folder from detail view ──
+  const handleSaveFolder = useCallback(async (folderId: string, parentCollectionId: string, data: Record<string, unknown>) => {
+    try {
+      await collectionsApi.updateItem(folderId, data as Parameters<typeof collectionsApi.updateItem>[1]);
+      // Update tab name
+      const newName = data.name as string;
+      if (newName) {
+        setTabs((prev) =>
+          prev.map((t) =>
+            t.tabType === "folder" && t.collectionId === folderId
+              ? { ...t, name: newName, isDirty: false }
+              : t
+          )
+        );
+      }
+      loadCollections();
+      loadCollectionTree(parentCollectionId);
+      setSnack({ msg: t("folder.saved"), severity: "success" });
+    } catch {
+      setSnack({ msg: t("folder.saveFailed"), severity: "error" });
+    }
+  }, [loadCollections, loadCollectionTree, t]);
+
   // ── Save collection from detail view ──
   const handleSaveCollectionDetail = useCallback(async (collectionId: string, data: { name: string; description: string; visibility: "private" | "shared"; variables: Record<string, string>; auth_type?: string | null; auth_config?: Record<string, string> | null; pre_request_script?: string | null; post_response_script?: string | null; script_language?: string | null }) => {
     try {
@@ -1241,7 +1335,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onSelectRequest={handleSelectRequest}
         onOpenCollection={handleOpenCollection}
         onNewCollection={() => setShowCreateCol(true)}
-        onNewFolder={(colId) => setShowCreateFolder(colId)}
+        onNewFolder={(colId, parentId) => setShowCreateFolder({ collectionId: colId, parentId: parentId || null })}
         onNewRequest={handleNewRequest}
         onEditCollection={(id, name, description, visibility, variables) => setShowEditCol({ id, name, description, visibility, variables })}
         onRenameCollection={(id, name) => setShowRename({ id, name, type: "collection" })}
@@ -1309,6 +1403,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onOpenSDK={() => setShowSDK(true)}
         onOpenAIAgent={() => setShowAIAgent(true)}
         onOpenTestBuilder={() => setShowTestFlowList(true)}
+        onOpenFolder={handleOpenFolder}
       />
 
       <Box sx={{
@@ -1337,7 +1432,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
             />
 
             {/* Request name bar — shown for request tabs (http/ws/gql) */}
-            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.name && (
+            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.tabType !== "folder" && activeTab.name && (
               <Box sx={{
                 px: 2, py: 0.5,
                 display: "flex", alignItems: "center", gap: 1,
@@ -1400,6 +1495,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                     });
                   }}
                   onRunCollection={handleRunCollection}
+                  resolvedVariables={scriptVarResolved}
+                  variableGroups={scriptVarGroups}
                 />
               );
             })()}
@@ -1416,12 +1513,48 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                   collectionItems={collectionItems}
                   onLoadAllItems={loadAllCollectionItems}
                   onOpenRequest={handleSelectRequest}
+                  onVariablesChanged={() => { loadGlobals(); loadEnvironments(); loadCollections(); }}
                 />
               </ReactFlowProvider>
             )}
 
+            {/* Folder Detail tab */}
+            {activeTab && activeTab.tabType === "folder" && activeTab.collectionId && (() => {
+              const parentColId = activeTab.parentCollectionId;
+              // Find folder from loaded items
+              const items = parentColId ? (collectionItems[parentColId] ?? []) : [];
+              const findFolder = (list: CollectionItem[]): CollectionItem | null => {
+                for (const item of list) {
+                  if (item.id === activeTab.collectionId) return item;
+                  if (item.children) {
+                    const found = findFolder(item.children);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              };
+              const folder = findFolder(items);
+              if (!folder) return null;
+              return (
+                <FolderDetail
+                  key={activeTab.collectionId}
+                  folder={folder}
+                  onSave={(data) => handleSaveFolder(activeTab.collectionId!, parentColId!, data)}
+                  onDirtyChange={(dirty) => {
+                    setTabs((prev) => {
+                      const tab = prev.find((t) => t.id === activeTab.id);
+                      if (!tab || tab.isDirty === dirty) return prev;
+                      return prev.map((t) => t.id === activeTab.id ? { ...t, isDirty: dirty } : t);
+                    });
+                  }}
+                  resolvedVariables={scriptVarResolved}
+                  variableGroups={scriptVarGroups}
+                />
+              );
+            })()}
+
             {/* WebSocket Builder */}
-            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.protocol === "websocket" && (
+            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.tabType !== "folder" && activeTab.protocol === "websocket" && (
               <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
                 <WebSocketBuilder
                   url={activeTab.url}
@@ -1449,12 +1582,17 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                   onWsMessagesChange={(msgs) => updateTab(activeTabId, { wsMessages: msgs })}
                   onWsConnectedChange={(connected) => updateTab(activeTabId, { wsConnected: connected })}
                   onSave={() => activeTab.savedRequestId ? handleQuickSave() : setShowSaveRequest(true)}
+                  environments={environments}
+                  selectedEnvId={selectedEnvId}
+                  envOverrideId={activeTab.envOverrideId}
+                  collectionVariables={activeCollectionVars}
+                  workspaceGlobals={workspaceGlobals}
                 />
               </Box>
             )}
 
             {/* GraphQL Builder */}
-            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.protocol === "graphql" && (
+            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.tabType !== "folder" && activeTab.protocol === "graphql" && (
               <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
                 <GraphQLBuilder
                   url={activeTab.url}
@@ -1485,12 +1623,17 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                   onOAuthConfigChange={(config) => updateTab(activeTabId, { oauthConfig: config })}
                   onSend={handleSend}
                   onSave={() => activeTab.savedRequestId ? handleQuickSave() : setShowSaveRequest(true)}
+                  environments={environments}
+                  selectedEnvId={selectedEnvId}
+                  envOverrideId={activeTab.envOverrideId}
+                  collectionVariables={activeCollectionVars}
+                  workspaceGlobals={workspaceGlobals}
                 />
               </Box>
             )}
 
             {/* HTTP Request Builder: normal request tab */}
-            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && (activeTab.protocol ?? "http") === "http" && (
+            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.tabType !== "folder" && (activeTab.protocol ?? "http") === "http" && (
               <PanelGridLayout>
                 {{
                   requestBuilder: (
@@ -1516,6 +1659,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                       selectedEnvId={selectedEnvId}
                       envOverrideId={activeTab.envOverrideId}
                       collectionVariables={activeCollectionVars}
+                      workspaceGlobals={workspaceGlobals}
                       onMethodChange={(m) => updateTab(activeTabId, { method: m })}
                       onUrlChange={(u) => updateTab(activeTabId, { url: u })}
                       onPathParamsChange={(p) => updateTab(activeTabId, { pathParams: p })}
@@ -1636,6 +1780,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onUpdateEnv={handleUpdateEnv}
         onDeleteEnv={handleDeleteEnv}
         onSetVariables={handleSetVariables}
+        workspaceId={currentWorkspaceId}
       />
 
       <HistoryPanel
@@ -1740,6 +1885,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           collectionName={showRunner.name}
           environments={environments}
           selectedEnvId={selectedEnvId}
+          onVariablesChanged={() => { loadGlobals(); loadEnvironments(); loadCollections(); }}
         />
       )}
 
@@ -1780,6 +1926,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           }
         }}
       />
+
+
 
       {/* Snackbar */}
       <Snackbar

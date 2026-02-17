@@ -12,6 +12,7 @@ class WorkspaceOut(BaseModel):
     id: str
     name: str
     description: str | None
+    globals: dict[str, str] | None = None
 
     model_config = {"from_attributes": True}
 

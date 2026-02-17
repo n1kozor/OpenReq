@@ -1,12 +1,10 @@
 import {
   Box,
-  TextField,
   Select,
   MenuItem,
   Typography,
   FormControl,
   InputLabel,
-  InputAdornment,
   IconButton,
   ToggleButtonGroup,
   ToggleButton,
@@ -14,8 +12,10 @@ import {
 import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { VariableValueCell } from "@/components/common/KeyValueEditor";
 import OAuthEditor from "./OAuthEditor";
 import type { AuthType, OAuthConfig } from "@/types";
+import type { VariableInfo, VariableGroup } from "@/hooks/useVariableGroups";
 
 interface AuthEditorProps {
   authType: AuthType;
@@ -34,6 +34,8 @@ interface AuthEditorProps {
   onApiKeyValueChange: (v: string) => void;
   onApiKeyPlacementChange: (v: "header" | "query") => void;
   onOAuthConfigChange: (config: OAuthConfig) => void;
+  resolvedVariables?: Map<string, VariableInfo>;
+  variableGroups?: VariableGroup[];
 }
 
 export default function AuthEditor(props: AuthEditorProps) {
@@ -50,6 +52,7 @@ export default function AuthEditor(props: AuthEditorProps) {
           onChange={(e) => props.onAuthTypeChange(e.target.value as AuthType)}
           label={t("request.authType")}
         >
+          <MenuItem value="inherit">{t("request.inherit")}</MenuItem>
           <MenuItem value="none">{t("request.none")}</MenuItem>
           <MenuItem value="bearer">{t("request.bearer")}</MenuItem>
           <MenuItem value="api_key">{t("request.apiKey")}</MenuItem>
@@ -61,89 +64,97 @@ export default function AuthEditor(props: AuthEditorProps) {
       {props.authType === "bearer" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
           <Typography variant="subtitle2">{t("request.bearerTitle")}</Typography>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder={t("request.enterToken")}
-            value={props.bearerToken}
-            onChange={(e) => props.onBearerTokenChange(e.target.value)}
-            type={showToken ? "text" : "password"}
-            InputProps={{
-              sx: { fontFamily: "monospace", fontSize: 13 },
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => setShowToken(!showToken)}>
-                    {showToken ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Box sx={{ flex: 1 }}>
+              <VariableValueCell
+                value={showToken ? props.bearerToken : props.bearerToken}
+                onChange={props.onBearerTokenChange}
+                placeholder={t("request.enterToken")}
+                resolvedVariables={props.resolvedVariables}
+                variableGroups={props.variableGroups}
+                masked={!showToken}
+              />
+            </Box>
+            <IconButton size="small" onClick={() => setShowToken(!showToken)}>
+              {showToken ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+            </IconButton>
+          </Box>
         </Box>
       )}
 
       {props.authType === "basic" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
           <Typography variant="subtitle2">{t("request.basicTitle")}</Typography>
-          <TextField
-            fullWidth
-            size="small"
-            label={t("auth.username")}
-            value={props.basicUsername}
-            onChange={(e) => props.onBasicUsernameChange(e.target.value)}
-            InputProps={{ sx: { fontFamily: "monospace", fontSize: 13 } }}
-          />
-          <TextField
-            fullWidth
-            size="small"
-            label={t("auth.password")}
-            value={props.basicPassword}
-            onChange={(e) => props.onBasicPasswordChange(e.target.value)}
-            type={showPassword ? "text" : "password"}
-            InputProps={{
-              sx: { fontFamily: "monospace", fontSize: 13 },
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => setShowPassword(!showPassword)}>
-                    {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+              {t("auth.username")}
+            </Typography>
+            <VariableValueCell
+              value={props.basicUsername}
+              onChange={props.onBasicUsernameChange}
+              placeholder={t("auth.username")}
+              resolvedVariables={props.resolvedVariables}
+              variableGroups={props.variableGroups}
+            />
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+              {t("auth.password")}
+            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Box sx={{ flex: 1 }}>
+                <VariableValueCell
+                  value={props.basicPassword}
+                  onChange={props.onBasicPasswordChange}
+                  placeholder={t("auth.password")}
+                  resolvedVariables={props.resolvedVariables}
+                variableGroups={props.variableGroups}
+                  masked={!showPassword}
+                />
+              </Box>
+              <IconButton size="small" onClick={() => setShowPassword(!showPassword)}>
+                {showPassword ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+              </IconButton>
+            </Box>
+          </Box>
         </Box>
       )}
 
       {props.authType === "api_key" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
           <Typography variant="subtitle2">{t("request.apiKeyTitle")}</Typography>
-          <TextField
-            fullWidth
-            size="small"
-            label={t("request.keyName")}
-            placeholder="X-API-Key"
-            value={props.apiKeyName}
-            onChange={(e) => props.onApiKeyNameChange(e.target.value)}
-            InputProps={{ sx: { fontFamily: "monospace", fontSize: 13 } }}
-          />
-          <TextField
-            fullWidth
-            size="small"
-            label={t("request.keyValue")}
-            value={props.apiKeyValue}
-            onChange={(e) => props.onApiKeyValueChange(e.target.value)}
-            type={showToken ? "text" : "password"}
-            InputProps={{
-              sx: { fontFamily: "monospace", fontSize: 13 },
-              endAdornment: (
-                <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => setShowToken(!showToken)}>
-                    {showToken ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
-                  </IconButton>
-                </InputAdornment>
-              ),
-            }}
-          />
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+              {t("request.keyName")}
+            </Typography>
+            <VariableValueCell
+              value={props.apiKeyName}
+              onChange={props.onApiKeyNameChange}
+              placeholder="X-API-Key"
+              resolvedVariables={props.resolvedVariables}
+              variableGroups={props.variableGroups}
+            />
+          </Box>
+          <Box>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+              {t("request.keyValue")}
+            </Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <Box sx={{ flex: 1 }}>
+                <VariableValueCell
+                  value={props.apiKeyValue}
+                  onChange={props.onApiKeyValueChange}
+                  placeholder={t("request.keyValue")}
+                  resolvedVariables={props.resolvedVariables}
+                variableGroups={props.variableGroups}
+                  masked={!showToken}
+                />
+              </Box>
+              <IconButton size="small" onClick={() => setShowToken(!showToken)}>
+                {showToken ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+              </IconButton>
+            </Box>
+          </Box>
           <Box>
             <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
               {t("request.addTo")}
@@ -165,7 +176,15 @@ export default function AuthEditor(props: AuthEditorProps) {
         <OAuthEditor
           config={props.oauthConfig}
           onChange={props.onOAuthConfigChange}
+          resolvedVariables={props.resolvedVariables}
+          variableGroups={props.variableGroups}
         />
+      )}
+
+      {props.authType === "inherit" && (
+        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: "italic" }}>
+          {t("request.inheritDescription")}
+        </Typography>
       )}
 
       {props.authType === "none" && (

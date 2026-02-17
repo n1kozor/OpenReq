@@ -48,6 +48,13 @@ class CollectionItem(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     request_id: Mapped[str | None] = mapped_column(ForeignKey("requests.id", ondelete="SET NULL"))
+    auth_type: Mapped[str | None] = mapped_column(String(20), default=None)
+    auth_config: Mapped[dict | None] = mapped_column(JSON, default=None)
+    description: Mapped[str | None] = mapped_column(default=None)
+    variables: Mapped[dict | None] = mapped_column(JSON, default=None)
+    pre_request_script: Mapped[str | None] = mapped_column(default=None)
+    post_response_script: Mapped[str | None] = mapped_column(default=None)
+    script_language: Mapped[str | None] = mapped_column(String(20), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     collection: Mapped["Collection"] = relationship(back_populates="items")

@@ -78,9 +78,13 @@ async def run_collection_stream(
                 auth_config=req.auth_config or {},
                 environment_id=environment_id,
                 collection_id=collection_id,
+                collection_item_id=item.id,
                 pre_request_script=req.pre_request_script,
                 post_response_script=req.post_response_script,
                 request_settings=request_settings,
+                request_name=req.name,
+                iteration=iteration,
+                iteration_count=iterations,
             )
 
             result_item: dict
@@ -88,10 +92,16 @@ async def run_collection_stream(
                 response = await execute_proxy_request(
                     db, proxy_req, extra_variables=dict(accumulated_vars),
                 )
-                if response.pre_request_result and response.pre_request_result.variables:
-                    accumulated_vars.update(response.pre_request_result.variables)
-                if response.script_result and response.script_result.variables:
-                    accumulated_vars.update(response.script_result.variables)
+                if response.pre_request_result:
+                    if response.pre_request_result.variables:
+                        accumulated_vars.update(response.pre_request_result.variables)
+                    if response.pre_request_result.globals:
+                        accumulated_vars.update(response.pre_request_result.globals)
+                if response.script_result:
+                    if response.script_result.variables:
+                        accumulated_vars.update(response.script_result.variables)
+                    if response.script_result.globals:
+                        accumulated_vars.update(response.script_result.globals)
 
                 result_item = {
                     "type": "result",

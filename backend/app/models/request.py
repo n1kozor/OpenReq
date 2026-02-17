@@ -24,6 +24,7 @@ class AuthType(str, PyEnum):
     API_KEY = "api_key"
     BASIC = "basic"
     OAUTH2 = "oauth2"
+    INHERIT = "inherit"
 
 
 class Request(Base):

@@ -51,6 +51,8 @@
     "header": "Header",
     "queryParam": "Query-Parameter",
     "noAuth": "Diese Anfrage verwendet keine Autorisierung.",
+    "inherit": "Von übergeordnetem Element erben",
+    "inheritDescription": "Die Autorisierung wird vom übergeordneten Ordner oder der Sammlung geerbt.",
     "noBody": "Diese Anfrage hat keinen Body.",
     "parameter": "Parameter",
     "requestName": "Anfragename",
@@ -132,6 +134,19 @@
     "preview": "Vorschau",
     "markdownSupported": "Markdown unterstützt"
   },
+  "folder": {
+    "editAuth": "Autorisierung bearbeiten",
+    "detail": "Ordnereinstellungen",
+    "saved": "Ordner gespeichert!",
+    "saveFailed": "Fehler beim Speichern des Ordners",
+    "overview": "Übersicht",
+    "name": "Ordnername",
+    "description": "Beschreibung",
+    "variables": "Ordnervariablen",
+    "preRequest": "Pre-request Skript",
+    "tests": "Tests",
+    "noDescription": "Keine Beschreibung. Klicken Sie zum Hinzufügen."
+  },
   "dashboard": {
     "welcome": "Willkommen zurück!",
     "subtitle": "Was möchten Sie tun?",
@@ -172,7 +187,8 @@
     "variablesSaved": "Variablen gespeichert!",
     "insertVariable": "Variable einfügen",
     "envOverride": "Umgebung",
-    "useGlobal": "Global verwenden"
+    "useGlobal": "Global verwenden",
+    "globalsDescription": "Workspace-übergreifende Variablen, die in allen Anfragen verfügbar sind. Niedrigste Priorität — werden durch Sammlungs- und Umgebungsvariablen überschrieben."
   },
   "workspace": {
     "new": "Neuer Arbeitsbereich",
@@ -364,6 +380,7 @@
   "variable": {
     "environment": "Umgebung",
     "collection": "Sammlung",
+    "globals": "Globals",
     "unresolved": "Unaufgelöste Variable",
     "source": "Quelle",
     "value": "Wert"

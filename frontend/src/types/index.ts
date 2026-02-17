@@ -1,6 +1,6 @@
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
 
-export type AuthType = "none" | "bearer" | "api_key" | "basic" | "oauth2";
+export type AuthType = "none" | "bearer" | "api_key" | "basic" | "oauth2" | "inherit";
 
 export type BodyType = "none" | "json" | "xml" | "text" | "form-data" | "x-www-form-urlencoded" | "graphql";
 
@@ -75,6 +75,7 @@ export interface Workspace {
   id: string;
   name: string;
   description: string | null;
+  globals: Record<string, string> | null;
 }
 
 export interface Collection {
@@ -102,6 +103,13 @@ export interface CollectionItem {
   method?: string | null;
   protocol?: Protocol;
   children?: CollectionItem[];
+  auth_type?: string | null;
+  auth_config?: Record<string, string> | null;
+  description?: string | null;
+  variables?: Record<string, string> | null;
+  pre_request_script?: string | null;
+  post_response_script?: string | null;
+  script_language?: string | null;
 }
 
 export interface ApiRequest {
@@ -142,7 +150,7 @@ export interface PostmanImportPreview {
     has_pre_request_script: boolean;
     has_post_response_script: boolean;
     request_scripts_count: number;
-  };
+  } | null;
   environments: {
     filename: string;
     name: string;
@@ -168,14 +176,14 @@ export interface PostmanImportResult {
     total_requests: number;
     total_folders: number;
     collection_variables_count: number;
-  };
+  } | null;
   environments: {
     id: string;
     name: string;
     env_type: EnvironmentType;
     variables_count: number;
   }[];
-  globals: { id: string; name: string; variables_count: number } | null;
+  globals: { name: string; variables_count: number } | null;
   request_scripts_count: number;
   errors: string[];
 }
@@ -225,6 +233,9 @@ export interface ScriptResult {
   globals: Record<string, string>;
   logs: string[];
   test_results: { name: string; passed: boolean; error: string | null }[];
+  globals_updates?: Record<string, string | null>;
+  environment_updates?: Record<string, string | null>;
+  collection_var_updates?: Record<string, string | null>;
 }
 
 export interface WebSocketMessage {
@@ -233,7 +244,7 @@ export interface WebSocketMessage {
   direction: "sent" | "received";
 }
 
-export type TabType = "request" | "collection" | "testflow";
+export type TabType = "request" | "collection" | "testflow" | "folder";
 
 export type ScriptLanguage = "javascript" | "python";
 
@@ -276,6 +287,8 @@ export interface RequestTab {
   isDirty: boolean;
   savedRequestId?: string;
   collectionId?: string;
+  collectionItemId?: string;
+  parentCollectionId?: string;
   headers: KeyValuePair[];
   queryParams: KeyValuePair[];
   body: string;

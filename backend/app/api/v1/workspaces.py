@@ -17,6 +17,10 @@ class WorkspaceUpdate(BaseModel):
     description: str | None = None
 
 
+class GlobalsUpdate(BaseModel):
+    globals: dict[str, str]
+
+
 class MemberOut(BaseModel):
     id: str
     user_id: str
@@ -133,6 +137,36 @@ def delete_workspace(
         raise HTTPException(status_code=404, detail="Workspace not found")
     db.delete(ws)
     db.commit()
+
+
+@router.get("/{workspace_id}/globals")
+def get_globals(
+    workspace_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get workspace globals variables."""
+    ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return {"globals": ws.globals or {}}
+
+
+@router.put("/{workspace_id}/globals")
+def update_globals(
+    workspace_id: str,
+    payload: GlobalsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update workspace globals variables."""
+    ws = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    if not ws:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    ws.globals = payload.globals
+    db.commit()
+    db.refresh(ws)
+    return {"globals": ws.globals}
 
 
 @router.get("/{workspace_id}/members", response_model=list[MemberOut])

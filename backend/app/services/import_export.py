@@ -226,6 +226,7 @@ def _parse_v1_request(req: dict) -> dict[str, Any]:
     body: str | None = None
     body_type = "none"
     query_params: dict[str, str] = {}
+    form_data_items: list[dict] | None = None
 
     if data_mode == "raw":
         # Raw body mode
@@ -250,13 +251,18 @@ def _parse_v1_request(req: dict) -> dict[str, Any]:
         data_items = req.get("data", [])
         if data_items and method in ("POST", "PUT", "PATCH"):
             # Form data for non-GET methods
-            obj = {}
+            form_data_items = []
             for item in data_items:
                 key = item.get("key", "")
                 if key and item.get("enabled", True) is not False:
-                    obj[key] = item.get("value", "")
-            if obj:
-                body = json.dumps(obj)
+                    form_data_items.append({
+                        "key": key,
+                        "value": item.get("value", ""),
+                        "type": item.get("type", "text"),
+                        "enabled": True,
+                        "file_name": None,
+                    })
+            if form_data_items:
                 body_type = "x-www-form-urlencoded"
         else:
             # Query params for GET (already in URL for v1, but extract from data too)
@@ -266,13 +272,18 @@ def _parse_v1_request(req: dict) -> dict[str, Any]:
                     query_params[key] = item.get("value", "")
     elif data_mode == "urlencoded":
         data_items = req.get("data", [])
-        obj = {}
+        form_data_items = []
         for item in data_items:
             key = item.get("key", "")
             if key and item.get("enabled", True) is not False:
-                obj[key] = item.get("value", "")
-        if obj:
-            body = json.dumps(obj)
+                form_data_items.append({
+                    "key": key,
+                    "value": item.get("value", ""),
+                    "type": "text",
+                    "enabled": True,
+                    "file_name": None,
+                })
+        if form_data_items:
             body_type = "x-www-form-urlencoded"
     elif data_mode == "binary":
         # Binary mode - we can't import the actual binary, just note it
@@ -291,6 +302,7 @@ def _parse_v1_request(req: dict) -> dict[str, Any]:
         "headers": headers,
         "body": body,
         "body_type": body_type,
+        "form_data": form_data_items,
         "auth_type": "none",
         "auth_config": {},
         "query_params": query_params,
@@ -412,10 +424,16 @@ def _parse_postman_auth(auth_data: dict | None) -> tuple[str, dict]:
     return "none", {}
 
 
-def _parse_postman_body(body_data: dict | None) -> tuple[str | None, str]:
-    """Parse Postman request body."""
+def _parse_postman_body(body_data: dict | None) -> tuple[str | None, str, list[dict] | None, str | None]:
+    """Parse Postman request body.
+
+    Returns (body_text, body_type, form_data_items, graphql_variables).
+    form_data_items is a list of {key, value, type, enabled, file_name} dicts
+    for form-data and urlencoded modes, None otherwise.
+    graphql_variables is a string for graphql mode, None otherwise.
+    """
     if not body_data:
-        return None, "none"
+        return None, "none", None, None
 
     mode = body_data.get("mode", "raw")
 
@@ -424,19 +442,51 @@ def _parse_postman_body(body_data: dict | None) -> tuple[str | None, str]:
         options = body_data.get("options", {})
         lang = options.get("raw", {}).get("language", "json")
         body_type_map = {"json": "json", "xml": "xml", "text": "text", "javascript": "json"}
-        return raw, body_type_map.get(lang, "text")
+        return raw, body_type_map.get(lang, "text"), None, None
 
     if mode == "formdata":
         form = body_data.get("formdata", [])
-        obj = {item["key"]: item.get("value", "") for item in form if item.get("key")}
-        return json.dumps(obj), "form-data"
+        form_items: list[dict] = []
+        for item in form:
+            key = item.get("key", "")
+            if not key:
+                continue
+            is_file = item.get("type", "text") == "file"
+            form_items.append({
+                "key": key,
+                "value": item.get("value", "") if not is_file else "",
+                "type": "file" if is_file else "text",
+                "enabled": not item.get("disabled", False),
+                "file_name": item.get("src", None) if is_file else None,
+            })
+        return None, "form-data", form_items, None
 
     if mode == "urlencoded":
         encoded = body_data.get("urlencoded", [])
-        obj = {item["key"]: item.get("value", "") for item in encoded if item.get("key")}
-        return json.dumps(obj), "x-www-form-urlencoded"
+        form_items = []
+        for item in encoded:
+            key = item.get("key", "")
+            if not key:
+                continue
+            form_items.append({
+                "key": key,
+                "value": item.get("value", ""),
+                "type": "text",
+                "enabled": not item.get("disabled", False),
+                "file_name": None,
+            })
+        return None, "x-www-form-urlencoded", form_items, None
 
-    return None, "none"
+    if mode == "graphql":
+        gql = body_data.get("graphql", {})
+        query = gql.get("query", "")
+        variables = gql.get("variables", "")
+        return query, "graphql", None, variables
+
+    if mode == "binary":
+        return None, "binary", None, None
+
+    return None, "none", None, None
 
 
 def _parse_item_scripts(item: dict) -> tuple[str, str]:
@@ -461,11 +511,30 @@ def _parse_postman_items(items: list[dict], collection_name: str) -> list[dict]:
 
     for item in items:
         if "item" in item:
-            # It's a folder
-            folder = {
+            # It's a folder — parse all folder-level metadata
+            raw_auth = item.get("auth")
+            if raw_auth is None:
+                folder_auth_type, folder_auth_config = "inherit", {}
+            else:
+                folder_auth_type, folder_auth_config = _parse_postman_auth(raw_auth)
+            folder_pre, folder_post = _parse_item_scripts(item)
+            folder_vars: dict[str, str] = {}
+            for v in item.get("variable", []):
+                k = v.get("key", "")
+                if k:
+                    folder_vars[k] = v.get("value", "")
+
+            folder: dict[str, Any] = {
                 "type": "folder",
                 "name": item.get("name", "Folder"),
+                "description": item.get("description", ""),
                 "children": _parse_postman_items(item["item"], collection_name),
+                "auth_type": folder_auth_type,
+                "auth_config": folder_auth_config,
+                "variables": folder_vars if folder_vars else None,
+                "pre_request_script": folder_pre,
+                "post_response_script": folder_post,
+                "script_language": "javascript" if (folder_pre or folder_post) else None,
             }
             result.append(folder)
         elif "request" in item:
@@ -480,11 +549,13 @@ def _parse_postman_items(items: list[dict], collection_name: str) -> list[dict]:
                     "headers": {},
                     "body": None,
                     "body_type": "none",
-                    "auth_type": "none",
+                    "auth_type": "inherit",
                     "auth_config": {},
                     "query_params": {},
                     "pre_request_script": "",
                     "post_response_script": "",
+                    "description": "",
+                    "graphql_variables": None,
                 })
                 continue
 
@@ -498,7 +569,7 @@ def _parse_postman_items(items: list[dict], collection_name: str) -> list[dict]:
                 url = raw_url
                 qp = {}
                 for q in url_data.get("query", []):
-                    if q.get("key"):
+                    if q.get("key") and not q.get("disabled", False):
                         qp[q["key"]] = q.get("value", "")
 
             # Parse headers
@@ -508,10 +579,14 @@ def _parse_postman_items(items: list[dict], collection_name: str) -> list[dict]:
                     headers[h["key"]] = h.get("value", "")
 
             # Parse body
-            body, body_type = _parse_postman_body(req_data.get("body"))
+            body, body_type, form_data_items, graphql_variables = _parse_postman_body(req_data.get("body"))
 
-            # Parse auth
-            auth_type, auth_config = _parse_postman_auth(req_data.get("auth"))
+            # Parse auth — missing auth in Postman means "inherit from parent"
+            raw_req_auth = req_data.get("auth")
+            if raw_req_auth is None:
+                auth_type, auth_config = "inherit", {}
+            else:
+                auth_type, auth_config = _parse_postman_auth(raw_req_auth)
 
             # Parse scripts
             pre_req_script, post_res_script = _parse_item_scripts(item)
@@ -524,11 +599,14 @@ def _parse_postman_items(items: list[dict], collection_name: str) -> list[dict]:
                 "headers": headers,
                 "body": body,
                 "body_type": body_type,
+                "form_data": form_data_items,
                 "auth_type": auth_type,
                 "auth_config": auth_config,
                 "query_params": qp,
                 "pre_request_script": pre_req_script,
                 "post_response_script": post_res_script,
+                "description": req_data.get("description", ""),
+                "graphql_variables": graphql_variables,
             })
 
     return result
@@ -549,6 +627,7 @@ def parse_postman_collection(data: dict) -> dict[str, Any]:
     items = _parse_postman_items(data.get("item", []), collection_name)
     collection_variables = extract_collection_variables(data)
     collection_scripts = extract_collection_scripts(data)
+    col_auth_type, col_auth_config = _parse_postman_auth(data.get("auth"))
 
     return {
         "name": collection_name,
@@ -556,6 +635,8 @@ def parse_postman_collection(data: dict) -> dict[str, Any]:
         "items": items,
         "variables": collection_variables,
         "scripts": collection_scripts,
+        "auth_type": col_auth_type,
+        "auth_config": col_auth_config,
     }
 
 
@@ -631,6 +712,11 @@ def _extract_variable_references(items: list[dict]) -> set[str]:
                 refs |= set(var_pattern.findall(str(hv)))
             for qv in (item.get("query_params") or {}).values():
                 refs |= set(var_pattern.findall(str(qv)))
+            # Scan form_data items for variable references
+            for fd in (item.get("form_data") or []):
+                for fd_field in ("key", "value"):
+                    fd_val = fd.get(fd_field) or ""
+                    refs |= set(var_pattern.findall(str(fd_val)))
     return refs
 
 
@@ -879,20 +965,65 @@ def _build_postman_auth(auth_type: str, auth_config: dict | None) -> dict | None
     return None
 
 
+def _build_postman_events(pre_req: str | None, post_res: str | None) -> list[dict]:
+    """Build Postman event array from pre-request and post-response scripts."""
+    events: list[dict] = []
+    if pre_req and pre_req.strip():
+        events.append({
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": pre_req.split("\n"),
+            },
+        })
+    if post_res and post_res.strip():
+        events.append({
+            "listen": "test",
+            "script": {
+                "type": "text/javascript",
+                "exec": post_res.split("\n"),
+            },
+        })
+    return events
+
+
 def export_to_postman(
     collection_name: str,
     collection_desc: str,
     items: list[dict],
     variables: dict[str, str] | None = None,
+    collection_auth_type: str | None = None,
+    collection_auth_config: dict | None = None,
+    collection_pre_request_script: str | None = None,
+    collection_post_response_script: str | None = None,
 ) -> dict:
     """Export collection to Postman Collection v2.1 format."""
 
     def build_item(item: dict) -> dict:
         if item.get("is_folder"):
-            return {
+            folder_obj: dict[str, Any] = {
                 "name": item["name"],
                 "item": [build_item(child) for child in item.get("children", [])],
             }
+            # Folder auth
+            folder_auth = _build_postman_auth(item.get("auth_type") or "none", item.get("auth_config"))
+            if folder_auth:
+                folder_obj["auth"] = folder_auth
+            # Folder events (scripts)
+            folder_events = _build_postman_events(item.get("pre_request_script"), item.get("post_response_script"))
+            if folder_events:
+                folder_obj["event"] = folder_events
+            # Folder description
+            if item.get("description"):
+                folder_obj["description"] = item["description"]
+            # Folder variables
+            if item.get("variables") and isinstance(item["variables"], dict):
+                folder_obj["variable"] = [
+                    {"key": k, "value": v, "type": "string"}
+                    for k, v in item["variables"].items()
+                    if k
+                ]
+            return folder_obj
 
         req = item.get("request", item)
         url = req.get("url", "")
@@ -919,8 +1050,42 @@ def export_to_postman(
             postman_url["query"] = [{"key": k, "value": v} for k, v in parse_qsl(parsed.query, keep_blank_values=True)]
 
         body_data = None
-        if req.get("body"):
-            bt = req.get("body_type", "json")
+        bt = req.get("body_type", "json")
+        form_items = req.get("form_data") or []
+        if bt == "graphql":
+            body_data = {
+                "mode": "graphql",
+                "graphql": {
+                    "query": req.get("body") or "",
+                    "variables": (req.get("settings") or {}).get("graphql_variables", ""),
+                },
+            }
+        elif bt == "form-data" and form_items:
+            body_data = {
+                "mode": "formdata",
+                "formdata": [
+                    {
+                        "key": fd.get("key", ""),
+                        "value": fd.get("value", ""),
+                        "type": fd.get("type", "text"),
+                        "disabled": not fd.get("enabled", True),
+                    }
+                    for fd in form_items
+                ],
+            }
+        elif bt == "x-www-form-urlencoded" and form_items:
+            body_data = {
+                "mode": "urlencoded",
+                "urlencoded": [
+                    {
+                        "key": fd.get("key", ""),
+                        "value": fd.get("value", ""),
+                        "disabled": not fd.get("enabled", True),
+                    }
+                    for fd in form_items
+                ],
+            }
+        elif req.get("body"):
             if bt in ("json", "xml", "text"):
                 body_data = {
                     "mode": "raw",
@@ -932,21 +1097,32 @@ def export_to_postman(
             elif bt == "x-www-form-urlencoded":
                 body_data = {"mode": "urlencoded", "urlencoded": []}
 
-        postman_item: dict[str, Any] = {
-            "name": item.get("name", "Request"),
-            "request": {
-                "method": req.get("method", "GET"),
-                "header": headers_list,
-                "url": postman_url,
-            },
+        postman_request: dict[str, Any] = {
+            "method": req.get("method", "GET"),
+            "header": headers_list,
+            "url": postman_url,
         }
 
+        # Request description
+        if item.get("description"):
+            postman_request["description"] = item["description"]
+
         if body_data:
-            postman_item["request"]["body"] = body_data
+            postman_request["body"] = body_data
 
         auth = _build_postman_auth(req.get("auth_type", "none"), req.get("auth_config"))
         if auth:
-            postman_item["request"]["auth"] = auth
+            postman_request["auth"] = auth
+
+        postman_item: dict[str, Any] = {
+            "name": item.get("name", "Request"),
+            "request": postman_request,
+        }
+
+        # Request-level events (scripts)
+        req_events = _build_postman_events(req.get("pre_request_script"), req.get("post_response_script"))
+        if req_events:
+            postman_item["event"] = req_events
 
         return postman_item
 
@@ -965,4 +1141,14 @@ def export_to_postman(
             for k, v in variables.items()
             if k
         ]
+    # Collection-level auth
+    if collection_auth_type and collection_auth_type != "none":
+        col_auth = _build_postman_auth(collection_auth_type, collection_auth_config)
+        if col_auth:
+            postman["auth"] = col_auth
+    # Collection-level events (scripts)
+    col_events = _build_postman_events(collection_pre_request_script, collection_post_response_script)
+    if col_events:
+        postman["event"] = col_events
+
     return postman

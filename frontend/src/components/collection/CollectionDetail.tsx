@@ -49,10 +49,12 @@ import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import AuthEditor from "@/components/request/AuthEditor";
+import { VariableValueCell } from "@/components/common/KeyValueEditor";
 import RunReportView from "./RunReportView";
 import { runsApi } from "@/api/endpoints";
 import { formatMs } from "./runnerUtils";
 import type { Collection, CollectionItem, AuthType, OAuthConfig, ScriptLanguage, CollectionRunSummary } from "@/types";
+import type { VariableInfo, VariableGroup } from "@/hooks/useVariableGroups";
 
 interface VarRow {
   key: string;
@@ -75,6 +77,8 @@ interface CollectionDetailProps {
   }) => Promise<void>;
   onDirtyChange: (isDirty: boolean) => void;
   onRunCollection: (collectionId: string) => void;
+  resolvedVariables?: Map<string, VariableInfo>;
+  variableGroups?: VariableGroup[];
 }
 
 function countItems(tree: CollectionItem[]): { requests: number; folders: number } {
@@ -100,6 +104,8 @@ export default function CollectionDetail({
   onSave,
   onDirtyChange,
   onRunCollection,
+  resolvedVariables,
+  variableGroups,
 }: CollectionDetailProps) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -593,20 +599,15 @@ export default function CollectionDetail({
                   },
                 }}
               />
-              <TextField
-                size="small"
-                placeholder={t("common.value")}
-                value={v.value}
-                onChange={(e) => updateVar(i, "value", e.target.value)}
-                sx={{
-                  flex: 1,
-                  "& .MuiOutlinedInput-root": {
-                    fontSize: "0.8rem",
-                    fontFamily: "monospace",
-                    backgroundColor: alpha(theme.palette.background.default, 0.5),
-                  },
-                }}
-              />
+              <Box sx={{ flex: 1 }}>
+                <VariableValueCell
+                  value={v.value}
+                  onChange={(val) => updateVar(i, "value", val)}
+                  placeholder={t("common.value")}
+                  resolvedVariables={resolvedVariables}
+                  variableGroups={variableGroups}
+                />
+              </Box>
               <IconButton
                 size="small"
                 onClick={() => removeVar(i)}
@@ -652,6 +653,8 @@ export default function CollectionDetail({
             onApiKeyValueChange={setApiKeyValue}
             onApiKeyPlacementChange={setApiKeyPlacement}
             onOAuthConfigChange={setOauthConfig}
+            resolvedVariables={resolvedVariables}
+            variableGroups={variableGroups}
           />
         </Paper>
       )}

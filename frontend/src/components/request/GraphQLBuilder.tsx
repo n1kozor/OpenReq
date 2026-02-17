@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import {
   Box,
-  TextField,
   Button,
   Tabs,
   Tab,
@@ -14,9 +13,11 @@ import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import Editor from "@monaco-editor/react";
 import KeyValueEditor from "@/components/common/KeyValueEditor";
+import { VariableValueCell } from "@/components/common/KeyValueEditor";
 import AuthEditor from "./AuthEditor";
 import ResponsePanel from "./ResponsePanel";
-import type { KeyValuePair, AuthType, OAuthConfig, ProxyResponse } from "@/types";
+import { useVariableGroups } from "@/hooks/useVariableGroups";
+import type { KeyValuePair, AuthType, OAuthConfig, ProxyResponse, Environment, EnvironmentVariable } from "@/types";
 
 const GQL_COLOR = "#e879f9";
 const MIN_TOP = 120;
@@ -51,6 +52,12 @@ interface GraphQLBuilderProps {
   onOAuthConfigChange: (config: OAuthConfig) => void;
   onSend: () => void;
   onSave: () => void;
+  // Variable support
+  environments?: Environment[];
+  selectedEnvId?: string | null;
+  envOverrideId?: string | null;
+  collectionVariables?: Record<string, string>;
+  workspaceGlobals?: Record<string, string>;
 }
 
 export default function GraphQLBuilder(props: GraphQLBuilderProps) {
@@ -62,6 +69,17 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
   // Vertical split ratio (fraction of height for top=editors, rest=bottom)
   const [splitRatio, setSplitRatio] = useState(0.55);
   const [dragging, setDragging] = useState(false);
+
+  // Variable resolution
+  const activeEnvId = props.envOverrideId ?? props.selectedEnvId ?? null;
+  const activeEnv = props.environments?.find((e) => e.id === activeEnvId);
+  const envVariables: EnvironmentVariable[] = activeEnv?.variables ?? [];
+
+  const { groups: variableGroups, resolved: resolvedVariables } = useVariableGroups(
+    envVariables,
+    props.collectionVariables ?? {},
+    props.workspaceGlobals,
+  );
 
   const activeHeadersCount = props.headers.filter((h) => h.enabled && h.key).length;
 
@@ -108,17 +126,15 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
           </Typography>
         </Box>
 
-        <TextField
-          fullWidth
-          size="small"
-          placeholder="https://api.example.com/graphql"
-          value={props.url}
-          onChange={(e) => props.onUrlChange(e.target.value)}
-          sx={{ "& .MuiOutlinedInput-root": { fontFamily: "monospace", fontSize: 13 } }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") props.onSend();
-          }}
-        />
+        <Box sx={{ flex: 1, border: 1, borderColor: "divider", borderRadius: 1, px: 1, py: 0.25 }}>
+          <VariableValueCell
+            value={props.url}
+            onChange={props.onUrlChange}
+            placeholder="https://api.example.com/graphql"
+            resolvedVariables={resolvedVariables}
+            variableGroups={variableGroups}
+          />
+        </Box>
 
         <Button
           variant="contained"
@@ -306,6 +322,8 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
                 onChange={props.onHeadersChange}
                 keyLabel={t("request.header")}
                 valueLabel={t("common.value")}
+                resolvedVariables={resolvedVariables}
+            variableGroups={variableGroups}
               />
             )}
 
@@ -327,6 +345,8 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
                 onApiKeyPlacementChange={props.onApiKeyPlacementChange}
                 oauthConfig={props.oauthConfig}
                 onOAuthConfigChange={props.onOAuthConfigChange}
+                resolvedVariables={resolvedVariables}
+            variableGroups={variableGroups}
               />
             )}
           </Box>

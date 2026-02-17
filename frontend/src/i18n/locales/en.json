@@ -51,6 +51,8 @@
     "header": "Header",
     "queryParam": "Query Param",
     "noAuth": "This request does not use any authorization.",
+    "inherit": "Inherit from Parent",
+    "inheritDescription": "Authorization is inherited from the parent folder or collection.",
     "noBody": "This request does not have a body.",
     "parameter": "Parameter",
     "requestName": "Request Name",
@@ -132,6 +134,19 @@
     "preview": "Preview",
     "markdownSupported": "Markdown supported"
   },
+  "folder": {
+    "editAuth": "Edit Authorization",
+    "detail": "Folder Settings",
+    "saved": "Folder saved!",
+    "saveFailed": "Failed to save folder",
+    "overview": "Overview",
+    "name": "Folder Name",
+    "description": "Description",
+    "variables": "Folder Variables",
+    "preRequest": "Pre-request Script",
+    "tests": "Tests",
+    "noDescription": "No description. Click to add one."
+  },
   "dashboard": {
     "welcome": "Welcome back!",
     "subtitle": "What would you like to do?",
@@ -172,7 +187,8 @@
     "variablesSaved": "Variables saved!",
     "insertVariable": "Insert Variable",
     "envOverride": "Environment",
-    "useGlobal": "Use Global"
+    "useGlobal": "Use Global",
+    "globalsDescription": "Workspace-level variables available in all requests. Lowest priority — overridden by collection and environment variables."
   },
   "workspace": {
     "new": "New Workspace",
@@ -364,6 +380,7 @@
   "variable": {
     "environment": "Environment",
     "collection": "Collection",
+    "globals": "Globals",
     "unresolved": "Unresolved variable",
     "source": "Source",
     "value": "Value"

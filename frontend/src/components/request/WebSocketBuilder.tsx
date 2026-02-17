@@ -25,8 +25,10 @@ import {
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import KeyValueEditor from "@/components/common/KeyValueEditor";
+import { VariableValueCell } from "@/components/common/KeyValueEditor";
 import AuthEditor from "./AuthEditor";
-import type { KeyValuePair, AuthType, OAuthConfig, WebSocketMessage } from "@/types";
+import { useVariableGroups } from "@/hooks/useVariableGroups";
+import type { KeyValuePair, AuthType, OAuthConfig, WebSocketMessage, Environment, EnvironmentVariable } from "@/types";
 import { API_URL } from "@/api/client";
 
 interface WebSocketBuilderProps {
@@ -55,6 +57,12 @@ interface WebSocketBuilderProps {
   onWsMessagesChange: (msgs: WebSocketMessage[]) => void;
   onWsConnectedChange: (connected: boolean) => void;
   onSave: () => void;
+  // Variable support
+  environments?: Environment[];
+  selectedEnvId?: string | null;
+  envOverrideId?: string | null;
+  collectionVariables?: Record<string, string>;
+  workspaceGlobals?: Record<string, string>;
 }
 
 export default function WebSocketBuilder(props: WebSocketBuilderProps) {
@@ -64,6 +72,17 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
   const [messageInput, setMessageInput] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Variable resolution
+  const activeEnvId = props.envOverrideId ?? props.selectedEnvId ?? null;
+  const activeEnv = props.environments?.find((e) => e.id === activeEnvId);
+  const envVariables: EnvironmentVariable[] = activeEnv?.variables ?? [];
+
+  const { groups: variableGroups, resolved: resolvedVariables } = useVariableGroups(
+    envVariables,
+    props.collectionVariables ?? {},
+    props.workspaceGlobals,
+  );
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -191,18 +210,15 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
           size="small"
           sx={{ fontWeight: 700, bgcolor: "#14b8a6", color: "#fff", "& .MuiChip-icon": { color: "#fff" } }}
         />
-        <TextField
-          fullWidth
-          size="small"
-          placeholder={t("websocket.urlPlaceholder")}
-          value={props.url}
-          onChange={(e) => props.onUrlChange(e.target.value)}
-          disabled={props.wsConnected}
-          sx={{ "& .MuiOutlinedInput-root": { fontFamily: "monospace", fontSize: 13 } }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !props.wsConnected) handleConnect();
-          }}
-        />
+        <Box sx={{ flex: 1, border: 1, borderColor: "divider", borderRadius: 1, px: 1, py: 0.25 }}>
+          <VariableValueCell
+            value={props.url}
+            onChange={props.onUrlChange}
+            placeholder={t("websocket.urlPlaceholder")}
+            resolvedVariables={resolvedVariables}
+            variableGroups={variableGroups}
+          />
+        </Box>
         {!props.wsConnected ? (
           <Button
             variant="contained"
@@ -281,6 +297,8 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
             onChange={props.onHeadersChange}
             keyLabel={t("request.header")}
             valueLabel={t("common.value")}
+            resolvedVariables={resolvedVariables}
+            variableGroups={variableGroups}
           />
         )}
 
@@ -302,6 +320,8 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
             onApiKeyPlacementChange={props.onApiKeyPlacementChange}
             oauthConfig={props.oauthConfig}
             onOAuthConfigChange={props.onOAuthConfigChange}
+            resolvedVariables={resolvedVariables}
+            variableGroups={variableGroups}
           />
         )}
 

@@ -25,9 +25,10 @@ import {
   TableRow,
   Divider,
 } from "@mui/material";
-import { Add, Delete, PlaylistAdd } from "@mui/icons-material";
+import { Add, Delete, PlaylistAdd, Public } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import type { Environment, EnvironmentType } from "@/types";
+import { workspacesApi } from "@/api/endpoints";
 
 const ENV_COLORS: Record<string, string> = {
   LIVE: "#f87171",
@@ -49,6 +50,7 @@ interface EnvironmentManagerProps {
   onUpdateEnv?: (id: string, name: string, envType: string) => void;
   onDeleteEnv: (id: string) => void;
   onSetVariables: (id: string, variables: Variable[]) => void;
+  workspaceId?: string | null;
 }
 
 /** Wizard dialog for creating a variable across all environments at once */
@@ -164,16 +166,29 @@ export default function EnvironmentManager({
   onUpdateEnv: _onUpdateEnv,
   onDeleteEnv,
   onSetVariables,
+  workspaceId,
 }: EnvironmentManagerProps) {
   const { t } = useTranslation();
   const [selectedEnvId, setSelectedEnvId] = useState<string | null>(null);
+  const [showGlobals, setShowGlobals] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState<EnvironmentType>("DEV");
   const [variables, setVariables] = useState<Variable[]>([]);
+  const [globalsVars, setGlobalsVars] = useState<{ key: string; value: string }[]>([]);
   const [showWizard, setShowWizard] = useState(false);
 
   const selectedEnv = environments.find((e) => e.id === selectedEnvId);
+
+  // Load globals when opening globals view
+  useEffect(() => {
+    if (showGlobals && workspaceId) {
+      workspacesApi.getGlobals(workspaceId).then((res) => {
+        const g = res.data.globals || {};
+        setGlobalsVars(Object.entries(g).map(([key, value]) => ({ key, value })));
+      }).catch(() => setGlobalsVars([]));
+    }
+  }, [showGlobals, workspaceId]);
 
   useEffect(() => {
     if (selectedEnv) {
@@ -206,6 +221,15 @@ export default function EnvironmentManager({
     setVariables(variables.filter((_, i) => i !== idx));
   };
 
+  const handleSaveGlobals = async () => {
+    if (!workspaceId) return;
+    const globalsObj: Record<string, string> = {};
+    for (const g of globalsVars) {
+      if (g.key.trim()) globalsObj[g.key.trim()] = g.value;
+    }
+    await workspacesApi.updateGlobals(workspaceId, globalsObj);
+  };
+
   const handleWizardSave = async (key: string, values: Record<string, { value: string; is_secret: boolean }>) => {
     for (const env of environments) {
       const envValue = values[env.id];
@@ -227,6 +251,17 @@ export default function EnvironmentManager({
           <Box sx={{ display: "flex", gap: 2, minHeight: 400 }}>
             {/* Left: env list */}
             <Box sx={{ width: 220, flexShrink: 0, borderRight: 1, borderColor: "divider", pr: 2 }}>
+              {/* Globals button */}
+              <ListItemButton
+                selected={showGlobals}
+                onClick={() => { setShowGlobals(true); setSelectedEnvId(null); }}
+                sx={{ borderRadius: 1, mb: 1, bgcolor: showGlobals ? "action.selected" : "transparent" }}
+              >
+                <Public fontSize="small" sx={{ mr: 1, color: "#60a5fa" }} />
+                <ListItemText primary="Globals" primaryTypographyProps={{ fontWeight: 600, fontSize: 14 }} />
+              </ListItemButton>
+              <Divider sx={{ mb: 1 }} />
+
               <Button startIcon={<Add />} size="small" onClick={() => setCreating(true)} fullWidth sx={{ mb: 1 }}>
                 {t("environment.new")}
               </Button>
@@ -253,7 +288,7 @@ export default function EnvironmentManager({
                   <ListItemButton
                     key={env.id}
                     selected={selectedEnvId === env.id}
-                    onClick={() => setSelectedEnvId(env.id)}
+                    onClick={() => { setSelectedEnvId(env.id); setShowGlobals(false); }}
                   >
                     <ListItemText
                       primary={env.name}
@@ -293,7 +328,72 @@ export default function EnvironmentManager({
 
             {/* Right: variable editor */}
             <Box sx={{ flexGrow: 1 }}>
-              {selectedEnv ? (
+              {showGlobals ? (
+                <>
+                  <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
+                    Globals
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {t("environment.globalsDescription")}
+                  </Typography>
+
+                  <Table
+                    size="small"
+                    sx={{
+                      border: 1, borderColor: "divider", borderRadius: 1,
+                      "& th": { py: 0.75, px: 1.5, bgcolor: "action.hover", borderBottom: 1, borderColor: "divider", fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: 0.5, color: "text.secondary" },
+                      "& td": { py: 0.25, px: 1.5, borderBottom: 1, borderColor: "divider", borderRight: 1, borderRightColor: "divider", "&:last-child": { borderRight: 0 } },
+                      "& tr:last-child td": { borderBottom: 0 },
+                    }}
+                  >
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>{t("environment.key")}</TableCell>
+                        <TableCell>{t("environment.value")}</TableCell>
+                        <TableCell sx={{ width: 40 }} />
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {globalsVars.map((g, idx) => (
+                        <TableRow key={idx} sx={{ "&:hover": { bgcolor: "action.hover" } }}>
+                          <TableCell>
+                            <TextField
+                              fullWidth size="small" variant="standard"
+                              value={g.key}
+                              onChange={(e) => setGlobalsVars(globalsVars.map((v, i) => i === idx ? { ...v, key: e.target.value } : v))}
+                              placeholder="variable_name"
+                              InputProps={{ disableUnderline: true, sx: { fontFamily: "monospace", fontSize: 13 } }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField
+                              fullWidth size="small" variant="standard"
+                              value={g.value}
+                              onChange={(e) => setGlobalsVars(globalsVars.map((v, i) => i === idx ? { ...v, value: e.target.value } : v))}
+                              placeholder={t("common.value")}
+                              InputProps={{ disableUnderline: true, sx: { fontFamily: "monospace", fontSize: 13 } }}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <IconButton size="small" onClick={() => setGlobalsVars(globalsVars.filter((_, i) => i !== idx))}>
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+
+                  <Box sx={{ mt: 1, display: "flex", gap: 1 }}>
+                    <Button size="small" startIcon={<Add />} onClick={() => setGlobalsVars([...globalsVars, { key: "", value: "" }])}>
+                      {t("environment.addVariable")}
+                    </Button>
+                    <Button size="small" variant="contained" onClick={handleSaveGlobals}>
+                      {t("common.save")}
+                    </Button>
+                  </Box>
+                </>
+              ) : selectedEnv ? (
                 <>
                   <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
                     {selectedEnv.name} — {t("environment.variables")}

@@ -45,27 +45,38 @@ def _transform_js_line(line: str) -> str:
     if m and not result.startswith("req.") and not result.startswith("assert"):
         return m.group(1) + _transform_js_expr(m.group(2))
 
-    # ── req.test("name", expr) — transform the expression part ──
-    m = re.match(r'(req\.test\(\s*["\'].+?["\']\s*,\s*)(.+?)(\)\s*)$', result)
+    # ── req.test / pm.test("name", expr) — transform the expression part ──
+    m = re.match(r'((?:req|pm)\.test\(\s*["\'].+?["\']\s*,\s*)(.+?)(\)\s*)$', result)
     if m:
         expr = m.group(2).strip()
-        # Handle arrow function: () => expr
-        arrow_m = re.match(r'\(\)\s*=>\s*(.+)', expr)
+        # Handle arrow function: () => expr  or  () => { ...stmts... }
+        arrow_m = re.match(r'\(\)\s*=>\s*\{(.+)\}', expr)
         if arrow_m:
-            expr = arrow_m.group(1)
-        # Handle function() { return expr; }
+            body = arrow_m.group(1).strip().rstrip(";")
+            if body.startswith("return "):
+                body = body[7:]
+            expr = body
+        else:
+            arrow_m = re.match(r'\(\)\s*=>\s*(.+)', expr)
+            if arrow_m:
+                expr = arrow_m.group(1)
+        # Handle function() { return expr; } or function() { ...stmts... }
         func_m = re.match(r'function\s*\(\)\s*\{\s*(?:return\s+)?(.+?);\s*\}', expr)
         if func_m:
             expr = func_m.group(1)
-        return m.group(1) + _transform_js_expr(expr) + m.group(3)
+        # For pm.test, wrap as lambda (Postman expects callback)
+        prefix = m.group(1)
+        if prefix.startswith("pm."):
+            return prefix + "lambda: " + _transform_js_expr(expr) + m.group(3)
+        return prefix + _transform_js_expr(expr) + m.group(3)
 
-    # ── req.variables.set("key", expr) — transform value expression ──
-    m = re.match(r'(req\.variables\.set\(\s*["\'].+?["\']\s*,\s*)(.+?)(\)\s*)$', result)
+    # ── req/pm .variables/.globals/.environment/.collectionVariables .set("key", expr) ──
+    m = re.match(r'((?:req|pm)\.(?:variables|globals|environment|collectionVariables)\.set\(\s*["\'].+?["\']\s*,\s*)(.+?)(\)\s*)$', result)
     if m:
         return m.group(1) + _transform_js_expr(m.group(2)) + m.group(3)
 
-    # ── req.globals.set("key", expr) — transform value expression ──
-    m = re.match(r'(req\.globals\.set\(\s*["\'].+?["\']\s*,\s*)(.+?)(\)\s*)$', result)
+    # ── postman.setGlobalVariable/setEnvironmentVariable("key", expr) ──
+    m = re.match(r'(postman\.(?:setGlobalVariable|setEnvironmentVariable)\(\s*["\'].+?["\']\s*,\s*)(.+?)(\)\s*)$', result)
     if m:
         return m.group(1) + _transform_js_expr(m.group(2)) + m.group(3)
 
@@ -174,7 +185,7 @@ def _transform_js_expr(expr: str) -> str:
     result = re.sub(r'\bBoolean\(', 'bool(', result)
 
     # ── JSON methods ──
-    result = re.sub(r'\bJSON\.parse\(', 'json.loads(', result)
+    result = re.sub(r'\bJSON\.parse\(', '_json_parse(', result)
     result = re.sub(r'\bJSON\.stringify\(', 'json.dumps(', result)
 
     # ── Math methods ──
@@ -214,6 +225,17 @@ def _transform_js_expr(expr: str) -> str:
         true_val = _transform_js_expr(ternary_m.group(2).strip())
         false_val = _transform_js_expr(ternary_m.group(3).strip())
         result = f"{true_val} if {cond} else {false_val}"
+
+    # ── Postman expect chains: .to.be.above → .to_be_above etc. ──
+    result = re.sub(r'\.to\.be\.', '.to_be_', result)
+    result = re.sub(r'\.to\.have\.', '.to_have_', result)
+    result = re.sub(r'\.to\.not\.be\.', '.to_not_be_', result)
+    result = re.sub(r'\.to\.not\.have\.', '.to_not_have_', result)
+    result = re.sub(r'\.to\.not\.', '.to_not_', result)
+    result = re.sub(r'\.to\.equal\(', '.to_equal(', result)
+    result = re.sub(r'\.to\.include\(', '.to_include(', result)
+    result = re.sub(r'\.to\.match\(', '.to_match(', result)
+    result = re.sub(r'\.to\.eql\(', '.eql(', result)
 
     # ── Template literals `...${expr}...` → f-string f"...{expr}..." ──
     if '`' in result:
@@ -287,6 +309,13 @@ def run_pre_request_script_js(
     request_headers: dict[str, str] | None = None,
     request_body: str | None = None,
     request_query_params: dict[str, str] | None = None,
+    # pm.* scope data
+    globals_vars: dict[str, str] | None = None,
+    environment_vars: dict[str, str] | None = None,
+    collection_vars: dict[str, str] | None = None,
+    request_name: str = "",
+    iteration: int = 1,
+    iteration_count: int = 1,
 ) -> dict[str, Any]:
     """Run a JavaScript pre-request script by transforming to Python DSL."""
     transformed = transform_js_script(script)
@@ -295,6 +324,9 @@ def run_pre_request_script_js(
         request_url=request_url, request_method=request_method,
         request_headers=request_headers, request_body=request_body,
         request_query_params=request_query_params,
+        globals_vars=globals_vars, environment_vars=environment_vars,
+        collection_vars=collection_vars, request_name=request_name,
+        iteration=iteration, iteration_count=iteration_count,
     )
 
 
@@ -305,6 +337,13 @@ def run_post_response_script_js(
     response_body: str = "",
     response_headers: dict[str, str] | None = None,
     response_time: float = 0,
+    # pm.* scope data
+    globals_vars: dict[str, str] | None = None,
+    environment_vars: dict[str, str] | None = None,
+    collection_vars: dict[str, str] | None = None,
+    request_name: str = "",
+    iteration: int = 1,
+    iteration_count: int = 1,
 ) -> dict[str, Any]:
     """Run a JavaScript post-response script by transforming to Python DSL."""
     transformed = transform_js_script(script)
@@ -315,4 +354,7 @@ def run_post_response_script_js(
         response_body=response_body,
         response_headers=response_headers,
         response_time=response_time,
+        globals_vars=globals_vars, environment_vars=environment_vars,
+        collection_vars=collection_vars, request_name=request_name,
+        iteration=iteration, iteration_count=iteration_count,
     )

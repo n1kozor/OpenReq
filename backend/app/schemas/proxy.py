@@ -15,6 +15,10 @@ class ScriptResultSchema(BaseModel):
     request_method: str | None = None
     request_body: str | None = None
     request_query_params: dict[str, str] = {}
+    # pm.* scope changes for DB persistence (key→value=set, key→None=delete)
+    environment_updates: dict[str, str | None] = {}
+    globals_updates: dict[str, str | None] = {}
+    collection_var_updates: dict[str, str | None] = {}
 
 
 class RequestSettings(BaseModel):
@@ -52,12 +56,17 @@ class ProxyRequest(BaseModel):
     auth_config: dict | None = None
     environment_id: str | None = None
     collection_id: str | None = None
+    collection_item_id: str | None = None
     # Scripts
     pre_request_script: str | None = None
     post_response_script: str | None = None
     script_language: str = "python"  # "python" or "javascript"
     # Per-request HTTP settings
     request_settings: RequestSettings | None = None
+    # Script context metadata
+    request_name: str = ""
+    iteration: int = 1
+    iteration_count: int = 1
 
 
 class ProxyResponse(BaseModel):

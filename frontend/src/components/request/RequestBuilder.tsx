@@ -85,6 +85,7 @@ interface RequestBuilderProps {
   onApiKeyPlacementChange: (v: "header" | "query") => void;
   onOAuthConfigChange: (config: OAuthConfig) => void;
   collectionVariables: Record<string, string>;
+  workspaceGlobals?: Record<string, string>;
   onEnvOverrideChange: (id: string | null) => void;
   requestSettings: RequestSettings;
   onRequestSettingsChange: (settings: RequestSettings) => void;
@@ -108,6 +109,7 @@ export default function RequestBuilder(props: RequestBuilderProps) {
   const { groups: variableGroups, resolved: resolvedVariables } = useVariableGroups(
     envVariables,
     props.collectionVariables,
+    props.workspaceGlobals,
   );
 
   const [dnsOpen, setDnsOpen] = useState(false);
@@ -363,6 +365,8 @@ export default function RequestBuilder(props: RequestBuilderProps) {
             keyLabel={t("request.parameter")}
             valueLabel={t("common.value")}
             showDescription
+            resolvedVariables={resolvedVariables}
+            variableGroups={variableGroups}
           />
         )}
 
@@ -372,6 +376,8 @@ export default function RequestBuilder(props: RequestBuilderProps) {
             onChange={props.onHeadersChange}
             keyLabel={t("request.header")}
             valueLabel={t("common.value")}
+            resolvedVariables={resolvedVariables}
+            variableGroups={variableGroups}
           />
         )}
 
@@ -406,6 +412,8 @@ export default function RequestBuilder(props: RequestBuilderProps) {
             onApiKeyPlacementChange={props.onApiKeyPlacementChange}
             oauthConfig={props.oauthConfig}
             onOAuthConfigChange={props.onOAuthConfigChange}
+            resolvedVariables={resolvedVariables}
+            variableGroups={variableGroups}
           />
         )}
 

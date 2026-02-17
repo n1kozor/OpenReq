@@ -38,6 +38,13 @@ class CollectionItemCreate(BaseModel):
     parent_id: str | None = None
     request_id: str | None = None
     sort_order: int = 0
+    auth_type: str | None = None
+    auth_config: dict | None = None
+    description: str | None = None
+    variables: dict | None = None
+    pre_request_script: str | None = None
+    post_response_script: str | None = None
+    script_language: str | None = None
 
 
 class CollectionItemOut(BaseModel):
@@ -49,5 +56,12 @@ class CollectionItemOut(BaseModel):
     sort_order: int
     method: str | None = None
     protocol: str | None = None
+    auth_type: str | None = None
+    auth_config: dict | None = None
+    description: str | None = None
+    variables: dict | None = None
+    pre_request_script: str | None = None
+    post_response_script: str | None = None
+    script_language: str | None = None
 
     model_config = {"from_attributes": True}

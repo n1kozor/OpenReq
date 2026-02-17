@@ -54,6 +54,13 @@ class CollectionItemUpdate(BaseModel):
     name: str | None = None
     sort_order: int | None = None
     parent_id: str | None = None
+    auth_type: str | None = None
+    auth_config: dict | None = None
+    description: str | None = None
+    variables: dict | None = None
+    pre_request_script: str | None = None
+    post_response_script: str | None = None
+    script_language: str | None = None
 
 
 class CollectionItemReorder(BaseModel):
@@ -250,6 +257,8 @@ def create_item(
         parent_id=payload.parent_id,
         request_id=payload.request_id,
         sort_order=payload.sort_order,
+        auth_type=payload.auth_type,
+        auth_config=payload.auth_config,
     )
     db.add(item)
     db.commit()
@@ -287,6 +296,18 @@ def list_items(
             out.protocol = protocols.get(item.request_id, "http")
         result.append(out)
     return result
+
+
+@router.get("/items/{item_id}", response_model=CollectionItemOut)
+def get_item(
+    item_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    item = db.query(CollectionItem).filter(CollectionItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return item
 
 
 @router.patch("/items/{item_id}", response_model=CollectionItemOut)

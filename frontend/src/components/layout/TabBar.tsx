@@ -82,7 +82,7 @@ export default function TabBar({
   };
 
   const contextTab = contextMenu ? tabs.find((t) => t.id === contextMenu.tabId) : null;
-  const isRequestTab = contextTab && contextTab.tabType !== "collection" && contextTab.tabType !== "testflow";
+  const isRequestTab = contextTab && contextTab.tabType !== "collection" && contextTab.tabType !== "testflow" && contextTab.tabType !== "folder";
 
   return (
     <Box
@@ -169,11 +169,18 @@ export default function TabBar({
                       }}
                     />
                   ) : tab.tabType === "collection" ? (
-                    /* Collection tab icon */
                     <FolderOpen
                       sx={{
                         fontSize: 14,
                         color: theme.palette.primary.main,
+                        flexShrink: 0,
+                      }}
+                    />
+                  ) : tab.tabType === "folder" ? (
+                    <FolderOpen
+                      sx={{
+                        fontSize: 14,
+                        color: theme.palette.warning.main,
                         flexShrink: 0,
                       }}
                     />

@@ -110,6 +110,10 @@ class _ResponseAccessor:
                 self._json = None
         return self._json
 
+    def text(self) -> str:
+        """Alias for body — compatible with pm.response.text()."""
+        return self.body
+
     def to_have_status(self, code: int) -> bool:
         return self.status == code
 
@@ -366,7 +370,11 @@ _SAFE_BUILTINS = {
 }
 
 
-def run_script(script: str, context: ScriptContext) -> ScriptContext:
+def run_script(
+    script: str,
+    context: ScriptContext,
+    pm: Any = None,
+) -> ScriptContext:
     """Execute a Python script in a sandboxed exec() environment.
 
     The script has access to:
@@ -377,6 +385,11 @@ def run_script(script: str, context: ScriptContext) -> ScriptContext:
     - req.sendRequest(url=..., ...)       — HTTP requests
     - req.expect(val).to_equal(...)       — chainable expects
     - req.response.status/body/json/...   — response data (post-response)
+    - pm.globals / pm.environment / pm.collectionVariables — Postman-compatible
+    - pm.test("name", callback)           — Postman callback-style tests
+    - pm.expect(val) / pm.response / pm.request / pm.info
+    - responseBody, responseTime, responseCode — legacy Postman globals
+    - postman.setGlobalVariable / getGlobalVariable etc.
     - json, re, time modules
     - print() → redirected to req.log
     """
@@ -395,13 +408,60 @@ def run_script(script: str, context: ScriptContext) -> ScriptContext:
             processed.append(line)
     script = "\n".join(processed)
 
+    def _json_parse(text: str) -> Any:
+        """JSON.parse replacement that returns _AttrDict for attribute-style access.
+
+        If the text is not pure JSON (e.g. PHP warnings before JSON), tries to
+        extract the JSON object/array from the text.
+        """
+        text = text.strip()
+        try:
+            return _wrap_value(json.loads(text))
+        except (json.JSONDecodeError, ValueError):
+            # Try to find JSON object or array within dirty response
+            for start_ch, end_ch in [('{', '}'), ('[', ']')]:
+                start = text.find(start_ch)
+                if start == -1:
+                    continue
+                end = text.rfind(end_ch)
+                if end > start:
+                    try:
+                        return _wrap_value(json.loads(text[start:end + 1]))
+                    except (json.JSONDecodeError, ValueError):
+                        continue
+            raise
+
+    # Create a patched json module where loads() handles dirty responses
+    # and returns _AttrDict for attribute-style access
+    import types as _types
+    _smart_json = _types.ModuleType("json")
+    _smart_json.loads = _json_parse
+    _smart_json.dumps = json.dumps
+    _smart_json.load = json.load
+    _smart_json.dump = json.dump
+
     safe_globals: dict[str, Any] = {
         "__builtins__": {**_SAFE_BUILTINS, "print": context.log},
-        "json": json,
+        "json": _smart_json,
         "re": re,
         "time": time,
         "req": context,
+        "_json_parse": _json_parse,
     }
+
+    # Inject Postman-compatible pm.* object and legacy globals
+    if pm is not None:
+        from app.services.pm_context import LegacyPostmanObject
+        safe_globals["pm"] = pm
+        safe_globals["postman"] = LegacyPostmanObject(pm)
+        # Legacy Postman globals (post-response only, when response exists)
+        if pm.response.code != 0:
+            safe_globals["responseBody"] = pm.response.text()
+            safe_globals["responseTime"] = pm.response.responseTime
+            safe_globals["responseCode"] = _AttrDict({
+                "code": pm.response.code,
+                "name": pm.response.status,
+            })
 
     # Parse into AST so each top-level statement runs independently.
     # If one statement crashes, the rest still execute (like Postman).
@@ -441,8 +501,8 @@ def run_script(script: str, context: ScriptContext) -> ScriptContext:
     return context
 
 
-def _to_result(ctx: ScriptContext) -> dict[str, Any]:
-    return {
+def _to_result(ctx: ScriptContext, pm: Any = None) -> dict[str, Any]:
+    result = {
         "variables": ctx.variables.to_dict(),
         "globals": ctx.globals.to_dict(),
         "logs": ctx.logs,
@@ -452,7 +512,28 @@ def _to_result(ctx: ScriptContext) -> dict[str, Any]:
         "request_method": ctx.request.method,
         "request_body": ctx.request.body,
         "request_query_params": ctx.request.query_params,
+        "environment_updates": {},
+        "globals_updates": {},
+        "collection_var_updates": {},
     }
+    # Merge req.globals.set() changes into globals_updates for DB persistence
+    req_globals = ctx.globals.to_dict()
+    if req_globals:
+        for k, v in req_globals.items():
+            result["globals_updates"][k] = v
+
+    if pm is not None:
+        changes = pm.get_scope_changes()
+        result["environment_updates"] = changes["environment_updates"]
+        # pm.globals changes override req.globals (pm is more specific)
+        for k, v in changes["globals_updates"].items():
+            result["globals_updates"][k] = v
+        result["collection_var_updates"] = changes["collection_var_updates"]
+        # Merge pm.variables.set() local changes into variables for {{var}} resolution
+        for k, v in changes["local_updates"].items():
+            if v is not None:
+                result["variables"][k] = v
+    return result
 
 
 def run_pre_request_script(
@@ -463,6 +544,13 @@ def run_pre_request_script(
     request_headers: dict[str, str] | None = None,
     request_body: str | None = None,
     request_query_params: dict[str, str] | None = None,
+    # pm.* scope data (optional — backward-compatible)
+    globals_vars: dict[str, str] | None = None,
+    environment_vars: dict[str, str] | None = None,
+    collection_vars: dict[str, str] | None = None,
+    request_name: str = "",
+    iteration: int = 1,
+    iteration_count: int = 1,
 ) -> dict[str, Any]:
     ctx = ScriptContext(
         variables=variables,
@@ -472,8 +560,24 @@ def run_pre_request_script(
         request_body=request_body,
         request_query_params=request_query_params,
     )
-    run_script(script, ctx)
-    return _to_result(ctx)
+    from app.services.pm_context import PostmanContext
+    pm = PostmanContext(
+        globals_vars=globals_vars,
+        environment_vars=environment_vars,
+        collection_vars=collection_vars,
+        local_vars=variables,
+        request_url=request_url,
+        request_method=request_method,
+        request_headers=request_headers,
+        request_name=request_name,
+        iteration=iteration,
+        iteration_count=iteration_count,
+        event_name="prerequest",
+        test_results=ctx.test_results,
+        logs=ctx.logs,
+    )
+    run_script(script, ctx, pm=pm)
+    return _to_result(ctx, pm=pm)
 
 
 def run_post_response_script(
@@ -483,6 +587,13 @@ def run_post_response_script(
     response_body: str = "",
     response_headers: dict[str, str] | None = None,
     response_time: float = 0,
+    # pm.* scope data (optional — backward-compatible)
+    globals_vars: dict[str, str] | None = None,
+    environment_vars: dict[str, str] | None = None,
+    collection_vars: dict[str, str] | None = None,
+    request_name: str = "",
+    iteration: int = 1,
+    iteration_count: int = 1,
 ) -> dict[str, Any]:
     ctx = ScriptContext(
         variables=variables,
@@ -491,5 +602,22 @@ def run_post_response_script(
         response_headers=response_headers,
         response_time=response_time,
     )
-    run_script(script, ctx)
-    return _to_result(ctx)
+    from app.services.pm_context import PostmanContext
+    pm = PostmanContext(
+        globals_vars=globals_vars,
+        environment_vars=environment_vars,
+        collection_vars=collection_vars,
+        local_vars=variables,
+        response_status=response_status,
+        response_body=response_body,
+        response_headers=response_headers,
+        response_time=response_time,
+        request_name=request_name,
+        iteration=iteration,
+        iteration_count=iteration_count,
+        event_name="test",
+        test_results=ctx.test_results,
+        logs=ctx.logs,
+    )
+    run_script(script, ctx, pm=pm)
+    return _to_result(ctx, pm=pm)
