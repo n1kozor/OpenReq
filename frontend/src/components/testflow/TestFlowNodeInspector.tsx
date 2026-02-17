@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import {
   Box, Typography, TextField, Select, MenuItem, FormControl, InputLabel,
-  IconButton, Button, Divider, InputAdornment, Autocomplete,
+  IconButton, Button, Divider, InputAdornment, Autocomplete, Alert,
 } from "@mui/material";
 import { Close, Add, Delete, Search } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
@@ -89,62 +89,76 @@ export default function TestFlowNodeInspector({
 
         {/* Node-type-specific config */}
         {nodeType === "http_request" && (
-          <HttpRequestConfig
-            config={config}
-            updateConfig={updateConfig}
-            allRequests={allRequests}
-            t={t}
-          />
+          <>
+            <NodeHelpBox text={t("testFlow.nodeHelp.httpRequest")} />
+            <HttpRequestConfig
+              config={config}
+              updateConfig={updateConfig}
+              allRequests={allRequests}
+              t={t}
+            />
+          </>
         )}
 
         {nodeType === "collection" && (
-          <CollectionConfig
-            config={config}
-            updateConfig={updateConfig}
-            collections={collections}
-            t={t}
-          />
+          <>
+            <NodeHelpBox text={t("testFlow.nodeHelp.collection")} />
+            <CollectionConfig
+              config={config}
+              updateConfig={updateConfig}
+              collections={collections}
+              t={t}
+            />
+          </>
         )}
 
         {nodeType === "assertion" && (
-          <AssertionConfig config={config} updateConfig={updateConfig} t={t} />
+          <>
+            <NodeHelpBox text={t("testFlow.nodeHelp.assertion")} />
+            <AssertionConfig config={config} updateConfig={updateConfig} t={t} />
+          </>
         )}
 
         {nodeType === "script" && (
-          <ScriptConfig config={config} updateConfig={updateConfig} t={t} />
+          <>
+            <NodeHelpBox text={t("testFlow.nodeHelp.script")} />
+            <ScriptConfig config={config} updateConfig={updateConfig} t={t} />
+          </>
         )}
 
         {nodeType === "delay" && (
-          <TextField
-            label={t("testFlow.nodeConfig.delayMs")}
-            type="number"
-            size="small"
-            fullWidth
-            value={(config.delay_ms as number) ?? 1000}
-            onChange={(e) => updateConfig({ delay_ms: Number(e.target.value) })}
-          />
+          <>
+            <NodeHelpBox text={t("testFlow.nodeHelp.delay")} />
+            <TextField
+              label={t("testFlow.nodeConfig.delayMs")}
+              type="number"
+              size="small"
+              fullWidth
+              value={(config.delay_ms as number) ?? 1000}
+              onChange={(e) => updateConfig({ delay_ms: Number(e.target.value) })}
+            />
+          </>
         )}
 
         {nodeType === "condition" && (
-          <TextField
-            label={t("testFlow.nodeConfig.expression")}
-            size="small"
-            fullWidth
-            multiline
-            minRows={2}
-            value={(config.expression as string) || ""}
-            onChange={(e) => updateConfig({ expression: e.target.value })}
-            placeholder="status_code == 200"
-            sx={{ "& textarea": { fontFamily: "monospace", fontSize: "0.8rem" } }}
-          />
+          <>
+            <NodeHelpBox text={t("testFlow.nodeHelp.condition")} />
+            <ConditionConfig config={config} updateConfig={updateConfig} t={t} />
+          </>
         )}
 
         {nodeType === "loop" && (
-          <LoopConfig config={config} updateConfig={updateConfig} t={t} />
+          <>
+            <NodeHelpBox text={t("testFlow.nodeHelp.loop")} />
+            <LoopConfig config={config} updateConfig={updateConfig} t={t} />
+          </>
         )}
 
         {nodeType === "set_variable" && (
-          <SetVariableConfig config={config} updateConfig={updateConfig} t={t} />
+          <>
+            <NodeHelpBox text={t("testFlow.nodeHelp.setVariable")} />
+            <SetVariableConfig config={config} updateConfig={updateConfig} t={t} />
+          </>
         )}
 
         {nodeType === "group" && (
@@ -185,6 +199,16 @@ function flattenItems(items: CollectionItem[]): CollectionItem[] {
     }
   }
   return result;
+}
+
+// ── Help box ──
+
+function NodeHelpBox({ text }: { text: string }) {
+  return (
+    <Alert severity="info" icon={false} sx={{ py: 0.25, px: 1, "& .MuiAlert-message": { fontSize: "0.7rem", lineHeight: 1.4 } }}>
+      {text}
+    </Alert>
+  );
 }
 
 // ── Sub-config components ──
@@ -302,6 +326,62 @@ function CollectionConfig({
     </FormControl>
   );
 }
+
+function ConditionConfig({
+  config,
+  updateConfig,
+  t,
+}: {
+  config: Record<string, unknown>;
+  updateConfig: (patch: Record<string, unknown>) => void;
+  t: (key: string) => string;
+}) {
+  return (
+    <>
+      <TextField
+        label={t("testFlow.nodeConfig.expression")}
+        size="small"
+        fullWidth
+        multiline
+        minRows={2}
+        value={(config.expression as string) || ""}
+        onChange={(e) => updateConfig({ expression: e.target.value })}
+        placeholder="status_code == 200"
+        sx={{ "& textarea": { fontFamily: "monospace", fontSize: "0.8rem" } }}
+      />
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+        {t("testFlow.nodeConfig.conditionPresets")}
+      </Typography>
+      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+        {CONDITION_PRESETS.map((preset) => (
+          <Button
+            key={preset.label}
+            size="small"
+            variant="outlined"
+            sx={{ fontSize: "0.65rem", py: 0.25, px: 0.75, minWidth: 0, textTransform: "none" }}
+            onClick={() => updateConfig({ expression: preset.expression })}
+          >
+            {preset.label}
+          </Button>
+        ))}
+      </Box>
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, fontSize: "0.65rem" }}>
+        {t("testFlow.nodeConfig.conditionHelpVars")}
+      </Typography>
+    </>
+  );
+}
+
+const CONDITION_PRESETS = [
+  { label: "200 OK", expression: "status_code == 200" },
+  { label: "No error (< 400)", expression: "status_code < 400" },
+  { label: "Is error (>= 400)", expression: "status_code >= 400" },
+  { label: "Body not empty", expression: 'response_body != ""' },
+  { label: "No error in body", expression: '"error" not in response_body' },
+  { label: "Under 1s", expression: "elapsed_ms < 1000" },
+  { label: "Token exists", expression: 'vars.get("token") is not None' },
+  { label: "Iteration < 5", expression: "iteration < 5" },
+];
 
 function AssertionConfig({
   config,
@@ -434,6 +514,10 @@ const ASSERTION_PRESETS = [
     assertions: [{ type: "status_code", operator: "eq", expected: "201", field: "" }],
   },
   {
+    label: "204 No Content",
+    assertions: [{ type: "status_code", operator: "eq", expected: "204", field: "" }],
+  },
+  {
     label: "2xx Success",
     assertions: [
       { type: "status_code", operator: "gte", expected: "200", field: "" },
@@ -445,12 +529,32 @@ const ASSERTION_PRESETS = [
     assertions: [{ type: "status_code", operator: "lt", expected: "400", field: "" }],
   },
   {
+    label: "301 Redirect",
+    assertions: [{ type: "status_code", operator: "eq", expected: "301", field: "" }],
+  },
+  {
+    label: "401 Unauthorized",
+    assertions: [{ type: "status_code", operator: "eq", expected: "401", field: "" }],
+  },
+  {
+    label: "404 Not Found",
+    assertions: [{ type: "status_code", operator: "eq", expected: "404", field: "" }],
+  },
+  {
     label: "Has JSON body",
     assertions: [{ type: "body_contains", operator: "contains", expected: "{", field: "" }],
   },
   {
+    label: "Body not empty",
+    assertions: [{ type: "body_contains", operator: "neq", expected: "", field: "" }],
+  },
+  {
     label: "Fast (< 500ms)",
     assertions: [{ type: "response_time", operator: "lt", expected: "500", field: "" }],
+  },
+  {
+    label: "Very fast (< 100ms)",
+    assertions: [{ type: "response_time", operator: "lt", expected: "100", field: "" }],
   },
   {
     label: "JSON $.id exists",
@@ -459,6 +563,10 @@ const ASSERTION_PRESETS = [
   {
     label: "Content-Type JSON",
     assertions: [{ type: "header_check", operator: "contains", expected: "application/json", field: "content-type" }],
+  },
+  {
+    label: "Has Auth header",
+    assertions: [{ type: "header_check", operator: "neq", expected: "", field: "Authorization" }],
   },
 ];
 

@@ -787,7 +787,23 @@
       "noRequest": "Nincs kiválasztott kérés",
       "noCollection": "Nincs kiválasztott gyűjtemény",
       "quickPresets": "Gyors sablonok",
-      "scriptTemplates": "Sablon beszúrása"
+      "scriptTemplates": "Sablon beszúrása",
+      "conditionPresets": "Gyors sablonok",
+      "conditionHelpVars": "Elérhető: status_code, response_body, response_headers, elapsed_ms, vars, iteration",
+      "conditionSubtitle": "Kifejezés ellenőrzés",
+      "assertionSubtitle": "Válasz ellenőrzés",
+      "loopBody": "Ciklus törzs",
+      "loopDone": "Kész"
+    },
+    "nodeHelp": {
+      "httpRequest": "Egy mentett HTTP kérést hajt végre. Csatlakoztasd egy Ellenőrzés csomóponthoz a válasz validálásához, vagy egy Feltétel csomóponthoz egyedi folyamatvezérléshez.",
+      "collection": "A gyűjtemény összes kérését sorban lefuttatja. A változók kérésenként halmozódnak.",
+      "assertion": "Ellenőrzi a HTTP választ előre meghatározott szabályok alapján (státusz kód, body tartalom, fejlécek, válaszidő). Minden ellenőrzés sikere → Igaz ág; bármely hiba → Hamis ág.",
+      "condition": "Egyedi Python kifejezést értékel ki változók és válaszadatok alapján (status_code, response_body, elapsed_ms stb.). Igaz eredmény → bal ág, Hamis eredmény → jobb ág.",
+      "loop": "Megismétli az összes csatlakoztatott 'Ciklus törzs' csomópontot. Számláló mód: fix számú ismétlés. Feltétel mód: ismétlés amíg a kifejezés igaz (hozzáféréssel a válaszadatokhoz).",
+      "script": "JavaScript vagy Python kódot futtat egyedi adatátalakításhoz, változó-kezeléshez vagy összetett ellenőrzésekhez.",
+      "delay": "Szünetelteti a végrehajtást a megadott ezredmásodpercig, mielőtt továbblépne a következő csomópontra.",
+      "setVariable": "Folyamatváltozókat állít be, amelyeket az alsóbb csomópontok {{változó_név}} szintaxissal érhetnek el."
     },
     "execution": {
       "pending": "Várakozik",

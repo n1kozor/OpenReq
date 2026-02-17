@@ -29,14 +29,19 @@ def _topological_sort(
     outgoing: dict[str, list[TestFlowEdge]],
     incoming: dict[str, list[TestFlowEdge]],
 ) -> list[str]:
-    """Return node IDs in topological (execution) order."""
+    """Return node IDs in topological (execution) order.
+
+    Raises ValueError if a cycle is detected.
+    """
+    non_group = {nid for nid, n in nodes.items() if n.node_type != "group"}
+
     in_degree: dict[str, int] = {nid: 0 for nid in nodes}
     for nid in nodes:
         in_degree[nid] = len(incoming.get(nid, []))
 
     queue: deque[str] = deque()
     for nid, deg in in_degree.items():
-        if deg == 0 and nodes[nid].node_type != "group":
+        if deg == 0 and nid in non_group:
             queue.append(nid)
 
     order: list[str] = []
@@ -49,6 +54,15 @@ def _topological_sort(
                 in_degree[target] -= 1
                 if in_degree[target] == 0:
                     queue.append(target)
+
+    # Cycle detection: if not all non-group nodes were visited, there's a cycle
+    visited = set(order)
+    unvisited = non_group - visited
+    if unvisited:
+        cycle_labels = [nodes[nid].label or nid for nid in unvisited]
+        raise ValueError(
+            f"Cycle detected in test flow involving nodes: {', '.join(cycle_labels)}"
+        )
 
     return order
 
@@ -545,21 +559,25 @@ def _exec_condition(
     incoming: dict[str, list[TestFlowEdge]],
     node_id: str,
     nodes: dict[str, TestFlowNode],
+    iteration: int = 0,
 ) -> dict:
     expression = config.get("expression", "false").strip()
 
-    # Simple expression evaluation against flow variables and upstream results
+    # Expression evaluation against flow variables and upstream HTTP results
     upstream = _find_upstream_http_result(node_id, incoming, nodes, node_results)
     eval_context = {
         "vars": dict(flow_vars),
         "status_code": upstream.get("status_code") if upstream else None,
         "response_body": upstream.get("response_body", "") if upstream else "",
+        "response_headers": upstream.get("response_headers", {}) if upstream else {},
         "elapsed_ms": upstream.get("elapsed_ms") if upstream else None,
+        "iteration": iteration,
     }
 
     try:
-        # Support simple expressions like:
-        # "status_code == 200", "vars.token != ''", "elapsed_ms < 500"
+        # Support expressions like:
+        # "status_code == 200", "vars.get('token') is not None",
+        # "elapsed_ms < 500", "iteration < 10"
         result = eval(expression, {"__builtins__": {}}, eval_context)  # noqa: S307
         branch = "true" if bool(result) else "false"
     except Exception as exc:
@@ -625,8 +643,17 @@ async def run_test_flow_stream(
         outgoing[e.source_node_id].append(e)
         incoming[e.target_node_id].append(e)
 
-    # Topological sort
-    execution_order = _topological_sort(nodes, outgoing, incoming)
+    # Topological sort (with cycle detection)
+    try:
+        execution_order = _topological_sort(nodes, outgoing, incoming)
+    except ValueError as exc:
+        yield _sse({"type": "error", "error": str(exc)})
+        yield _sse({"type": "done", "summary": {
+            "total_nodes": 0, "passed_count": 0, "failed_count": 0,
+            "skipped_count": 0, "total_assertions": 0,
+            "passed_assertions": 0, "failed_assertions": 0, "total_time_ms": 0,
+        }, "final_variables": {}})
+        return
 
     executable = [nid for nid in execution_order if nodes[nid].node_type != "group"]
     total = len(executable)
@@ -757,19 +784,64 @@ async def _exec_loop(
     nodes: dict[str, TestFlowNode],
     skipped_nodes: set[str],
 ) -> dict:
-    """Execute a loop node: re-run downstream subgraph for N iterations."""
+    """Execute a loop node: re-run the FULL downstream subgraph each iteration."""
     mode = config.get("mode", "count")
     count = config.get("count", 1)
     max_iterations = config.get("max_iterations", 100)
 
-    # Find the loop body output (source_handle == "loop-body")
-    loop_body_targets: list[str] = []
+    # Identify direct loop body targets and done targets
+    loop_body_starts: list[str] = []
     done_targets: list[str] = []
     for edge in outgoing.get(node.id, []):
         if edge.source_handle == "source-loop":
-            loop_body_targets.append(edge.target_node_id)
+            loop_body_starts.append(edge.target_node_id)
         else:
             done_targets.append(edge.target_node_id)
+
+    # BFS to collect ALL nodes reachable from loop body (the full subgraph)
+    # Stop at done_targets — those are outside the loop body
+    done_set = set(done_targets)
+    loop_body_nodes: list[str] = []
+    visited_body: set[str] = set()
+    bfs_queue: deque[str] = deque(loop_body_starts)
+    while bfs_queue:
+        nid = bfs_queue.popleft()
+        if nid in visited_body or nid in done_set or nid == node.id:
+            continue
+        if nid not in nodes:
+            continue
+        visited_body.add(nid)
+        loop_body_nodes.append(nid)
+        for edge in outgoing.get(nid, []):
+            bfs_queue.append(edge.target_node_id)
+
+    # Build mini topological order for loop body nodes
+    body_set = set(loop_body_nodes)
+    body_in_degree: dict[str, int] = {nid: 0 for nid in loop_body_nodes}
+    for nid in loop_body_nodes:
+        for edge in incoming.get(nid, []):
+            if edge.source_node_id in body_set or edge.source_node_id == node.id:
+                body_in_degree[nid] = body_in_degree.get(nid, 0)
+                # Only count edges from within the body or the loop node itself
+        # Recalculate: count only edges whose source is in body_set or is the loop node
+        body_in_degree[nid] = sum(
+            1 for e in incoming.get(nid, [])
+            if e.source_node_id in body_set
+        )
+
+    topo_queue: deque[str] = deque(
+        nid for nid in loop_body_nodes if body_in_degree[nid] == 0
+    )
+    body_order: list[str] = []
+    while topo_queue:
+        nid = topo_queue.popleft()
+        body_order.append(nid)
+        for edge in outgoing.get(nid, []):
+            tid = edge.target_node_id
+            if tid in body_set:
+                body_in_degree[tid] -= 1
+                if body_in_degree[tid] == 0:
+                    topo_queue.append(tid)
 
     sub_events: list[dict] = []
 
@@ -778,7 +850,11 @@ async def _exec_loop(
     else:
         iterations = max_iterations
 
+    completed = 0
+    last_http_result: dict | None = None
+
     for i in range(1, iterations + 1):
+        completed = i
         sub_events.append({
             "type": "loop_iteration",
             "node_id": node.id,
@@ -786,52 +862,124 @@ async def _exec_loop(
             "total": iterations if mode == "count" else max_iterations,
         })
 
-        # Execute loop body nodes (simplified: just the direct targets)
-        for target_id in loop_body_targets:
-            if target_id not in nodes:
+        last_http_result = None
+        body_skipped: set[str] = set()
+
+        # Execute full loop body in topological order
+        for body_nid in body_order:
+            if body_nid in body_skipped:
+                sub_events.append({
+                    "type": "node_skipped",
+                    "node_id": body_nid,
+                    "iteration": i,
+                    "reason": "branch_not_taken",
+                })
                 continue
-            target = nodes[target_id]
-            cfg = target.config or {}
+
+            body_node = nodes[body_nid]
+            cfg = body_node.config or {}
 
             try:
-                if target.node_type == "http_request":
+                if body_node.node_type == "http_request":
                     r = await _exec_http_request(
                         db, cfg, flow_vars, environment_id, None
                     )
-                elif target.node_type == "delay":
+                elif body_node.node_type == "collection":
+                    r = await _exec_collection(db, cfg, flow_vars, environment_id)
+                elif body_node.node_type == "delay":
                     r = await _exec_delay(cfg)
-                elif target.node_type == "script":
+                elif body_node.node_type == "script":
                     r = await _exec_script(cfg, flow_vars, node_results)
-                elif target.node_type == "set_variable":
+                elif body_node.node_type == "set_variable":
                     r = _exec_set_variable(cfg, flow_vars, node_results)
+                elif body_node.node_type == "assertion":
+                    r = _exec_assertion(
+                        cfg, node_results, incoming, body_nid, nodes
+                    )
+                elif body_node.node_type == "condition":
+                    r = _exec_condition(
+                        cfg, flow_vars, node_results, incoming, body_nid, nodes,
+                        iteration=i,
+                    )
                 else:
-                    r = {"status": "success", "node_type": target.node_type}
+                    r = {"status": "success", "node_type": body_node.node_type}
             except Exception as exc:
                 r = {"status": "error", "error": str(exc)}
 
             r["iteration"] = i
             if r.get("variables"):
                 flow_vars.update(r["variables"])
-            node_results[target_id] = r
+            node_results[body_nid] = r
+
+            # Track last HTTP result for condition evaluation
+            if body_node.node_type in ("http_request", "collection"):
+                last_http_result = r
 
             sub_events.append({
                 "type": "node_result",
-                "node_id": target_id,
+                "node_id": body_nid,
                 "iteration": i,
                 **r,
             })
 
-            # Mark loop body targets as handled so main loop skips them
-            skipped_nodes.add(target_id)
+            # Handle branching within loop body
+            if body_node.node_type in ("condition", "assertion") and r.get("branch_taken"):
+                # Mark inactive branch nodes within body
+                inactive_handle = (
+                    "source-false" if r["branch_taken"] == "true" else "source-true"
+                )
+                inactive_starts: list[str] = []
+                active_starts: list[str] = []
+                for edge in outgoing.get(body_nid, []):
+                    if edge.target_node_id in body_set:
+                        if edge.source_handle == inactive_handle:
+                            inactive_starts.append(edge.target_node_id)
+                        else:
+                            active_starts.append(edge.target_node_id)
+                # BFS inactive within body
+                inactive_reach: set[str] = set()
+                q: deque[str] = deque(inactive_starts)
+                while q:
+                    sid = q.popleft()
+                    if sid in inactive_reach or sid not in body_set:
+                        continue
+                    inactive_reach.add(sid)
+                    for e in outgoing.get(sid, []):
+                        if e.target_node_id in body_set:
+                            q.append(e.target_node_id)
+                # BFS active within body
+                active_reach: set[str] = set()
+                q = deque(active_starts)
+                while q:
+                    sid = q.popleft()
+                    if sid in active_reach or sid not in body_set:
+                        continue
+                    active_reach.add(sid)
+                    for e in outgoing.get(sid, []):
+                        if e.target_node_id in body_set:
+                            q.append(e.target_node_id)
+                for sid in inactive_reach - active_reach:
+                    body_skipped.add(sid)
 
-        # For condition mode: check if condition is still true
+        # Mark all loop body nodes as handled so main loop skips them
+        for body_nid in loop_body_nodes:
+            skipped_nodes.add(body_nid)
+
+        # For condition mode: evaluate condition with full HTTP context
         if mode == "condition":
             cond = config.get("condition", "false")
+            cond_context: dict[str, Any] = {
+                "vars": dict(flow_vars),
+                "iteration": i,
+            }
+            # Add HTTP context from last body result
+            if last_http_result:
+                cond_context["status_code"] = last_http_result.get("status_code")
+                cond_context["response_body"] = last_http_result.get("response_body", "")
+                cond_context["response_headers"] = last_http_result.get("response_headers", {})
+                cond_context["elapsed_ms"] = last_http_result.get("elapsed_ms")
             try:
-                result = eval(cond, {"__builtins__": {}}, {  # noqa: S307
-                    "vars": dict(flow_vars),
-                    "iteration": i,
-                })
+                result = eval(cond, {"__builtins__": {}}, cond_context)  # noqa: S307
                 if not bool(result):
                     break
             except Exception:
@@ -840,7 +988,7 @@ async def _exec_loop(
     return {
         "status": "success",
         "node_type": "loop",
-        "iterations_completed": i if loop_body_targets else 0,
+        "iterations_completed": completed if loop_body_nodes else 0,
         "_sub_events": sub_events,
     }
 

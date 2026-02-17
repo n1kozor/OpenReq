@@ -24,12 +24,15 @@ export default function ConditionNode({ data, selected }: NodeProps) {
     >
       <Handle type="target" position={Position.Top} />
       <Box sx={{ p: 1, textAlign: "center" }}>
-        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0.5, mb: 0.5 }}>
+        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0.5, mb: 0.25 }}>
           <CallSplit sx={{ fontSize: 16, color: "#ec4899" }} />
           <Typography variant="body2" fontWeight={600}>
             {(d.label as string) || "Condition"}
           </Typography>
         </Box>
+        <Typography variant="caption" sx={{ fontSize: "0.6rem", color: "#ec4899", opacity: 0.7, display: "block" }}>
+          {t("testFlow.nodeConfig.conditionSubtitle")}
+        </Typography>
         {expression && (
           <Typography
             variant="caption"

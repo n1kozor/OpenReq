@@ -33,11 +33,16 @@ export default function AssertionNode({ data, selected }: NodeProps) {
   return (
     <Box sx={{ ...nodeStatusStyles(runStatus, selected, "#a855f7"), minWidth: 180 }}>
       <Handle type="target" position={Position.Top} />
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, pb: 0.25 }}>
         {icon}
-        <Typography variant="body2" fontWeight={600} noWrap sx={{ flex: 1 }}>
-          {(d.label as string) || "Assertion"}
-        </Typography>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="body2" fontWeight={600} noWrap>
+            {(d.label as string) || "Assertion"}
+          </Typography>
+          <Typography variant="caption" sx={{ fontSize: "0.6rem", color: "#a855f7", opacity: 0.7 }}>
+            {t("testFlow.nodeConfig.assertionSubtitle")}
+          </Typography>
+        </Box>
         {totalCount > 0 && (
           <Chip
             label={assertionResults ? `${passedCount}/${totalCount}` : `${totalCount}`}

@@ -787,7 +787,23 @@
       "noRequest": "No request selected",
       "noCollection": "No collection selected",
       "quickPresets": "Quick presets",
-      "scriptTemplates": "Insert template"
+      "scriptTemplates": "Insert template",
+      "conditionPresets": "Quick presets",
+      "conditionHelpVars": "Available: status_code, response_body, response_headers, elapsed_ms, vars, iteration",
+      "conditionSubtitle": "Expression Check",
+      "assertionSubtitle": "Response Check",
+      "loopBody": "Loop Body",
+      "loopDone": "Done"
+    },
+    "nodeHelp": {
+      "httpRequest": "Executes a saved HTTP request. Connect to an Assertion node to validate the response, or to a Condition node for custom flow control.",
+      "collection": "Runs all requests in a collection sequentially. Variables are accumulated across requests.",
+      "assertion": "Checks the HTTP response against predefined rules (status code, body content, headers, response time). All checks must pass for the True branch; any failure triggers the False branch.",
+      "condition": "Evaluates a custom Python expression using variables and response data (status_code, response_body, elapsed_ms, etc.). True result → left branch, False result → right branch.",
+      "loop": "Repeats all connected 'Loop Body' nodes. Count mode: fixed number of iterations. Condition mode: repeats while the expression is true (with access to response data).",
+      "script": "Runs JavaScript or Python code for custom data transformation, variable manipulation, or complex assertions.",
+      "delay": "Pauses execution for the specified number of milliseconds before continuing to the next node.",
+      "setVariable": "Sets flow variables that downstream nodes can access via {{variable_name}} syntax."
     },
     "execution": {
       "pending": "Pending",

@@ -787,7 +787,23 @@
       "noRequest": "Keine Anfrage ausgewählt",
       "noCollection": "Keine Sammlung ausgewählt",
       "quickPresets": "Schnellvorlagen",
-      "scriptTemplates": "Vorlage einfügen"
+      "scriptTemplates": "Vorlage einfügen",
+      "conditionPresets": "Schnellvorlagen",
+      "conditionHelpVars": "Verfügbar: status_code, response_body, response_headers, elapsed_ms, vars, iteration",
+      "conditionSubtitle": "Ausdrucksprüfung",
+      "assertionSubtitle": "Antwortprüfung",
+      "loopBody": "Schleifenkörper",
+      "loopDone": "Fertig"
+    },
+    "nodeHelp": {
+      "httpRequest": "Führt eine gespeicherte HTTP-Anfrage aus. Verbinden Sie mit einem Überprüfungs-Knoten zur Antwortvalidierung oder mit einem Bedingungs-Knoten für benutzerdefinierte Flusssteuerung.",
+      "collection": "Führt alle Anfragen einer Sammlung nacheinander aus. Variablen werden über Anfragen hinweg akkumuliert.",
+      "assertion": "Prüft die HTTP-Antwort gegen vordefinierte Regeln (Statuscode, Body-Inhalt, Header, Antwortzeit). Alle Prüfungen bestanden → Wahr-Zweig; jeder Fehler → Falsch-Zweig.",
+      "condition": "Wertet einen benutzerdefinierten Python-Ausdruck mit Variablen und Antwortdaten aus (status_code, response_body, elapsed_ms usw.). Wahres Ergebnis → linker Zweig, Falsches Ergebnis → rechter Zweig.",
+      "loop": "Wiederholt alle verbundenen 'Schleifenkörper'-Knoten. Zählmodus: feste Anzahl von Iterationen. Bedingungsmodus: Wiederholung solange der Ausdruck wahr ist (mit Zugriff auf Antwortdaten).",
+      "script": "Führt JavaScript- oder Python-Code für benutzerdefinierte Datentransformation, Variablenmanipulation oder komplexe Überprüfungen aus.",
+      "delay": "Pausiert die Ausführung für die angegebene Anzahl von Millisekunden, bevor zum nächsten Knoten fortgefahren wird.",
+      "setVariable": "Setzt Flussvariablen, auf die nachfolgende Knoten über die {{Variablenname}}-Syntax zugreifen können."
     },
     "execution": {
       "pending": "Ausstehend",

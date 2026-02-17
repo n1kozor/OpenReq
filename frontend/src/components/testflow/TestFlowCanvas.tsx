@@ -518,8 +518,24 @@ export default function TestFlowCanvas({
   }, [flow, nodes, edges]);
 
   // ── Run flow ──
-  const handleRun = useCallback(() => {
+  const handleRun = useCallback(async () => {
     if (!flow) return;
+
+    // Save first if dirty — ensures the backend has the latest nodes/edges
+    if (isDirty) {
+      try {
+        const viewport = reactFlowInstance.getViewport();
+        const nodesData = nodes.map(fromReactFlowNode);
+        const edgesData = edges.map(fromReactFlowEdge);
+        await testFlowsApi.update(flow.id, { nodes: nodesData, edges: edgesData, viewport });
+        setIsDirty(false);
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      } catch {
+        setSnackbar({ message: t("testFlow.saveFailed"), severity: "error" });
+        return;
+      }
+    }
+
     setIsRunning(true);
     setSummary(null);
 
@@ -692,7 +708,7 @@ export default function TestFlowCanvas({
     });
 
     abortRef.current = ctrl;
-  }, [flow, selectedEnvId, environments, t, setNodes, setEdges]);
+  }, [flow, selectedEnvId, environments, t, setNodes, setEdges, isDirty, nodes, edges, reactFlowInstance]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
