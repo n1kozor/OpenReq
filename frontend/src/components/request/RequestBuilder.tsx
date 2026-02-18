@@ -150,7 +150,9 @@ export default function RequestBuilder(props: RequestBuilderProps) {
     if (!target) return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => {
+      (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
         setShowFloatingSend(!entry.isIntersecting);
       },
       { root: null, rootMargin: "-56px 0px 0px 0px", threshold: 0.95 }

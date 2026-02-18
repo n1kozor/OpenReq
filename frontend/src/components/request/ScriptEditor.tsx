@@ -189,11 +189,6 @@ export default function ScriptEditor({
   const activeIsPre = scriptTab === "pre";
   const activeScript = activeIsPre ? preRequestScript : postResponseScript;
   const activeTemplate = activeIsPre ? preTemplate : postTemplate;
-  const activeHasOutput = activeIsPre
-    ? hasPreOutput
-    : (testResults.length > 0 || postLogs.length > 0);
-
-
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", minHeight: 0, overflow: "auto", p: 1 }}>
       {/* Language Toggle */}

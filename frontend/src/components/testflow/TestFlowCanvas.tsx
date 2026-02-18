@@ -73,6 +73,17 @@ interface TestFlowCanvasProps {
 }
 
 let nodeCounter = 0;
+const fallbackRandomId = () => {
+  const rand = Math.random().toString(36).slice(2);
+  return `r-${Date.now().toString(36)}-${rand}`;
+};
+
+const safeRandomUUID = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return fallbackRandomId();
+};
 
 export default function TestFlowCanvas({
   flowId,
@@ -187,7 +198,7 @@ export default function TestFlowCanvas({
   // ── Handlers ──
   const onConnect: OnConnect = useCallback(
     (connection: Connection) => {
-      setEdges((eds) => addEdge({ ...connection, type: "animated", id: `e-${crypto.randomUUID()}` }, eds));
+      setEdges((eds) => addEdge({ ...connection, type: "animated", id: `e-${safeRandomUUID()}` }, eds));
       setIsDirty(true);
       pushHistory();
     },
@@ -225,7 +236,7 @@ export default function TestFlowCanvas({
       if (nodeType) {
         const cfg = NODE_TYPE_CONFIGS[nodeType as keyof typeof NODE_TYPE_CONFIGS];
         if (!cfg) return;
-        const id = `node-${++nodeCounter}-${crypto.randomUUID().slice(0, 8)}`;
+        const id = `node-${++nodeCounter}-${safeRandomUUID().slice(0, 8)}`;
         const newNode: Node = {
           id,
           type: nodeType,
@@ -253,7 +264,7 @@ export default function TestFlowCanvas({
           const item = flat.find((i) => i.id === payload.itemId);
           if (!item) return;
 
-          const id = `node-${++nodeCounter}-${crypto.randomUUID().slice(0, 8)}`;
+          const id = `node-${++nodeCounter}-${safeRandomUUID().slice(0, 8)}`;
 
           if (item.is_folder) {
             // Folder → collection node
@@ -383,7 +394,7 @@ export default function TestFlowCanvas({
           const { collectionId } = JSON.parse(collectionDrag) as { collectionId: string };
           const col = collections.find((c) => c.id === collectionId);
           if (!col) return;
-          const id = `node-${++nodeCounter}-${crypto.randomUUID().slice(0, 8)}`;
+          const id = `node-${++nodeCounter}-${safeRandomUUID().slice(0, 8)}`;
           const newNode: Node = {
             id,
             type: "collection",
@@ -460,7 +471,7 @@ export default function TestFlowCanvas({
     (nodeId: string) => {
       const orig = nodes.find((n) => n.id === nodeId);
       if (!orig) return;
-      const id = `node-${++nodeCounter}-${crypto.randomUUID().slice(0, 8)}`;
+      const id = `node-${++nodeCounter}-${safeRandomUUID().slice(0, 8)}`;
       const newNode: Node = {
         ...orig,
         id,
