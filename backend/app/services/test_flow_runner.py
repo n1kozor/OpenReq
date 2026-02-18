@@ -823,7 +823,7 @@ async def run_test_flow_stream(
         try:
             if node.node_type == "http_request":
                 result = await _exec_http_request(
-                    db, config, flow_vars, environment_id, None
+                    db, config, flow_vars, environment_id, config.get("collection_id")
                 )
             elif node.node_type == "collection":
                 result = await _exec_collection(
@@ -849,7 +849,7 @@ async def run_test_flow_stream(
                 )
             elif node.node_type == "graphql":
                 result = await _exec_graphql(
-                    db, config, flow_vars, environment_id, None
+                    db, config, flow_vars, environment_id, config.get("collection_id")
                 )
             elif node.node_type == "loop":
                 result = await _exec_loop(
@@ -1011,7 +1011,7 @@ async def _exec_loop(
             try:
                 if body_node.node_type == "http_request":
                     r = await _exec_http_request(
-                        db, cfg, flow_vars, environment_id, None
+                        db, cfg, flow_vars, environment_id, cfg.get("collection_id")
                     )
                 elif body_node.node_type == "collection":
                     r = await _exec_collection(db, cfg, flow_vars, environment_id)
@@ -1034,7 +1034,7 @@ async def _exec_loop(
                     r = await _exec_websocket(cfg, flow_vars, environment_id)
                 elif body_node.node_type == "graphql":
                     r = await _exec_graphql(
-                        db, cfg, flow_vars, environment_id, None
+                        db, cfg, flow_vars, environment_id, cfg.get("collection_id")
                     )
                 else:
                     r = {"status": "success", "node_type": body_node.node_type}

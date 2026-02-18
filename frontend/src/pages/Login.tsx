@@ -15,6 +15,7 @@ import {
 import { Visibility, VisibilityOff, Email, Lock, Person, Badge, DarkMode, LightMode } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
+import axios from "axios";
 import { authApi } from "@/api/endpoints";
 import NeuralGrid from "@/components/NeuralGrid";
 
@@ -44,6 +45,20 @@ export default function Login({ onLogin, mode, onToggleTheme }: LoginProps) {
   const [showPassword, setShowPassword] = useState(false);
   const logoRef = useRef<HTMLDivElement>(null);
 
+  const formatValidationError = (detail: unknown) => {
+    if (Array.isArray(detail)) {
+      return detail
+        .map((item) => {
+          const loc = Array.isArray(item?.loc) ? item.loc.slice(1).join(".") : "field";
+          const msg = typeof item?.msg === "string" ? item.msg : "Invalid value";
+          return `${loc}: ${msg}`;
+        })
+        .join(" | ");
+    }
+    if (typeof detail === "string") return detail;
+    return t("auth.invalidCredentials");
+  };
+
   const handleLanguageChange = (lang: string) => {
     i18n.changeLanguage(lang);
     localStorage.setItem("openreq-lang", lang);
@@ -58,7 +73,27 @@ export default function Login({ onLogin, mode, onToggleTheme }: LoginProps) {
         await authApi.register({ email, username, password, full_name: fullName || undefined });
       }
       await onLogin(email, password);
-    } catch {
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        const status = err.response?.status;
+        const detail = err.response?.data?.detail;
+        if (status === 422) {
+          setError(formatValidationError(detail));
+          return;
+        }
+        if ((status === 403 || status === 409) && typeof detail === "string") {
+          setError(detail);
+          return;
+        }
+        if (status === 401) {
+          setError(t("auth.invalidCredentials"));
+          return;
+        }
+        if (typeof detail === "string") {
+          setError(detail);
+          return;
+        }
+      }
       setError(t("auth.invalidCredentials"));
     } finally {
       setLoading(false);

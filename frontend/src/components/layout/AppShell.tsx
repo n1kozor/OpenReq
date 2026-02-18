@@ -1480,6 +1480,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onOpenAIAgent={() => setShowAIAgent(true)}
         onOpenTestBuilder={() => setShowTestFlowList(true)}
         onOpenFolder={handleOpenFolder}
+        onRefreshCollections={loadCollections}
       />
 
       <Box sx={{

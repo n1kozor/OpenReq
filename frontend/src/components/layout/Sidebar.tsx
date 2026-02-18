@@ -39,6 +39,7 @@ import {
   AccountTree,
   ContentCopy,
   Lock,
+  Refresh,
 } from "@mui/icons-material";
 import { List as VirtualList } from "react-window";
 import { useTranslation } from "react-i18next";
@@ -99,6 +100,7 @@ interface SidebarProps {
   onOpenAIAgent: () => void;
   onOpenTestBuilder: () => void;
   onGenerateDocs: (collectionId: string, collectionName: string, folderId?: string, folderName?: string) => void;
+  onRefreshCollections: () => void;
 }
 
 type SidebarRow =
@@ -142,6 +144,7 @@ export default function Sidebar({
   onOpenAIAgent,
   onOpenTestBuilder,
   onGenerateDocs,
+  onRefreshCollections,
 }: SidebarProps) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -418,6 +421,20 @@ export default function Sidebar({
             }}
           >
             <SwapHoriz sx={{ fontSize: 14 }} />
+          </IconButton>
+          <IconButton
+            size="small"
+            onClick={onRefreshCollections}
+            title={t("common.refresh")}
+            sx={{
+              width: 24,
+              height: 24,
+              borderRadius: 1.5,
+              color: "text.secondary",
+              "&:hover": { color: "primary.main" },
+            }}
+          >
+            <Refresh sx={{ fontSize: 14 }} />
           </IconButton>
           <IconButton
             size="small"

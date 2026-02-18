@@ -746,6 +746,7 @@
     "close": "Close",
     "duplicate": "Duplicate",
     "cloneRequest": "Clone to Collection",
+    "refresh": "Refresh",
     "openInNewTab": "Open in New Tab",
     "noItems": "No items yet",
     "deleteConfirm": "Delete <strong>{{name}}</strong>? This action cannot be undone.",

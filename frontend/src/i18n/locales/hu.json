@@ -746,6 +746,7 @@
     "close": "Bezárás",
     "duplicate": "Másolás",
     "cloneRequest": "Klónozás gyűjteménybe",
+    "refresh": "Frissítés",
     "openInNewTab": "Megnyitás új fülön",
     "noItems": "Még nincsenek elemek",
     "deleteConfirm": "<strong>{{name}}</strong> törlése? Ez a művelet nem vonható vissza.",

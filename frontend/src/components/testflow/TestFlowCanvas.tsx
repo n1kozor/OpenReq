@@ -292,6 +292,7 @@ export default function TestFlowCanvas({
             const nodeConfig: Record<string, unknown> = {
               request_id: item.request_id,
               request_name_hint: item.name,
+              collection_id: payload.collectionId,
             };
             if (nodeType === "http_request") {
               nodeConfig.method = item.method || "GET";
@@ -308,6 +309,7 @@ export default function TestFlowCanvas({
                 const asyncConfig: Record<string, unknown> = {
                   request_id: capturedRequestId,
                   request_name_hint: capturedName,
+                  collection_id: payload.collectionId,
                 };
                 if (capturedType === "websocket") {
                   asyncConfig.ws_url = req.url || "";
@@ -337,6 +339,7 @@ export default function TestFlowCanvas({
                 const fallbackConfig: Record<string, unknown> = {
                   request_id: capturedRequestId,
                   request_name_hint: capturedName,
+                  collection_id: payload.collectionId,
                 };
                 if (capturedType === "websocket") {
                   fallbackConfig.ws_url = "";

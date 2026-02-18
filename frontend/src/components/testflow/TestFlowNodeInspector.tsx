@@ -49,7 +49,7 @@ export default function TestFlowNodeInspector({
   );
 
   // Get all requests from collections
-  const allRequests: { id: string; name: string; method: string; collectionName: string }[] = [];
+  const allRequests: { id: string; name: string; method: string; collectionName: string; collectionId: string }[] = [];
   for (const col of collections) {
     const items = collectionItems[col.id] || [];
     const flatItems = flattenItems(items);
@@ -60,6 +60,7 @@ export default function TestFlowNodeInspector({
           name: item.name,
           method: item.method || "GET",
           collectionName: col.name,
+          collectionId: col.id,
         });
       }
     }
@@ -308,7 +309,7 @@ function HttpRequestConfig({
 }: {
   config: Record<string, unknown>;
   updateConfig: (patch: Record<string, unknown>) => void;
-  allRequests: { id: string; name: string; method: string; collectionName: string }[];
+  allRequests: { id: string; name: string; method: string; collectionName: string; collectionId: string }[];
   t: (key: string) => string;
 }) {
   const selectedRequest = allRequests.find((r) => r.id === (config.request_id as string)) || null;
@@ -323,6 +324,7 @@ function HttpRequestConfig({
         updateConfig({
           request_id: req?.id || undefined,
           request_name_hint: req?.name,
+          collection_id: req?.collectionId || undefined,
         });
       }}
       getOptionLabel={(opt) => `${opt.method} ${opt.name}`}
