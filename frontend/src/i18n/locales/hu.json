@@ -10,7 +10,8 @@
     "settings": "Beállítások",
     "workspace": "Munkaterület",
     "aiAgent": "George AI",
-    "testBuilder": "Teszt Építő"
+    "testBuilder": "Teszt Építő",
+    "shortcuts": "Gyorsmenü"
   },
   "auth": {
     "login": "Bejelentkezés",
@@ -81,7 +82,13 @@
     "download": "Letöltés",
     "downloadFile": "Fájl letöltése",
     "binaryResponse": "Bináris válasz — ez a tartalom nem jeleníthető meg szövegként.",
-    "fileInfo": "{{type}} — {{size}}"
+    "fileInfo": "{{type}} — {{size}}",
+    "cleanMixed": "Tisztítás és szépítés",
+    "showRaw": "Nyers megjelenítés",
+    "sentRequest": "Küldött kérés",
+    "noSentRequest": "Még nem lett kérés elküldve.",
+    "showSecrets": "Titkok megjelenítése",
+    "hideSecrets": "Titkok elrejtése"
   },
   "collection": {
     "new": "Új gyűjtemény",
@@ -188,7 +195,10 @@
     "insertVariable": "Változó beszúrása",
     "envOverride": "Környezet",
     "useGlobal": "Globális",
-    "globalsDescription": "Workspace szintű változók, minden kérésben elérhetők. Legalacsonyabb prioritás — a kollekció és környezeti változók felülírják."
+    "globalsDescription": "Workspace szintű változók, minden kérésben elérhetők. Legalacsonyabb prioritás — a kollekció és környezeti változók felülírják.",
+    "deleteConfirmTitle": "Környezet törlése",
+    "deleteConfirmDesc": "Írd be, hogy \"delete\" a {{name}} törlésének megerősítéséhez.",
+    "deleteConfirmPlaceholder": "Írd be: delete"
   },
   "workspace": {
     "new": "Új munkaterület",
@@ -355,6 +365,9 @@
     "suggestResponseTime": "Válaszidő ellenőrzése (500ms alatt)",
     "suggestJsonStructure": "JSON válasz struktúra validálása",
     "suggestFullValidation": "Teljes válasz validáció minden ellenőrzéssel",
+    "allPassed": "Minden teszt sikeres",
+    "noTests": "Nincsenek tesztek",
+    "ran": "Szkript lefutott",
     "docsTitle": "Szkript referencia",
     "docsIntro": "A szkriptek Python-alapú DSL-t használnak. Minden sor egy önálló parancs — nincsenek többsoros blokkok, ciklusok vagy feltételes elágazások.",
     "docsIntroJs": "A szkriptek JavaScript-alapú DSL-t használnak (req-kompatibilis). Minden sor egy önálló parancs — nincsenek többsoros blokkok, ciklusok vagy feltételes elágazások.",

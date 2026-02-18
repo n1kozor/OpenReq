@@ -144,6 +144,28 @@ export interface FormDataItemSaved {
   file_name?: string | null;
 }
 
+export interface SentFormDataItem {
+  key: string;
+  value: string;
+  type: string;
+  enabled: boolean;
+  file_name?: string | null;
+}
+
+export interface SentRequestSnapshot {
+  method: HttpMethod;
+  url: string;
+  headers: Record<string, string>;
+  query_params: Record<string, string>;
+  body?: string;
+  body_type?: BodyType | "json";
+  form_data?: SentFormDataItem[];
+  auth_type?: AuthType;
+  auth_config?: Record<string, string>;
+  environment_id?: string | null;
+  secret_values?: string[];
+}
+
 // ── Postman Import Types ──
 
 export interface PostmanImportPreview {
@@ -317,6 +339,7 @@ export interface RequestTab {
   response: ProxyResponse | null;
   scriptResult: ScriptResult | null;
   preRequestResult: ScriptResult | null;
+  sentRequest?: SentRequestSnapshot | null;
   // GraphQL-specific
   graphqlQuery?: string;
   graphqlVariables?: string;

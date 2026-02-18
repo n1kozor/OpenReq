@@ -177,6 +177,8 @@ export default function EnvironmentManager({
   const [variables, setVariables] = useState<Variable[]>([]);
   const [globalsVars, setGlobalsVars] = useState<{ key: string; value: string }[]>([]);
   const [showWizard, setShowWizard] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Environment | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
 
   const selectedEnv = environments.find((e) => e.id === selectedEnvId);
 
@@ -243,6 +245,14 @@ export default function EnvironmentManager({
     }
   };
 
+  const handleConfirmDelete = () => {
+    if (!deleteTarget) return;
+    if (deleteConfirm.trim() !== "delete") return;
+    onDeleteEnv(deleteTarget.id);
+    setDeleteTarget(null);
+    setDeleteConfirm("");
+  };
+
   return (
     <>
       <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -302,7 +312,7 @@ export default function EnvironmentManager({
                       secondaryTypographyProps={{ component: "div" }}
                     />
                     <ListItemSecondaryAction>
-                      <IconButton size="small" onClick={() => onDeleteEnv(env.id)}>
+                      <IconButton size="small" onClick={() => { setDeleteTarget(env); setDeleteConfirm(""); }}>
                         <Delete fontSize="small" />
                       </IconButton>
                     </ListItemSecondaryAction>
@@ -504,6 +514,42 @@ export default function EnvironmentManager({
         environments={environments}
         onSave={handleWizardSave}
       />
+
+      <Dialog
+        open={!!deleteTarget}
+        onClose={() => { setDeleteTarget(null); setDeleteConfirm(""); }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{t("environment.deleteConfirmTitle")}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {t("environment.deleteConfirmDesc", { name: deleteTarget?.name ?? "" })}
+          </Typography>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder={t("environment.deleteConfirmPlaceholder")}
+            value={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.target.value)}
+            autoFocus
+            InputProps={{ sx: { fontFamily: "monospace" } }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setDeleteTarget(null); setDeleteConfirm(""); }}>
+            {t("common.cancel")}
+          </Button>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={handleConfirmDelete}
+            disabled={deleteConfirm.trim() !== "delete"}
+          >
+            {t("common.delete")}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

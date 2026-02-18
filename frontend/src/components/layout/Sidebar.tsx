@@ -49,6 +49,7 @@ const DRAWER_WIDTH = 264;
 const MIN_DRAWER_WIDTH = 220;
 const MAX_DRAWER_WIDTH = 420;
 const SIDEBAR_WIDTH_STORAGE_KEY = "openreq-sidebar-width";
+const SIDEBAR_BOTTOM_NAV_STORAGE_KEY = "openreq-sidebar-bottom-nav-open";
 const COLLECTION_ROW_HEIGHT = 32;
 const ITEM_ROW_HEIGHT = 30;
 
@@ -152,6 +153,11 @@ export default function Sidebar({
       return Math.min(MAX_DRAWER_WIDTH, Math.max(MIN_DRAWER_WIDTH, saved));
     }
     return DRAWER_WIDTH;
+  });
+  const [bottomNavOpen, setBottomNavOpen] = useState(() => {
+    const saved = localStorage.getItem(SIDEBAR_BOTTOM_NAV_STORAGE_KEY);
+    if (saved === null) return true;
+    return saved === "true";
   });
   const [collectionOpen, setCollectionOpen] = useState<Record<string, boolean>>({});
   const [folderOpen, setFolderOpen] = useState<Record<string, boolean>>({});
@@ -310,6 +316,18 @@ export default function Sidebar({
 
   const itemSize = (index: number) =>
     flatRows[index]?.type === "collection" ? COLLECTION_ROW_HEIGHT : ITEM_ROW_HEIGHT;
+
+  const handleToggleBottomNav = () => {
+    setBottomNavOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(SIDEBAR_BOTTOM_NAV_STORAGE_KEY, String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   return (
     <Drawer
@@ -966,35 +984,69 @@ export default function Sidebar({
       {/* Bottom navigation */}
       <Divider />
       <List dense sx={{ py: 0.5, flexShrink: 0 }}>
-        {navItems.map((item) => (
-          <ListItemButton
-            key={item.label}
-            onClick={item.onClick}
+        <ListItemButton
+          onClick={handleToggleBottomNav}
+          sx={{
+            py: 0.5,
+            minHeight: 30,
+            borderRadius: 1.5,
+            mx: 1,
+          }}
+        >
+          <ListItemIcon
             sx={{
-              py: 0.5,
-              minHeight: 32,
-              borderRadius: 1.5,
-              mx: 1,
+              minWidth: 22,
+              color: "text.secondary",
             }}
           >
-            <ListItemIcon
+            {bottomNavOpen ? (
+              <ExpandMore sx={{ fontSize: 16 }} />
+            ) : (
+              <ChevronRight sx={{ fontSize: 16 }} />
+            )}
+          </ListItemIcon>
+          <ListItemText
+            primary={t("nav.shortcuts")}
+            primaryTypographyProps={{
+              variant: "caption",
+              fontWeight: 700,
+              fontSize: "0.65rem",
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              color: "text.secondary",
+            }}
+          />
+        </ListItemButton>
+        {bottomNavOpen &&
+          navItems.map((item) => (
+            <ListItemButton
+              key={item.label}
+              onClick={item.onClick}
               sx={{
-                minWidth: 28,
-                color: "text.secondary",
+                py: 0.5,
+                minHeight: 32,
+                borderRadius: 1.5,
+                mx: 1,
               }}
             >
-              {item.icon}
-            </ListItemIcon>
-            <ListItemText
-              primary={item.label}
-              primaryTypographyProps={{
-                variant: "body2",
-                fontSize: 12.5,
-                fontWeight: 500,
-              }}
-            />
-          </ListItemButton>
-        ))}
+              <ListItemIcon
+                sx={{
+                  minWidth: 28,
+                  color: "text.secondary",
+                }}
+              >
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={item.label}
+                primaryTypographyProps={{
+                  variant: "body2",
+                  fontSize: 12.5,
+                  fontWeight: 500,
+                }}
+              />
+            </ListItemButton>
+          ))}
       </List>
 
       <Box

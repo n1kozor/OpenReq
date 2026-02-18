@@ -12,6 +12,7 @@ import {
   Tabs,
   Tab,
   Badge,
+  Portal,
 } from "@mui/material";
 import {
   Cable,
@@ -72,6 +73,8 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
   const [messageInput, setMessageInput] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const connectButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [showFloatingConnect, setShowFloatingConnect] = useState(false);
 
   // Variable resolution
   const activeEnvId = props.envOverrideId ?? props.selectedEnvId ?? null;
@@ -100,6 +103,21 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
         wsRef.current = null;
       }
     };
+  }, []);
+
+  useEffect(() => {
+    const target = connectButtonRef.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowFloatingConnect(!entry.isIntersecting);
+      },
+      { root: null, rootMargin: "-56px 0px 0px 0px", threshold: 0.95 }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
   }, []);
 
   const getWsProxyUrl = () => {
@@ -203,14 +221,14 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
   return (
     <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5, height: "100%", overflow: "hidden" }}>
       {/* URL bar */}
-      <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
         <Chip
           icon={<Cable />}
           label="WS"
           size="small"
           sx={{ fontWeight: 700, bgcolor: "#14b8a6", color: "#fff", "& .MuiChip-icon": { color: "#fff" } }}
         />
-        <Box sx={{ flex: 1, border: 1, borderColor: "divider", borderRadius: 1, px: 1, py: 0.25 }}>
+        <Box sx={{ flex: "1 1 320px", minWidth: 220, border: 1, borderColor: "divider", borderRadius: 1, px: 1, py: 0.25 }}>
           <VariableValueCell
             value={props.url}
             onChange={props.onUrlChange}
@@ -219,36 +237,40 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
             variableGroups={variableGroups}
           />
         </Box>
-        {!props.wsConnected ? (
-          <Button
-            variant="contained"
-            color="success"
-            onClick={handleConnect}
-            disabled={connecting || !props.url}
-            startIcon={<Cable />}
-            sx={{ minWidth: 130, whiteSpace: "nowrap", height: 36 }}
-          >
-            {connecting ? t("websocket.connecting") : t("websocket.connect")}
-          </Button>
-        ) : (
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+          {!props.wsConnected ? (
+            <Button
+              ref={connectButtonRef}
+              variant="contained"
+              color="success"
+              onClick={handleConnect}
+              disabled={connecting || !props.url}
+              startIcon={<Cable />}
+              sx={{ minWidth: 130, whiteSpace: "nowrap", height: 36 }}
+            >
+              {connecting ? t("websocket.connecting") : t("websocket.connect")}
+            </Button>
+          ) : (
+            <Button
+              ref={connectButtonRef}
+              variant="outlined"
+              color="error"
+              onClick={handleDisconnect}
+              startIcon={<PowerOff />}
+              sx={{ minWidth: 130, whiteSpace: "nowrap", height: 36 }}
+            >
+              {t("websocket.disconnect")}
+            </Button>
+          )}
           <Button
             variant="outlined"
-            color="error"
-            onClick={handleDisconnect}
-            startIcon={<PowerOff />}
-            sx={{ minWidth: 130, whiteSpace: "nowrap", height: 36 }}
+            onClick={props.onSave}
+            startIcon={<Save sx={{ fontSize: 16 }} />}
+            sx={{ minWidth: 80, whiteSpace: "nowrap", height: 36 }}
           >
-            {t("websocket.disconnect")}
+            {t("common.save")}
           </Button>
-        )}
-        <Button
-          variant="outlined"
-          onClick={props.onSave}
-          startIcon={<Save sx={{ fontSize: 16 }} />}
-          sx={{ minWidth: 80, whiteSpace: "nowrap", height: 36 }}
-        >
-          {t("common.save")}
-        </Button>
+        </Box>
       </Box>
 
       {/* Status chip */}
@@ -419,6 +441,55 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
           </Box>
         )}
       </Box>
+
+      {showFloatingConnect && (
+        <Portal>
+          {!props.wsConnected ? (
+            <Button
+              variant="contained"
+              color="success"
+              onClick={handleConnect}
+              disabled={connecting || !props.url}
+              startIcon={<Cable />}
+              sx={{
+                position: "fixed",
+                right: 24,
+                bottom: 24,
+                zIndex: 1400,
+                borderRadius: 999,
+                px: 2.25,
+                py: 1,
+                fontWeight: 700,
+                fontSize: "0.9rem",
+                boxShadow: "0 12px 30px rgba(0,0,0,0.2)",
+              }}
+            >
+              {connecting ? t("websocket.connecting") : t("websocket.connect")}
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              color="error"
+              onClick={handleDisconnect}
+              startIcon={<PowerOff />}
+              sx={{
+                position: "fixed",
+                right: 24,
+                bottom: 24,
+                zIndex: 1400,
+                borderRadius: 999,
+                px: 2.25,
+                py: 1,
+                fontWeight: 700,
+                fontSize: "0.9rem",
+                boxShadow: "0 12px 30px rgba(0,0,0,0.2)",
+              }}
+            >
+              {t("websocket.disconnect")}
+            </Button>
+          )}
+        </Portal>
+      )}
     </Box>
   );
 }

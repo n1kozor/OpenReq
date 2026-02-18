@@ -31,7 +31,7 @@ import { Suspense, lazy, memo, useMemo, useState, useEffect, useCallback } from 
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import JsonTreeView from "@/components/response/JsonTreeView";
-import type { ProxyResponse } from "@/types";
+import type { ProxyResponse, SentRequestSnapshot } from "@/types";
 
 function statusColor(code: number): "success" | "warning" | "error" | "info" {
   if (code < 300) return "success";
@@ -68,6 +68,22 @@ function tryPrettyJson(raw: string): string {
 function tryParseJson(raw: string): unknown | null {
   try {
     return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function extractJsonFromMixed(raw: string): { json: unknown; pretty: string } | null {
+  const brace = raw.indexOf("{");
+  const bracket = raw.indexOf("[");
+  let start = -1;
+  if (brace >= 0 && bracket >= 0) start = Math.min(brace, bracket);
+  else start = brace >= 0 ? brace : bracket;
+  if (start < 0) return null;
+  const candidate = raw.slice(start).trim();
+  try {
+    const parsed = JSON.parse(candidate);
+    return { json: parsed, pretty: JSON.stringify(parsed, null, 2) };
   } catch {
     return null;
   }
@@ -135,14 +151,18 @@ type BodyViewMode = "pretty" | "raw" | "tree" | "preview";
 
 interface ResponsePanelProps {
   response: ProxyResponse | null;
+  sentRequest: SentRequestSnapshot | null;
 }
 
-function ResponsePanel({ response }: ResponsePanelProps) {
+function ResponsePanel({ response, sentRequest }: ResponsePanelProps) {
   const { t } = useTranslation();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const [tab, setTab] = useState(0);
   const [bodyView, setBodyView] = useState<BodyViewMode>("pretty");
+  const [sentBodyView, setSentBodyView] = useState<"pretty" | "raw">("pretty");
+  const [showSecrets, setShowSecrets] = useState(false);
+  const [cleanMixed, setCleanMixed] = useState(false);
   const [treeEnabled, setTreeEnabled] = useState(false);
   const editorTheme = isDark ? "vs-dark" : "light";
   const MonacoEditor = useMemo(
@@ -169,11 +189,31 @@ function ResponsePanel({ response }: ResponsePanelProps) {
     () => Object.entries(responseHeaders),
     [responseHeaders]
   );
+  const sentHeaderEntries = useMemo(
+    () => Object.entries(sentRequest?.headers ?? {}),
+    [sentRequest?.headers]
+  );
+  const sentQueryEntries = useMemo(
+    () => Object.entries(sentRequest?.query_params ?? {}),
+    [sentRequest?.query_params]
+  );
+
+  const secretValues = sentRequest?.secret_values ?? [];
+  const maskSecrets = useCallback((value: string) => {
+    if (showSecrets || secretValues.length === 0) return value;
+    let masked = value;
+    for (const secret of secretValues) {
+      if (!secret) continue;
+      masked = masked.split(secret).join("******");
+    }
+    return masked;
+  }, [showSecrets, secretValues]);
   const isJson = category === "json";
   const isHtml = category === "html";
   const isImage = category === "image";
   const shouldGateTree = isJson && responseBody.length > LARGE_JSON_THRESHOLD;
   const canRenderTree = !shouldGateTree || treeEnabled;
+  const mixedJson = useMemo(() => extractJsonFromMixed(responseBody), [responseBody]);
   const parsedJson = useMemo(() => {
     if (!isJson) return null;
     if (bodyView !== "tree") return null;
@@ -181,9 +221,21 @@ function ResponsePanel({ response }: ResponsePanelProps) {
     return tryParseJson(responseBody);
   }, [isJson, bodyView, canRenderTree, responseBody]);
 
+  const sentBody = sentRequest?.body ?? "";
+  const sentBodyType = sentRequest?.body_type ?? "none";
+  const sentBodyIsJson = sentBodyType === "json";
+  const sentBodyPretty = useMemo(
+    () => (sentBodyIsJson ? tryPrettyJson(sentBody) : sentBody),
+    [sentBodyIsJson, sentBody]
+  );
+
   useEffect(() => {
     if (bodyView !== "tree") setTreeEnabled(false);
   }, [bodyView, responseBody]);
+
+  useEffect(() => {
+    setCleanMixed(false);
+  }, [responseBody, isBinary]);
 
   // Reset to appropriate view when binary response comes in
   useEffect(() => {
@@ -228,6 +280,11 @@ function ResponsePanel({ response }: ResponsePanelProps) {
           icon: <Image sx={{ fontSize: 14 }} />,
         });
       }
+      views.push({
+        value: "raw",
+        label: t("response.raw"),
+        icon: <DataObject sx={{ fontSize: 14 }} />,
+      });
       return views;
     }
 
@@ -410,6 +467,7 @@ function ResponsePanel({ response }: ResponsePanelProps) {
       <Tabs value={tab} onChange={(_, v) => setTab(v)}>
         <Tab label={t("response.body")} />
         <Tab label={`${t("response.headers")} (${headerEntries.length})`} />
+        <Tab label={t("response.sentRequest")} />
       </Tabs>
 
       {tab === 0 && (
@@ -440,6 +498,18 @@ function ResponsePanel({ response }: ResponsePanelProps) {
                   </ToggleButton>
                 ))}
               </ToggleButtonGroup>
+
+              {mixedJson && !isBinary && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setCleanMixed((prev) => !prev)}
+                  sx={{ ml: 1, textTransform: "none", fontSize: "0.72rem" }}
+                >
+                  {cleanMixed ? t("response.showRaw", "Show raw") : t("response.cleanMixed", "Clean & pretty")}
+                </Button>
+              )}
+
             </Box>
           )}
 
@@ -523,6 +593,45 @@ function ResponsePanel({ response }: ResponsePanelProps) {
             </Box>
           )}
 
+          {/* Binary raw view (base64) */}
+          {isBinary && bodyView === "raw" && (
+            <Box
+              sx={{
+                borderRadius: 2,
+                overflow: "hidden",
+                border: `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.1)}`,
+                flex: 1,
+                minHeight: 0,
+              }}
+            >
+              <Suspense fallback={<Box sx={{ height: "100%" }} />}>
+                <MonacoEditor
+                  height="100%"
+                  language="plaintext"
+                  theme={editorTheme}
+                  value={bodyBase64 ?? response.body}
+                  options={{
+                    readOnly: true,
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    fontSize: 12.5,
+                    fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                    wordWrap: "on",
+                    automaticLayout: true,
+                    padding: { top: 8, bottom: 8 },
+                    lineNumbers: "off",
+                    renderLineHighlight: "none",
+                    overviewRulerBorder: false,
+                    scrollbar: {
+                      verticalScrollbarSize: 6,
+                      horizontalScrollbarSize: 6,
+                    },
+                  }}
+                />
+              </Suspense>
+            </Box>
+          )}
+
           {/* Text responses */}
           {!isBinary && bodyView === "pretty" && (
             <Box
@@ -539,7 +648,7 @@ function ResponsePanel({ response }: ResponsePanelProps) {
                   height="100%"
                   language={language}
                   theme={editorTheme}
-                  value={formattedBody}
+                  value={cleanMixed && mixedJson ? mixedJson.pretty : formattedBody}
                   options={{
                     readOnly: true,
                     minimap: { enabled: false },
@@ -739,6 +848,266 @@ function ResponsePanel({ response }: ResponsePanelProps) {
               ))}
             </TableBody>
           </Table>
+        </Box>
+      )}
+
+      {tab === 2 && (
+        <Box
+          sx={{
+            flex: 1,
+            overflow: "auto",
+            display: "flex",
+            flexDirection: "column",
+            gap: 1.5,
+            animation: "fadeIn 0.2s ease",
+          }}
+        >
+          {!sentRequest ? (
+            <Typography variant="body2" color="text.secondary">
+              {t("response.noSentRequest")}
+            </Typography>
+          ) : (
+            <>
+              <Box
+                sx={{
+                  borderRadius: 2,
+                  border: `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.1)}`,
+                  p: 1.5,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                  flexWrap: "wrap",
+                }}
+              >
+                <Chip
+                  label={sentRequest.method}
+                  size="small"
+                  sx={{ fontWeight: 700, fontSize: "0.72rem", height: 22 }}
+                />
+                <Typography
+                  variant="body2"
+                  sx={{ fontFamily: "'JetBrains Mono', monospace", fontSize: "0.75rem" }}
+                >
+                  {maskSecrets(sentRequest.url)}
+                </Typography>
+                {secretValues.length > 0 && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => setShowSecrets((prev) => !prev)}
+                    sx={{ ml: "auto", textTransform: "none", fontSize: "0.72rem" }}
+                  >
+                    {showSecrets ? t("response.hideSecrets") : t("response.showSecrets")}
+                  </Button>
+                )}
+              </Box>
+
+              {sentHeaderEntries.length > 0 && (
+                <Box
+                  sx={{
+                    borderRadius: 2,
+                    border: `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.1)}`,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600, fontSize: "0.78rem" }}>
+                          {t("request.header")}
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: "0.78rem" }}>
+                          {t("common.value")}
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {sentHeaderEntries.map(([key, value]) => (
+                        <TableRow key={key}>
+                          <TableCell
+                            sx={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: "0.75rem",
+                              color: "primary.main",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {key}
+                          </TableCell>
+                          <TableCell
+                            sx={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: "0.75rem",
+                              wordBreak: "break-all",
+                            }}
+                          >
+                            {maskSecrets(value)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              )}
+
+              {sentQueryEntries.length > 0 && (
+                <Box
+                  sx={{
+                    borderRadius: 2,
+                    border: `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.1)}`,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600, fontSize: "0.78rem" }}>
+                          {t("request.parameter")}
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: "0.78rem" }}>
+                          {t("common.value")}
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {sentQueryEntries.map(([key, value]) => (
+                        <TableRow key={key}>
+                          <TableCell
+                            sx={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: "0.75rem",
+                              color: "primary.main",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {key}
+                          </TableCell>
+                          <TableCell
+                            sx={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: "0.75rem",
+                              wordBreak: "break-all",
+                            }}
+                          >
+                            {maskSecrets(value)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              )}
+
+              {sentRequest.form_data && sentRequest.form_data.length > 0 && (
+                <Box
+                  sx={{
+                    borderRadius: 2,
+                    border: `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.1)}`,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600, fontSize: "0.78rem" }}>
+                          {t("request.parameter")}
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: "0.78rem" }}>
+                          {t("common.value")}
+                        </TableCell>
+                        <TableCell sx={{ fontWeight: 600, fontSize: "0.78rem" }}>
+                          {t("bodyEditor.type")}
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {sentRequest.form_data.map((item, idx) => (
+                        <TableRow key={`${item.key}-${idx}`}>
+                          <TableCell
+                            sx={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: "0.75rem",
+                              color: "primary.main",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {item.key}
+                          </TableCell>
+                          <TableCell
+                            sx={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: "0.75rem",
+                              wordBreak: "break-all",
+                            }}
+                          >
+                            {item.type === "file" ? (item.file_name ?? "") : maskSecrets(item.value)}
+                          </TableCell>
+                          <TableCell sx={{ fontSize: "0.75rem" }}>{item.type}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              )}
+
+              {sentBody && (
+                <Box
+                  sx={{
+                    borderRadius: 2,
+                    overflow: "hidden",
+                    border: `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.1)}`,
+                    flex: 1,
+                    minHeight: 0,
+                  }}
+                >
+                  {sentBodyIsJson && (
+                    <Box sx={{ px: 1, py: 0.75, borderBottom: `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.08)}` }}>
+                      <ToggleButtonGroup
+                        value={sentBodyView}
+                        exclusive
+                        onChange={(_, v) => v && setSentBodyView(v)}
+                        size="small"
+                      >
+                        <ToggleButton value="pretty" sx={{ py: 0.2, px: 1.2, fontSize: "0.72rem", gap: 0.5 }}>
+                          <Code sx={{ fontSize: 13 }} />
+                          {t("response.pretty")}
+                        </ToggleButton>
+                        <ToggleButton value="raw" sx={{ py: 0.2, px: 1.2, fontSize: "0.72rem", gap: 0.5 }}>
+                          <DataObject sx={{ fontSize: 13 }} />
+                          {t("response.raw")}
+                        </ToggleButton>
+                      </ToggleButtonGroup>
+                    </Box>
+                  )}
+                  <Suspense fallback={<Box sx={{ height: "100%" }} />}>
+                    <MonacoEditor
+                      height="100%"
+                      language={sentBodyIsJson ? "json" : "plaintext"}
+                      theme={editorTheme}
+                      value={maskSecrets(sentBodyIsJson && sentBodyView === "pretty" ? sentBodyPretty : sentBody)}
+                      options={{
+                        readOnly: true,
+                        minimap: { enabled: false },
+                        scrollBeyondLastLine: false,
+                        fontSize: 12.5,
+                        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                        wordWrap: "on",
+                        automaticLayout: true,
+                        padding: { top: 8, bottom: 8 },
+                        lineNumbers: "off",
+                        renderLineHighlight: "none",
+                        overviewRulerBorder: false,
+                        scrollbar: {
+                          verticalScrollbarSize: 6,
+                          horizontalScrollbarSize: 6,
+                        },
+                      }}
+                    />
+                  </Suspense>
+                </Box>
+              )}
+            </>
+          )}
         </Box>
       )}
     </Box>

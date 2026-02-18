@@ -9,9 +9,6 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Button,
   TextField,
   Dialog,
@@ -29,7 +26,6 @@ import {
   CheckCircle,
   Cancel,
   Terminal,
-  ExpandMore,
   Code,
   AutoAwesome,
   MenuBook,
@@ -111,9 +107,7 @@ export default function ScriptEditor({
 }: ScriptEditorProps) {
   const { t } = useTranslation();
   const theme = useTheme();
-  const [preTab, setPreTab] = useState(0);
-  const [postTab, setPostTab] = useState(0);
-  const [expanded, setExpanded] = useState<string | false>(false);
+  const [scriptTab, setScriptTab] = useState<"pre" | "post" | "output">("pre");
   const isDark = theme.palette.mode === "dark";
   const editorTheme = getVariableTheme(isDark);
 
@@ -150,11 +144,6 @@ export default function ScriptEditor({
   const preLogs = preRequestResult?.logs ?? [];
   const preErrors = preRequestResult?.test_results?.filter((r) => !r.passed) ?? [];
   const hasPreOutput = preLogs.length > 0 || preErrors.length > 0;
-
-  const handleAccordionChange =
-    (panel: string) => (_: React.SyntheticEvent, isExpanded: boolean) => {
-      setExpanded(isExpanded ? panel : false);
-    };
 
   const openAiDialog = (type: "pre-request" | "post-response") => {
     setAiDialogType(type);
@@ -197,10 +186,18 @@ export default function ScriptEditor({
     },
   };
 
+  const activeIsPre = scriptTab === "pre";
+  const activeScript = activeIsPre ? preRequestScript : postResponseScript;
+  const activeTemplate = activeIsPre ? preTemplate : postTemplate;
+  const activeHasOutput = activeIsPre
+    ? hasPreOutput
+    : (testResults.length > 0 || postLogs.length > 0);
+
+
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5, height: "100%", overflow: "auto", p: 1 }}>
-      {/* ── Language Toggle ── */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 0.5, mb: 0.5 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1, height: "100%", minHeight: 0, overflow: "auto", p: 1 }}>
+      {/* Language Toggle */}
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", px: 0.5 }}>
         <ToggleButtonGroup
           value={scriptLanguage}
           exclusive
@@ -256,56 +253,75 @@ export default function ScriptEditor({
         </Box>
       </Box>
 
-      {/* Pre-request Script Accordion */}
-      <Accordion
-        expanded={expanded === "pre-request"}
-        onChange={handleAccordionChange("pre-request")}
-        disableGutters
-        elevation={0}
-        sx={{
-          border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
-          borderRadius: "8px !important",
-          "&:before": { display: "none" },
-          backgroundColor: alpha(theme.palette.background.paper, 0.4),
-        }}
-      >
-        <AccordionSummary
-          expandIcon={<ExpandMore />}
+      {/* Script Tabs */}
+      <Tabs value={scriptTab} onChange={(_, v) => v && setScriptTab(v)} sx={tabBarSx}>
+        <Tab
+          value="pre"
+          label={
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+              <Terminal sx={{ fontSize: 16, color: theme.palette.primary.main }} />
+              {t("scripts.preRequest")}
+            </Box>
+          }
+        />
+        <Tab
+          value="post"
+          label={
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+              <Code sx={{ fontSize: 16, color: theme.palette.secondary.main }} />
+              {t("scripts.postResponse")}
+            </Box>
+          }
+        />
+        <Tab
+          value="output"
+          label={
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+              <Terminal sx={{ fontSize: 16, color: theme.palette.info.main }} />
+              {t("scripts.output")}
+            </Box>
+          }
+        />
+      </Tabs>
+
+      {scriptTab !== "output" && (
+        <Box
           sx={{
-            minHeight: 40,
-            "& .MuiAccordionSummary-content": {
-              my: 0.5,
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-            },
+            border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
+            borderRadius: 2,
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 180,
+            flex: 1,
           }}
         >
-          <Terminal sx={{ fontSize: 18, color: theme.palette.primary.main }} />
-          <Typography variant="body2" fontWeight={600}>
-            {t("scripts.preRequest")}
-          </Typography>
-          {preRequestScript && (
-            <Chip
-              label={t("common.active")}
-              size="small"
-              color="primary"
-              sx={{ height: 20, fontSize: 10 }}
-            />
-          )}
-          {hasPreOutput && (
-            <Chip
-              label={`${preLogs.length} log${preLogs.length !== 1 ? "s" : ""}`}
-              size="small"
-              color="info"
-              sx={{ height: 20, fontSize: 10 }}
-            />
-          )}
-          <Box sx={{ ml: "auto", display: "flex", gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 1, py: 0.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.08)}` }}>
+            <Typography variant="caption" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: "0.06em", color: "text.secondary" }}>
+              {activeIsPre ? t("scripts.preRequest") : t("scripts.postResponse")}
+            </Typography>
+            {activeIsPre && preRequestScript && (
+              <Chip label={t("common.active")} size="small" color="primary" sx={{ height: 20, fontSize: 10 }} />
+            )}
+            {!activeIsPre && postResponseScript && (
+              <Chip label={t("common.active")} size="small" color="secondary" sx={{ height: 20, fontSize: 10 }} />
+            )}
+            {!activeIsPre && testResults.length > 0 && (
+              <>
+                <Chip label={`${passedCount} ${t("common.passed")}`} size="small" color="success" sx={{ height: 20, fontSize: 10 }} />
+                {failedCount > 0 && (
+                  <Chip label={`${failedCount} ${t("common.failed")}`} size="small" color="error" sx={{ height: 20, fontSize: 10 }} />
+                )}
+              </>
+            )}
+            {activeIsPre && hasPreOutput && (
+              <Chip label={`${preLogs.length} log${preLogs.length !== 1 ? "s" : ""}`} size="small" color="info" sx={{ height: 20, fontSize: 10 }} />
+            )}
+            <Box sx={{ ml: "auto" }} />
             <Tooltip title={t("scripts.aiGenerate")}>
               <Box
                 component="span"
-                onClick={() => openAiDialog("pre-request")}
+                onClick={() => openAiDialog(activeIsPre ? "pre-request" : "post-response")}
                 sx={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -322,240 +338,166 @@ export default function ScriptEditor({
               </Box>
             </Tooltip>
           </Box>
-        </AccordionSummary>
-        <AccordionDetails sx={{ p: 0, borderTop: `1px solid ${alpha(theme.palette.divider, 0.08)}` }}>
-          <Tabs
-            value={preTab}
-            onChange={(_, v) => setPreTab(v)}
-            sx={tabBarSx}
-          >
-            <Tab label={t("scripts.preRequest")} />
+
+          <Box sx={{ flex: 1, minHeight: 0 }}>
+            <Editor
+              height="100%"
+              language={editorLang}
+              theme={editorTheme}
+              value={activeScript || activeTemplate}
+              onChange={(v) => {
+                const next = v ?? "";
+                if (activeIsPre) onPreRequestScriptChange(next);
+                else onPostResponseScriptChange(next);
+              }}
+              beforeMount={handleBeforeMount}
+              options={{
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                fontSize: 12,
+                wordWrap: "on",
+                automaticLayout: true,
+                lineNumbers: "on",
+              }}
+            />
+          </Box>
+        </Box>
+      )}
+
+      {scriptTab === "output" && (
+        <Box
+          sx={{
+            border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
+            borderRadius: 2,
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 180,
+            flex: 1,
+          }}
+        >
+          <Box sx={{ px: 1, py: 0.5, borderBottom: `1px solid ${alpha(theme.palette.divider, 0.08)}` }}>
+            <Typography variant="caption" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: "0.06em", color: "text.secondary" }}>
+              {t("scripts.output")}
+            </Typography>
+          </Box>
+          <Box sx={{ flex: 1, overflow: "auto", p: 1 }}>
             {hasPreOutput && (
-              <Tab label={t("scripts.output")} />
-            )}
-          </Tabs>
-
-          {preTab === 0 && (
-            <Editor
-              height="200px"
-              language={editorLang}
-              theme={editorTheme}
-              value={preRequestScript || preTemplate}
-              onChange={(v) => onPreRequestScriptChange(v ?? "")}
-              beforeMount={handleBeforeMount}
-              options={{
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                fontSize: 12,
-                wordWrap: "on",
-                automaticLayout: true,
-                lineNumbers: "on",
-              }}
-            />
-          )}
-
-          {preTab === 1 && hasPreOutput && (
-            <Box sx={{ maxHeight: 200, overflow: "auto", p: 1 }}>
-              {preErrors.length > 0 && (
-                <List dense disablePadding>
-                  {preErrors.map((result, i) => (
-                    <ListItem key={i} sx={{ py: 0.25 }}>
-                      <ListItemIcon sx={{ minWidth: 28 }}>
-                        <Cancel color="error" sx={{ fontSize: 18 }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={result.name}
-                        secondary={result.error}
-                        primaryTypographyProps={{ variant: "body2", fontSize: 13 }}
-                        secondaryTypographyProps={{
-                          variant: "caption",
-                          color: "error.main",
-                          fontFamily: "monospace",
-                        }}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              )}
-              {preLogs.length > 0 && (
-                <Box sx={{ mt: preErrors.length > 0 ? 1 : 0 }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                    {t("scripts.consoleLogs")}
-                  </Typography>
-                  {preLogs.map((log, i) => (
-                    <Typography
-                      key={i}
-                      variant="body2"
-                      sx={{ fontFamily: "monospace", fontSize: 12, color: "text.secondary" }}
-                    >
-                      {log}
-                    </Typography>
-                  ))}
-                </Box>
-              )}
-            </Box>
-          )}
-        </AccordionDetails>
-      </Accordion>
-
-      {/* Post-response Tests Accordion */}
-      <Accordion
-        expanded={expanded === "post-response"}
-        onChange={handleAccordionChange("post-response")}
-        disableGutters
-        elevation={0}
-        sx={{
-          border: `1px solid ${alpha(theme.palette.divider, 0.08)}`,
-          borderRadius: "8px !important",
-          "&:before": { display: "none" },
-          backgroundColor: alpha(theme.palette.background.paper, 0.4),
-        }}
-      >
-        <AccordionSummary
-          expandIcon={<ExpandMore />}
-          sx={{
-            minHeight: 40,
-            "& .MuiAccordionSummary-content": {
-              my: 0.5,
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-            },
-          }}
-        >
-          <Code sx={{ fontSize: 18, color: theme.palette.secondary.main }} />
-          <Typography variant="body2" fontWeight={600}>
-            {t("scripts.postResponse")}
-          </Typography>
-          {postResponseScript && (
-            <Chip
-              label={t("common.active")}
-              size="small"
-              color="secondary"
-              sx={{ height: 20, fontSize: 10 }}
-            />
-          )}
-          {testResults.length > 0 && (
-            <>
-              <Chip
-                label={`${passedCount} ${t("common.passed")}`}
-                size="small"
-                color="success"
-                sx={{ height: 20, fontSize: 10 }}
-              />
-              {failedCount > 0 && (
-                <Chip
-                  label={`${failedCount} ${t("common.failed")}`}
-                  size="small"
-                  color="error"
-                  sx={{ height: 20, fontSize: 10 }}
-                />
-              )}
-            </>
-          )}
-          <Box sx={{ ml: "auto", display: "flex", gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
-            <Tooltip title={t("scripts.aiGenerate")}>
-              <Box
-                component="span"
-                onClick={() => openAiDialog("post-response")}
-                sx={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 28,
-                  height: 28,
-                  borderRadius: "50%",
-                  cursor: "pointer",
-                  color: theme.palette.warning.main,
-                  "&:hover": { backgroundColor: alpha(theme.palette.warning.main, 0.1) },
-                }}
-              >
-                <AutoAwesome sx={{ fontSize: 16 }} />
-              </Box>
-            </Tooltip>
-          </Box>
-        </AccordionSummary>
-        <AccordionDetails sx={{ p: 0, borderTop: `1px solid ${alpha(theme.palette.divider, 0.08)}` }}>
-          <Tabs
-            value={postTab}
-            onChange={(_, v) => setPostTab(v)}
-            sx={tabBarSx}
-          >
-            <Tab label={t("scripts.postResponse")} />
-            {(testResults.length > 0 || postLogs.length > 0) && (
-              <Tab label={t("scripts.results")} />
-            )}
-          </Tabs>
-
-          {postTab === 0 && (
-            <Editor
-              height="200px"
-              language={editorLang}
-              theme={editorTheme}
-              value={postResponseScript || postTemplate}
-              onChange={(v) => onPostResponseScriptChange(v ?? "")}
-              beforeMount={handleBeforeMount}
-              options={{
-                minimap: { enabled: false },
-                scrollBeyondLastLine: false,
-                fontSize: 12,
-                wordWrap: "on",
-                automaticLayout: true,
-                lineNumbers: "on",
-              }}
-            />
-          )}
-
-          {postTab === 1 && (
-            <Box sx={{ maxHeight: 200, overflow: "auto", p: 1 }}>
-              {testResults.length > 0 && (
-                <List dense disablePadding>
-                  {testResults.map((result, i) => (
-                    <ListItem key={i} sx={{ py: 0.25 }}>
-                      <ListItemIcon sx={{ minWidth: 28 }}>
-                        {result.passed ? (
-                          <CheckCircle color="success" sx={{ fontSize: 18 }} />
-                        ) : (
+              <Box sx={{ mb: 1.5 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ textTransform: "uppercase" }}>
+                  {t("scripts.preRequest")}
+                </Typography>
+                {preErrors.length > 0 && (
+                  <List dense disablePadding>
+                    {preErrors.map((result, i) => (
+                      <ListItem key={i} sx={{ py: 0.25 }}>
+                        <ListItemIcon sx={{ minWidth: 28 }}>
                           <Cancel color="error" sx={{ fontSize: 18 }} />
-                        )}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={result.name}
-                        secondary={result.error}
-                        primaryTypographyProps={{ variant: "body2", fontSize: 13 }}
-                        secondaryTypographyProps={{
-                          variant: "caption",
-                          color: "error.main",
-                          fontFamily: "monospace",
-                        }}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              )}
-
-              {postLogs.length > 0 && (
-                <Box sx={{ mt: 1 }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600}>
-                    {t("scripts.consoleLogs")}
-                  </Typography>
-                  {postLogs.map((log, i) => (
-                    <Typography
-                      key={i}
-                      variant="body2"
-                      sx={{ fontFamily: "monospace", fontSize: 12, color: "text.secondary" }}
-                    >
-                      {log}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={result.name}
+                          secondary={result.error}
+                          primaryTypographyProps={{ variant: "body2", fontSize: 13 }}
+                          secondaryTypographyProps={{
+                            variant: "caption",
+                            color: "error.main",
+                            fontFamily: "monospace",
+                          }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+                {preLogs.length > 0 && (
+                  <Box sx={{ mt: preErrors.length > 0 ? 1 : 0 }}>
+                    <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                      {t("scripts.consoleLogs")}
                     </Typography>
-                  ))}
-                </Box>
-              )}
-            </Box>
-          )}
-        </AccordionDetails>
-      </Accordion>
+                    {preLogs.map((log, i) => (
+                      <Typography
+                        key={i}
+                        variant="body2"
+                        sx={{ fontFamily: "monospace", fontSize: 12, color: "text.secondary" }}
+                      >
+                        {log}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            )}
 
-      {/* ── AI Script Generation Dialog ── */}
+            {(testResults.length > 0 || postLogs.length > 0) && (
+              <Box>
+                <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ textTransform: "uppercase" }}>
+                  {t("scripts.postResponse")}
+                </Typography>
+                {scriptResult && (
+                  <Box sx={{ display: "flex", gap: 0.75, alignItems: "center", mt: 0.5, mb: 0.75, flexWrap: "wrap" }}>
+                    {testResults.length === 0 ? (
+                      <Chip label={t("scripts.ran")} size="small" color="success" sx={{ height: 20, fontSize: 10 }} />
+                    ) : failedCount === 0 ? (
+                      <Chip label={t("scripts.allPassed")} size="small" color="success" sx={{ height: 20, fontSize: 10 }} />
+                    ) : (
+                      <Chip label={t("common.failed")} size="small" color="error" sx={{ height: 20, fontSize: 10 }} />
+                    )}
+                    {testResults.length > 0 && (
+                      <>
+                        <Chip label={`${passedCount} ${t("common.passed")}`} size="small" color="success" sx={{ height: 20, fontSize: 10 }} />
+                        {failedCount > 0 && (
+                          <Chip label={`${failedCount} ${t("common.failed")}`} size="small" color="error" sx={{ height: 20, fontSize: 10 }} />
+                        )}
+                      </>
+                    )}
+                  </Box>
+                )}
+                {testResults.length > 0 && (
+                  <List dense disablePadding>
+                    {testResults.map((result, i) => (
+                      <ListItem key={i} sx={{ py: 0.25 }}>
+                        <ListItemIcon sx={{ minWidth: 28 }}>
+                          {result.passed ? (
+                            <CheckCircle color="success" sx={{ fontSize: 18 }} />
+                          ) : (
+                            <Cancel color="error" sx={{ fontSize: 18 }} />
+                          )}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={result.name}
+                          secondary={result.error}
+                          primaryTypographyProps={{ variant: "body2", fontSize: 13 }}
+                          secondaryTypographyProps={{
+                            variant: "caption",
+                            color: "error.main",
+                            fontFamily: "monospace",
+                          }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+                {postLogs.length > 0 && (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                      {t("scripts.consoleLogs")}
+                    </Typography>
+                    {postLogs.map((log, i) => (
+                      <Typography
+                        key={i}
+                        variant="body2"
+                        sx={{ fontFamily: "monospace", fontSize: 12, color: "text.secondary" }}
+                      >
+                        {log}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Box>
+        </Box>
+      )}
+      {/* ?? AI Script Generation Dialog ?? */}
       <Dialog open={aiDialogOpen} onClose={() => !aiGenerating && setAiDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <AutoAwesome sx={{ color: theme.palette.warning.main }} />

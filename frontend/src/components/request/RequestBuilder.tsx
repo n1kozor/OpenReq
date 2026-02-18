@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import {
   Box,
   Select,
@@ -14,6 +14,7 @@ import {
   InputAdornment,
   IconButton,
   Tooltip,
+  Portal,
 } from "@mui/material";
 import { Send, Save, Dns, NetworkPing } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
@@ -98,6 +99,9 @@ export default function RequestBuilder(props: RequestBuilderProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const [tab, setTab] = useState(0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const sendButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [showFloatingSend, setShowFloatingSend] = useState(false);
 
   const activeParamsCount = props.queryParams.filter((p) => p.enabled && p.key).length;
   const activeHeadersCount = props.headers.filter((h) => h.enabled && h.key).length;
@@ -141,10 +145,25 @@ export default function RequestBuilder(props: RequestBuilderProps) {
 
   const methodColor = METHOD_COLORS[props.method] ?? "#888";
 
+  useEffect(() => {
+    const target = sendButtonRef.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowFloatingSend(!entry.isIntersecting);
+      },
+      { root: null, rootMargin: "-56px 0px 0px 0px", threshold: 0.95 }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <Box sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5, height: "100%", overflow: "auto" }}>
+    <Box ref={containerRef} sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5, height: "100%", overflow: "auto" }}>
       {/* URL Bar */}
-      <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
         <Select
           value={props.method}
           onChange={(e) => props.onMethodChange(e.target.value as HttpMethod)}
@@ -175,26 +194,28 @@ export default function RequestBuilder(props: RequestBuilderProps) {
           ))}
         </Select>
 
-        <UrlInput
-          url={props.url}
-          pathParams={props.pathParams}
-          onUrlChange={props.onUrlChange}
-          onPathParamsChange={props.onPathParamsChange}
-          onSend={props.onSend}
-          placeholder={t("request.url")}
-          variableGroups={variableGroups}
-          resolvedVariables={resolvedVariables}
-          endAdornment={
-            envVariables.length > 0 ? (
-              <InputAdornment position="end">
-                <VariableInsertButton
-                  variables={envVariables}
-                  onInsert={handleInsertVariable}
-                />
-              </InputAdornment>
-            ) : undefined
-          }
-        />
+        <Box sx={{ flex: "1 1 320px", minWidth: 220 }}>
+          <UrlInput
+            url={props.url}
+            pathParams={props.pathParams}
+            onUrlChange={props.onUrlChange}
+            onPathParamsChange={props.onPathParamsChange}
+            onSend={props.onSend}
+            placeholder={t("request.url")}
+            variableGroups={variableGroups}
+            resolvedVariables={resolvedVariables}
+            endAdornment={
+              envVariables.length > 0 ? (
+                <InputAdornment position="end">
+                  <VariableInsertButton
+                    variables={envVariables}
+                    onInsert={handleInsertVariable}
+                  />
+                </InputAdornment>
+              ) : undefined
+            }
+          />
+        </Box>
 
         {/* DNS Resolve & Ping buttons */}
         <Tooltip title={hostname ? t("network.dnsResolve") : t("network.noHostname")}>
@@ -284,48 +305,51 @@ export default function RequestBuilder(props: RequestBuilderProps) {
           </Select>
         </FormControl>
 
-        <Button
-          variant="contained"
-          onClick={props.onSend}
-          disabled={props.loading || !props.url}
-          startIcon={props.loading ? <CircularProgress size={14} /> : <Send sx={{ fontSize: 16 }} />}
-          sx={{
-            minWidth: 100,
-            whiteSpace: "nowrap",
-            height: 36,
-            borderRadius: 2,
-            fontWeight: 600,
-            fontSize: "0.82rem",
-            background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.7)} 100%)`,
-            color: isDark ? "#0b0e14" : "#fff",
-            "&:hover": {
-              background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.85)} 100%)`,
-              boxShadow: `0 4px 16px ${alpha(methodColor, 0.35)}`,
-            },
-            "&:disabled": {
-              background: alpha(theme.palette.text.primary, 0.08),
-              color: alpha(theme.palette.text.primary, 0.3),
-            },
-          }}
-        >
-          {t("request.send")}
-        </Button>
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+          <Button
+            ref={sendButtonRef}
+            variant="contained"
+            onClick={props.onSend}
+            disabled={props.loading || !props.url}
+            startIcon={props.loading ? <CircularProgress size={14} /> : <Send sx={{ fontSize: 16 }} />}
+            sx={{
+              minWidth: 100,
+              whiteSpace: "nowrap",
+              height: 36,
+              borderRadius: 2,
+              fontWeight: 600,
+              fontSize: "0.82rem",
+              background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.7)} 100%)`,
+              color: isDark ? "#0b0e14" : "#fff",
+              "&:hover": {
+                background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.85)} 100%)`,
+                boxShadow: `0 4px 16px ${alpha(methodColor, 0.35)}`,
+              },
+              "&:disabled": {
+                background: alpha(theme.palette.text.primary, 0.08),
+                color: alpha(theme.palette.text.primary, 0.3),
+              },
+            }}
+          >
+            {t("request.send")}
+          </Button>
 
-        <Button
-          variant="outlined"
-          onClick={props.onSave}
-          startIcon={<Save sx={{ fontSize: 16 }} />}
-          sx={{
-            minWidth: 80,
-            whiteSpace: "nowrap",
-            height: 36,
-            borderRadius: 2,
-            fontWeight: 500,
-            fontSize: "0.82rem",
-          }}
-        >
-          {t("common.save")}
-        </Button>
+          <Button
+            variant="outlined"
+            onClick={props.onSave}
+            startIcon={<Save sx={{ fontSize: 16 }} />}
+            sx={{
+              minWidth: 80,
+              whiteSpace: "nowrap",
+              height: 36,
+              borderRadius: 2,
+              fontWeight: 500,
+              fontSize: "0.82rem",
+            }}
+          >
+            {t("common.save")}
+          </Button>
+        </Box>
       </Box>
 
       {/* Tabs */}
@@ -428,6 +452,42 @@ export default function RequestBuilder(props: RequestBuilderProps) {
       {/* Network tools modals */}
       <DnsResolveModal open={dnsOpen} onClose={() => setDnsOpen(false)} hostname={hostname} />
       <PingModal open={pingOpen} onClose={() => setPingOpen(false)} hostname={hostname} />
+
+      {showFloatingSend && (
+        <Portal>
+          <Button
+            variant="contained"
+            onClick={props.onSend}
+            disabled={props.loading || !props.url}
+            startIcon={props.loading ? <CircularProgress size={14} /> : <Send sx={{ fontSize: 16 }} />}
+            sx={{
+              position: "fixed",
+              right: 24,
+              bottom: 24,
+              zIndex: theme.zIndex.modal + 1,
+              borderRadius: 999,
+              px: 2.25,
+              py: 1,
+              fontWeight: 700,
+              fontSize: "0.9rem",
+              background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.7)} 100%)`,
+              color: isDark ? "#0b0e14" : "#fff",
+              boxShadow: `0 12px 30px ${alpha(methodColor, 0.35)}`,
+              "&:hover": {
+                background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.85)} 100%)`,
+                boxShadow: `0 14px 36px ${alpha(methodColor, 0.45)}`,
+              },
+              "&:disabled": {
+                background: alpha(theme.palette.text.primary, 0.08),
+                color: alpha(theme.palette.text.primary, 0.3),
+                boxShadow: "none",
+              },
+            }}
+          >
+            {t("request.send")}
+          </Button>
+        </Portal>
+      )}
     </Box>
   );
 }

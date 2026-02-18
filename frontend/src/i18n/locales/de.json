@@ -10,7 +10,8 @@
     "settings": "Einstellungen",
     "workspace": "Arbeitsbereich",
     "aiAgent": "George AI",
-    "testBuilder": "Test-Builder"
+    "testBuilder": "Test-Builder",
+    "shortcuts": "Kurzmenü"
   },
   "auth": {
     "login": "Anmelden",
@@ -81,7 +82,13 @@
     "download": "Herunterladen",
     "downloadFile": "Datei herunterladen",
     "binaryResponse": "Binäre Antwort — dieser Inhalt kann nicht als Text angezeigt werden.",
-    "fileInfo": "{{type}} — {{size}}"
+    "fileInfo": "{{type}} — {{size}}",
+    "cleanMixed": "Bereinigen & formatieren",
+    "showRaw": "Roh anzeigen",
+    "sentRequest": "Gesendete Anfrage",
+    "noSentRequest": "Es wurde noch keine Anfrage gesendet.",
+    "showSecrets": "Geheimnisse anzeigen",
+    "hideSecrets": "Geheimnisse verbergen"
   },
   "collection": {
     "new": "Neue Sammlung",
@@ -188,7 +195,10 @@
     "insertVariable": "Variable einfügen",
     "envOverride": "Umgebung",
     "useGlobal": "Global verwenden",
-    "globalsDescription": "Workspace-übergreifende Variablen, die in allen Anfragen verfügbar sind. Niedrigste Priorität — werden durch Sammlungs- und Umgebungsvariablen überschrieben."
+    "globalsDescription": "Workspace-übergreifende Variablen, die in allen Anfragen verfügbar sind. Niedrigste Priorität — werden durch Sammlungs- und Umgebungsvariablen überschrieben.",
+    "deleteConfirmTitle": "Umgebung löschen",
+    "deleteConfirmDesc": "Gib \"delete\" ein, um das Löschen von {{name}} zu bestätigen.",
+    "deleteConfirmPlaceholder": "Gib delete zur Bestätigung ein"
   },
   "workspace": {
     "new": "Neuer Arbeitsbereich",
@@ -355,6 +365,9 @@
     "suggestResponseTime": "Antwortzeit unter 500ms überprüfen",
     "suggestJsonStructure": "JSON-Antwortstruktur validieren",
     "suggestFullValidation": "Vollständige Antwortvalidierung mit allen Prüfungen",
+    "allPassed": "Alle Tests bestanden",
+    "noTests": "Keine Tests",
+    "ran": "Skript ausgeführt",
     "docsTitle": "Skript-Referenz",
     "docsIntro": "Skripte verwenden eine Python-basierte DSL. Jede Zeile ist ein eigenständiger Befehl — keine mehrzeiligen Blöcke, Schleifen oder Bedingungen.",
     "docsIntroJs": "Skripte verwenden eine JavaScript-basierte DSL (Postman-kompatibel). Jede Zeile ist ein eigenständiger Befehl — keine mehrzeiligen Blöcke, Schleifen oder Bedingungen.",

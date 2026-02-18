@@ -10,7 +10,8 @@
     "settings": "Settings",
     "workspace": "Workspace",
     "aiAgent": "George AI",
-    "testBuilder": "Test Builder"
+    "testBuilder": "Test Builder",
+    "shortcuts": "Shortcuts"
   },
   "auth": {
     "login": "Sign In",
@@ -81,7 +82,13 @@
     "download": "Download",
     "downloadFile": "Download File",
     "binaryResponse": "Binary response — this content cannot be displayed as text.",
-    "fileInfo": "{{type}} — {{size}}"
+    "fileInfo": "{{type}} — {{size}}",
+    "cleanMixed": "Clean & pretty",
+    "showRaw": "Show raw",
+    "sentRequest": "Sent Request",
+    "noSentRequest": "No request has been sent yet.",
+    "showSecrets": "Show secrets",
+    "hideSecrets": "Hide secrets"
   },
   "collection": {
     "new": "New Collection",
@@ -188,7 +195,10 @@
     "insertVariable": "Insert Variable",
     "envOverride": "Environment",
     "useGlobal": "Use Global",
-    "globalsDescription": "Workspace-level variables available in all requests. Lowest priority — overridden by collection and environment variables."
+    "globalsDescription": "Workspace-level variables available in all requests. Lowest priority — overridden by collection and environment variables.",
+    "deleteConfirmTitle": "Delete Environment",
+    "deleteConfirmDesc": "Type \"delete\" to confirm deleting {{name}}.",
+    "deleteConfirmPlaceholder": "Type delete to confirm"
   },
   "workspace": {
     "new": "New Workspace",
@@ -355,6 +365,9 @@
     "suggestResponseTime": "Assert response time under 500ms",
     "suggestJsonStructure": "Validate JSON response structure",
     "suggestFullValidation": "Full response validation with all checks",
+    "allPassed": "All tests passed",
+    "noTests": "No tests",
+    "ran": "Script ran",
     "docsTitle": "Script Reference",
     "docsIntro": "Scripts use a Python-based DSL. Each line is a standalone command — no multiline blocks, loops or conditionals.",
     "docsIntroJs": "Scripts use a JavaScript-like DSL (req-compatible). Each line is a standalone command — no multiline blocks, loops or conditionals.",

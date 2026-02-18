@@ -58,6 +58,7 @@ import type {
   Workspace,
   User,
   OAuthConfig,
+  SentRequestSnapshot,
 } from "@/types";
 import { defaultRequestSettings } from "@/types";
 
@@ -116,6 +117,7 @@ function createNewTab(protocol: Protocol = "http"): RequestTab {
     response: null,
     scriptResult: null,
     preRequestResult: null,
+    sentRequest: null,
     graphqlQuery: protocol === "graphql" ? "query {\n  \n}" : "",
     graphqlVariables: protocol === "graphql" ? "{}" : "",
     wsMessages: [],
@@ -129,6 +131,7 @@ function stripRuntimeTab(tab: RequestTab): RequestTab {
     response: null,
     scriptResult: null,
     preRequestResult: null,
+    sentRequest: null,
     wsMessages: [],
     wsConnected: false,
     // Strip File objects from formData (not serializable)
@@ -723,6 +726,29 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       }
     }
 
+    const resolveTemplate = (input: string, vars: Map<string, { value: string }>) => (
+      input.replace(/{{\s*([^}]+)\s*}}/g, (match, key) => {
+        const k = String(key).trim();
+        const v = vars.get(k);
+        return v ? v.value : match;
+      })
+    );
+
+    const displayVars = new Map<string, { value: string }>();
+    // Globals -> Collection -> Environment (priority)
+    for (const [key, value] of Object.entries(workspaceGlobals)) {
+      displayVars.set(key, { value });
+    }
+    for (const [key, value] of Object.entries(activeCollectionVars)) {
+      displayVars.set(key, { value });
+    }
+    for (const v of activeEnvVariables) {
+      displayVars.set(v.key, { value: v.value });
+    }
+    const secretValues = activeEnvVariables
+      .filter((v) => v.is_secret && v.value)
+      .map((v) => v.value);
+
     // Build request settings for backend (snake_case)
     const rs = tab.requestSettings ?? defaultRequestSettings;
     const requestSettings = {
@@ -746,6 +772,31 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       remove_referer_on_redirect: false, encode_url: true, max_redirects: 10,
       disable_cookie_jar: false, use_server_cipher_suite: false, disabled_tls_protocols: [],
     });
+
+    const sentRequest: SentRequestSnapshot = {
+      method: tab.protocol === "graphql" ? "POST" : tab.method,
+      url: resolveTemplate(resolvedUrl, displayVars),
+      headers: Object.keys(headers).length > 0
+        ? Object.fromEntries(Object.entries(headers).map(([k, v]) => [k, resolveTemplate(v, displayVars)]))
+        : {},
+      query_params: Object.keys(queryParams).length > 0
+        ? Object.fromEntries(Object.entries(queryParams).map(([k, v]) => [k, resolveTemplate(v, displayVars)]))
+        : {},
+      body: bodyToSend ? resolveTemplate(bodyToSend, displayVars) : bodyToSend,
+      body_type: tab.protocol === "graphql" ? "json" : tab.bodyType,
+      form_data: formDataToSend?.map(({ file_content_base64, ...rest }) => ({
+        ...rest,
+        value: resolveTemplate(rest.value, displayVars),
+      })),
+      auth_type: authType === "oauth2" ? "bearer" : authType,
+      auth_config: Object.keys(authConfig).length > 0
+        ? Object.fromEntries(Object.entries(authConfig).map(([k, v]) => [k, resolveTemplate(v, displayVars)]))
+        : undefined,
+      environment_id: tab.envOverrideId ?? selectedEnvId ?? null,
+      secret_values: secretValues.length > 0 ? secretValues : undefined,
+    };
+
+    updateTab(activeTabId, { sentRequest });
 
     setLoading(true);
     try {
@@ -793,7 +844,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     } finally {
       setLoading(false);
     }
-  }, [tabs, activeTabId, selectedEnvId, updateTab, buildAuthConfig, fileToBase64, loadGlobals, loadEnvironments, loadCollections]);
+  }, [tabs, activeTabId, selectedEnvId, updateTab, buildAuthConfig, fileToBase64, loadGlobals, loadEnvironments, loadCollections, workspaceGlobals, activeCollectionVars, activeEnvVariables]);
 
   // ── Save helpers ──
   const buildTabPayload = useCallback((tab: RequestTab) => {
@@ -1160,7 +1211,11 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       setSnack({ msg: t("workspace.createFirst"), severity: "error" });
       return;
     }
-    await environmentsApi.create({ name, env_type: envType, workspace_id: currentWorkspaceId, variables });
+    const { data: created } = await environmentsApi.create({ name, env_type: envType, workspace_id: currentWorkspaceId, variables });
+    setEnvironments((prev) => {
+      if (prev.some((e) => e.id === created.id)) return prev;
+      return [...prev, created];
+    });
     loadEnvironments();
   }, [currentWorkspaceId, loadEnvironments]);
 
@@ -1719,7 +1774,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                     />
                   ),
                   responsePanel: (
-                    <ResponsePanel response={activeTab.response} />
+                    <ResponsePanel response={activeTab.response} sentRequest={activeTab.sentRequest ?? null} />
                   ),
                 }}
               </PanelGridLayout>

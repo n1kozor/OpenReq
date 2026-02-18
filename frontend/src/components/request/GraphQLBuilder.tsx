@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import {
   Box,
   Button,
@@ -7,6 +7,7 @@ import {
   Badge,
   CircularProgress,
   Typography,
+  Portal,
 } from "@mui/material";
 import { Hub, Send, Save, DragHandle } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
@@ -69,6 +70,8 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
   // Vertical split ratio (fraction of height for top=editors, rest=bottom)
   const [splitRatio, setSplitRatio] = useState(0.55);
   const [dragging, setDragging] = useState(false);
+  const sendButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [showFloatingSend, setShowFloatingSend] = useState(false);
 
   // Variable resolution
   const activeEnvId = props.envOverrideId ?? props.selectedEnvId ?? null;
@@ -102,10 +105,25 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
     window.addEventListener("mouseup", onMouseUp);
   }, []);
 
+  useEffect(() => {
+    const target = sendButtonRef.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setShowFloatingSend(!entry.isIntersecting);
+      },
+      { root: null, rootMargin: "-56px 0px 0px 0px", threshold: 0.95 }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* URL Bar */}
-      <Box sx={{ display: "flex", gap: 1, alignItems: "center", p: 1.5, pb: 1, flexShrink: 0 }}>
+      <Box sx={{ display: "flex", gap: 1, alignItems: "center", p: 1.5, pb: 1, flexShrink: 0, flexWrap: "wrap" }}>
         <Box
           sx={{
             display: "flex",
@@ -126,7 +144,7 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
           </Typography>
         </Box>
 
-        <Box sx={{ flex: 1, border: 1, borderColor: "divider", borderRadius: 1, px: 1, py: 0.25 }}>
+        <Box sx={{ flex: "1 1 320px", minWidth: 220, border: 1, borderColor: "divider", borderRadius: 1, px: 1, py: 0.25 }}>
           <VariableValueCell
             value={props.url}
             onChange={props.onUrlChange}
@@ -136,37 +154,40 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
           />
         </Box>
 
-        <Button
-          variant="contained"
-          onClick={props.onSend}
-          disabled={props.loading || !props.url}
-          startIcon={props.loading ? <CircularProgress size={14} /> : <Send sx={{ fontSize: 16 }} />}
-          sx={{
-            minWidth: 100,
-            whiteSpace: "nowrap",
-            height: 36,
-            borderRadius: 2,
-            fontWeight: 600,
-            fontSize: "0.82rem",
-            background: `linear-gradient(135deg, ${GQL_COLOR} 0%, ${alpha(GQL_COLOR, 0.7)} 100%)`,
-            color: isDark ? "#0b0e14" : "#fff",
-            "&:hover": {
-              background: `linear-gradient(135deg, ${GQL_COLOR} 0%, ${alpha(GQL_COLOR, 0.85)} 100%)`,
-              boxShadow: `0 4px 16px ${alpha(GQL_COLOR, 0.35)}`,
-            },
-          }}
-        >
-          {t("graphql.send")}
-        </Button>
+        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+          <Button
+            ref={sendButtonRef}
+            variant="contained"
+            onClick={props.onSend}
+            disabled={props.loading || !props.url}
+            startIcon={props.loading ? <CircularProgress size={14} /> : <Send sx={{ fontSize: 16 }} />}
+            sx={{
+              minWidth: 100,
+              whiteSpace: "nowrap",
+              height: 36,
+              borderRadius: 2,
+              fontWeight: 600,
+              fontSize: "0.82rem",
+              background: `linear-gradient(135deg, ${GQL_COLOR} 0%, ${alpha(GQL_COLOR, 0.7)} 100%)`,
+              color: isDark ? "#0b0e14" : "#fff",
+              "&:hover": {
+                background: `linear-gradient(135deg, ${GQL_COLOR} 0%, ${alpha(GQL_COLOR, 0.85)} 100%)`,
+                boxShadow: `0 4px 16px ${alpha(GQL_COLOR, 0.35)}`,
+              },
+            }}
+          >
+            {t("graphql.send")}
+          </Button>
 
-        <Button
-          variant="outlined"
-          onClick={props.onSave}
-          startIcon={<Save sx={{ fontSize: 16 }} />}
-          sx={{ minWidth: 80, whiteSpace: "nowrap", height: 36, borderRadius: 2, fontWeight: 500, fontSize: "0.82rem" }}
-        >
-          {t("common.save")}
-        </Button>
+          <Button
+            variant="outlined"
+            onClick={props.onSave}
+            startIcon={<Save sx={{ fontSize: 16 }} />}
+            sx={{ minWidth: 80, whiteSpace: "nowrap", height: 36, borderRadius: 2, fontWeight: 500, fontSize: "0.82rem" }}
+          >
+            {t("common.save")}
+          </Button>
+        </Box>
       </Box>
 
       {/* Main split area */}
@@ -313,7 +334,7 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
 
           <Box sx={{ flex: 1, overflow: "auto", mt: 0.5, minHeight: 0 }}>
             {rightTab === 0 && (
-              <ResponsePanel response={props.response} />
+              <ResponsePanel response={props.response} sentRequest={null} />
             )}
 
             {rightTab === 1 && (
@@ -352,6 +373,37 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
           </Box>
         </Box>
       </Box>
+
+      {showFloatingSend && (
+        <Portal>
+          <Button
+            variant="contained"
+            onClick={props.onSend}
+            disabled={props.loading || !props.url}
+            startIcon={props.loading ? <CircularProgress size={14} /> : <Send sx={{ fontSize: 16 }} />}
+            sx={{
+              position: "fixed",
+              right: 24,
+              bottom: 24,
+              zIndex: theme.zIndex.modal + 1,
+              borderRadius: 999,
+              px: 2.25,
+              py: 1,
+              fontWeight: 700,
+              fontSize: "0.9rem",
+              background: `linear-gradient(135deg, ${GQL_COLOR} 0%, ${alpha(GQL_COLOR, 0.7)} 100%)`,
+              color: isDark ? "#0b0e14" : "#fff",
+              boxShadow: `0 12px 30px ${alpha(GQL_COLOR, 0.35)}`,
+              "&:hover": {
+                background: `linear-gradient(135deg, ${GQL_COLOR} 0%, ${alpha(GQL_COLOR, 0.85)} 100%)`,
+                boxShadow: `0 14px 36px ${alpha(GQL_COLOR, 0.45)}`,
+              },
+            }}
+          >
+            {t("graphql.send")}
+          </Button>
+        </Portal>
+      )}
     </Box>
   );
 }
