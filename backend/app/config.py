@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "OpenReq"
-    APP_VERSION: str = "0.1.0"
+    APP_VERSION: str = "1.0.4"
     ENVIRONMENT: str = "development"
 
     DATABASE_URL: str = "sqlite:///./data/openreq.db"
