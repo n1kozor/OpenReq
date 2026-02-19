@@ -61,8 +61,8 @@
 ### Docker (recommended)
 
 ```bash
-git clone https://github.com/n1kozor/openreq.git
-cd openreq
+git clone https://github.com/n1kozor/OpenReq.git
+cd OpenReq
 cp .env.example .env
 docker compose up -d
 ```
@@ -74,8 +74,8 @@ The app will be available at `http://localhost:8000` with the API at `http://loc
 **1. Clone & configure**
 
 ```bash
-git clone https://github.com/n1kozor/openreq.git
-cd openreq
+git clone https://github.com/n1kozor/OpenReq.git
+cd OpenReq
 cp .env.example .env
 ```
 
