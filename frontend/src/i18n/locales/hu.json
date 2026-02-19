@@ -960,5 +960,14 @@
     "selectAll": "Mind",
     "selectNone": "Egyik sem",
     "noRequests": "Nincsenek kérések ebben a kollekcióban"
+  },
+  "proxyMode": {
+    "label": "Proxy mód",
+    "server": "Szerver",
+    "local": "Helyi",
+    "serverDesc": "A kérések az OpenReq szerveren keresztül mennek",
+    "localDesc": "A kérések közvetlenül a gépedről indulnak",
+    "localNotAvailable": "Telepítsd a Chrome bővítményt vagy használd az asztali alkalmazást",
+    "collectionRunnerWarning": "A kollekció futtatás mindig a szerveren keresztül történik."
   }
 }

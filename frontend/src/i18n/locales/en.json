@@ -960,5 +960,14 @@
     "selectAll": "All",
     "selectNone": "None",
     "noRequests": "No requests in this collection"
+  },
+  "proxyMode": {
+    "label": "Proxy Mode",
+    "server": "Server",
+    "local": "Local",
+    "serverDesc": "Requests are sent through the OpenReq server",
+    "localDesc": "Requests are sent directly from your machine",
+    "localNotAvailable": "Install Chrome extension or use the desktop app",
+    "collectionRunnerWarning": "Collection runs always execute through the server."
   }
 }

@@ -46,6 +46,8 @@ import {
   importExportApi,
 } from "@/api/endpoints";
 import { useVariableGroups } from "@/hooks/useVariableGroups";
+import { ProxyModeContext, useProxyModeProvider } from "@/hooks/useProxyMode";
+import { executeViaExtension, executeViaDesktop } from "@/services/localProxyExecutor";
 import type {
   RequestTab,
   HttpMethod,
@@ -195,6 +197,8 @@ type View = "request" | "settings";
 
 export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShellProps) {
   const { t } = useTranslation();
+  const proxyModeValue = useProxyModeProvider();
+  const { proxyMode, localChannel } = proxyModeValue;
   const initialTabs = useMemo(() => restoreTabs(), []);
   const [view, setView] = useState<View>(() => {
     const saved = localStorage.getItem(VIEW_STORAGE_KEY);
@@ -309,18 +313,18 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
   const loadCollections = useCallback(async () => {
     try {
-      const { data: cols } = await collectionsApi.list();
+      const { data: cols } = await collectionsApi.list(currentWorkspaceId ?? undefined);
       setCollections(cols);
       // Reload trees for already-loaded collections (keeps sidebar open & fresh)
       const openIds = loadedCollectionIdsRef.current;
-      for (const colId of openIds) {
+      await Promise.all(openIds.map((colId) =>
         collectionsApi.listItems(colId).then(({ data }) => {
           setCollectionItems((p) => ({ ...p, [colId]: data }));
           setCollectionTrees((p) => ({ ...p, [colId]: buildTree(data) }));
-        }).catch(() => {});
-      }
+        }).catch(() => {}),
+      ));
     } catch { /* ignore */ }
-  }, [buildTree]);
+  }, [buildTree, currentWorkspaceId]);
 
   const loadCollectionTree = useCallback(async (collectionId: string) => {
     if (collectionTreeLoading[collectionId]) return;
@@ -404,6 +408,17 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     didInitCollections.current = true;
     loadCollections();
   }, [loadCollections]);
+  // Reload collections when workspace changes
+  const lastColWorkspaceId = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastColWorkspaceId.current === currentWorkspaceId) return;
+    lastColWorkspaceId.current = currentWorkspaceId;
+    // Clear stale collection tree data from previous workspace
+    setCollectionItems({});
+    setCollectionTrees({});
+    loadedCollectionIdsRef.current = [];
+    loadCollections();
+  }, [loadCollections, currentWorkspaceId]);
   useEffect(() => {
     if (lastEnvWorkspaceId.current === currentWorkspaceId) return;
     lastEnvWorkspaceId.current = currentWorkspaceId;
@@ -800,15 +815,15 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
     setLoading(true);
     try {
-      const { data: response } = await proxyApi.send({
-        method: tab.protocol === "graphql" ? "POST" : tab.method,
+      const proxyPayload = {
+        method: (tab.protocol === "graphql" ? "POST" : tab.method) as import("@/types").HttpMethod,
         url: resolvedUrl,
         headers: Object.keys(headers).length > 0 ? headers : undefined,
         body: bodyToSend,
         body_type: tab.protocol === "graphql" ? "json" : tab.bodyType,
         form_data: formDataToSend,
         query_params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
-        auth_type: authType === "oauth2" ? "bearer" : authType,
+        auth_type: (authType === "oauth2" ? "bearer" : authType) as import("@/types").AuthType,
         auth_config: Object.keys(authConfig).length > 0 ? authConfig : undefined,
         environment_id: tab.envOverrideId ?? selectedEnvId ?? undefined,
         collection_id: tab.collectionId,
@@ -817,7 +832,39 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         post_response_script: tab.postResponseScript?.trim() || undefined,
         script_language: tab.scriptLanguage || "javascript",
         request_settings: isDefaultSettings ? undefined : requestSettings,
-      });
+      };
+
+      let response: import("@/types").ProxyResponse;
+
+      if (proxyMode === "server") {
+        // Server-side proxy (original flow)
+        const { data } = await proxyApi.send(proxyPayload);
+        response = data;
+      } else {
+        // Local proxy: prepare → local execute → complete
+        const { data: prepared } = await proxyApi.prepare(proxyPayload);
+        // Show pre-request results immediately
+        if (prepared.pre_request_result) {
+          updateTab(activeTabId, { preRequestResult: prepared.pre_request_result });
+        }
+        // Execute request locally — auto-select channel (desktop > extension)
+        const localExecute = localChannel === "desktop" ? executeViaDesktop : executeViaExtension;
+        const localResult = await localExecute({
+          url: prepared.url,
+          method: prepared.method,
+          headers: prepared.headers,
+          body: prepared.body,
+          query_params: prepared.query_params,
+        });
+        // Complete on server (post-scripts, history, pm.* persist)
+        const { data } = await proxyApi.complete({
+          ...localResult,
+          prepare_token: prepared.prepare_token,
+        });
+        // Merge pre_request_result from prepare phase
+        response = { ...data, pre_request_result: prepared.pre_request_result };
+      }
+
       updateTab(activeTabId, {
         response,
         preRequestResult: response.pre_request_result ?? null,
@@ -844,7 +891,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     } finally {
       setLoading(false);
     }
-  }, [tabs, activeTabId, selectedEnvId, updateTab, buildAuthConfig, fileToBase64, loadGlobals, loadEnvironments, loadCollections, workspaceGlobals, activeCollectionVars, activeEnvVariables]);
+  }, [tabs, activeTabId, selectedEnvId, updateTab, buildAuthConfig, fileToBase64, loadGlobals, loadEnvironments, loadCollections, workspaceGlobals, activeCollectionVars, activeEnvVariables, proxyMode, localChannel]);
 
   // ── Save helpers ──
   const buildTabPayload = useCallback((tab: RequestTab) => {
@@ -1145,13 +1192,36 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
   const handleDelete = useCallback(async () => {
     if (!showDelete) return;
+    const deletedId = showDelete.id;
     if (showDelete.type === "collection") {
-      await collectionsApi.delete(showDelete.id);
+      await collectionsApi.delete(deletedId);
+      // Close tabs belonging to this collection
+      setTabs((prev) => {
+        const next = prev.filter((t) =>
+          !(t.tabType === "collection" && t.collectionId === deletedId) &&
+          !(t.parentCollectionId === deletedId),
+        );
+        if (next.length === 0) setActiveTabId("");
+        else if (!next.find((t) => t.id === activeTabId)) setActiveTabId(next[next.length - 1]!.id);
+        return next;
+      });
     } else {
-      await collectionsApi.deleteItem(showDelete.id);
+      await collectionsApi.deleteItem(deletedId);
+      // Close tabs for this specific item (folder or request)
+      setTabs((prev) => {
+        const next = prev.filter((t) => {
+          if (t.tabType === "folder" && t.collectionId === deletedId) return false;
+          // Check if the tab's collectionItemId matches the deleted item
+          if (t.collectionItemId === deletedId) return false;
+          return true;
+        });
+        if (next.length === 0) setActiveTabId("");
+        else if (!next.find((t) => t.id === activeTabId)) setActiveTabId(next[next.length - 1]!.id);
+        return next;
+      });
     }
     loadCollections();
-  }, [showDelete, loadCollections]);
+  }, [showDelete, loadCollections, activeTabId]);
 
   const handleDuplicateCollection = useCallback(async (newName: string) => {
     if (!showDuplicateCol) return;
@@ -1271,7 +1341,16 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const handleSelectWorkspace = useCallback((id: string) => {
     setCurrentWorkspaceId(id);
     localStorage.setItem("openreq-workspace", id);
-  }, []);
+    // Close all saved/collection/folder/testflow tabs — they belong to the old workspace
+    setTabs((prev) => {
+      const next = prev.filter((t) =>
+        !t.savedRequestId && !t.collectionId && t.tabType !== "collection" && t.tabType !== "folder" && t.tabType !== "testflow",
+      );
+      if (next.length === 0) setActiveTabId("");
+      else if (!next.find((t) => t.id === activeTabId)) setActiveTabId(next[next.length - 1]?.id ?? "");
+      return next;
+    });
+  }, [activeTabId]);
 
   // ── History ──
   const handleLoadFromHistory = useCallback((method: string, url: string) => {
@@ -1390,6 +1469,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
 
   return (
+    <ProxyModeContext.Provider value={proxyModeValue}>
     <Box sx={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       <TopBar
         mode={mode}
@@ -2028,5 +2108,6 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         {snack ? <Alert severity={snack.severity} onClose={() => setSnack(null)}>{snack.msg}</Alert> : undefined}
       </Snackbar>
     </Box>
+    </ProxyModeContext.Provider>
   );
 }

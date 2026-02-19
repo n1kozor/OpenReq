@@ -15,11 +15,14 @@ from app.models.request import AuthType
 from app.models.workspace import Workspace
 from app.schemas.proxy import (
     FormDataItem,
+    LocalProxyResponse,
+    PreparedRequest,
     ProxyRequest,
     ProxyResponse,
     RequestSettings,
     ScriptResultSchema,
 )
+from app.services.prepare_token import encode_prepare_token, decode_prepare_token
 from app.services.script_runner import run_pre_request_script, run_post_response_script
 from app.services.js_script_runner import run_pre_request_script_js, run_post_response_script_js
 
@@ -386,28 +389,35 @@ def _persist_scope_changes(
         db.commit()
 
 
-async def execute_proxy_request(
+async def _run_prepare_phase(
     db: Session,
     proxy_req: ProxyRequest,
     extra_variables: dict[str, str] | None = None,
-) -> ProxyResponse:
+) -> tuple[
+    str, str, dict[str, str], str | None, dict[str, str],  # url, method, headers, body, params
+    dict[str, str],  # merged_vars
+    dict,  # pm_kwargs
+    Collection | None,  # collection
+    list[CollectionItem],  # folder_chain
+    ScriptResultSchema | None,  # combined_pre
+    str | None,  # body_type
+    RequestSettings | None,  # request_settings
+]:
+    """Phase 1: Merge variables, run pre-scripts, resolve auth. Shared by prepare & execute."""
     # ── 1. Merge variables: globals < collection < folders (root→leaf) < environment < extra ──
     merged_vars: dict[str, str] = {}
     collection: Collection | None = None
 
-    # Keep separate scope dicts for pm.* context
     ws_globals = _load_workspace_globals(db, proxy_req.collection_id)
     col_vars: dict[str, str] = {}
     env_vars: dict[str, str] = {}
 
-    # Lowest priority: workspace globals
     merged_vars.update(ws_globals)
     if proxy_req.collection_id:
         collection = db.query(Collection).filter(Collection.id == proxy_req.collection_id).first()
         if collection and collection.variables:
             col_vars = dict(collection.variables)
             merged_vars.update(col_vars)
-    # Folder variables (root→leaf, child overrides parent)
     folder_chain = _resolve_folder_chain(db, proxy_req.collection_item_id)
     for folder in folder_chain:
         if folder.variables:
@@ -418,7 +428,6 @@ async def execute_proxy_request(
     if extra_variables:
         merged_vars.update(extra_variables)
 
-    # Common pm.* kwargs for all script calls
     pm_kwargs = dict(
         globals_vars=dict(ws_globals),
         environment_vars=dict(env_vars),
@@ -428,14 +437,13 @@ async def execute_proxy_request(
         iteration_count=proxy_req.iteration_count,
     )
 
-    # Start with the request data from the client
     req_url = proxy_req.url
     req_method = proxy_req.method.value
     req_headers = dict(proxy_req.headers or {})
     req_body = proxy_req.body
     req_params = dict(proxy_req.query_params or {})
 
-    # ── 2a. Run COLLECTION-level pre-request script (runs first) ──
+    # ── 2a. Collection-level pre-request script ──
     col_pre_result: ScriptResultSchema | None = None
     if collection and collection.pre_request_script and collection.pre_request_script.strip():
         col_lang = collection.script_language or "python"
@@ -451,7 +459,7 @@ async def execute_proxy_request(
             col_pre_result, merged_vars, req_url, req_method, req_headers, req_body, req_params,
         )
 
-    # ── 2b. Run FOLDER-level pre-request scripts (root→leaf order) ──
+    # ── 2b. Folder-level pre-request scripts ──
     folder_pre_results: list[ScriptResultSchema] = []
     for folder in folder_chain:
         if folder.pre_request_script and folder.pre_request_script.strip():
@@ -469,7 +477,7 @@ async def execute_proxy_request(
             )
             folder_pre_results.append(f_result)
 
-    # ── 2c. Run REQUEST-level pre-request script (runs last, can override) ──
+    # ── 2c. Request-level pre-request script ──
     pre_result: ScriptResultSchema | None = None
     if proxy_req.pre_request_script and proxy_req.pre_request_script.strip():
         raw = await asyncio.to_thread(
@@ -484,7 +492,7 @@ async def execute_proxy_request(
             pre_result, merged_vars, req_url, req_method, req_headers, req_body, req_params,
         )
 
-    # Combine pre-request results for response (collection + folders + request logs/tests merged)
+    # Combine pre-request results
     combined_pre: ScriptResultSchema | None = None
     all_pre = [r for r in [col_pre_result, *folder_pre_results, pre_result] if r]
     if all_pre:
@@ -497,7 +505,6 @@ async def execute_proxy_request(
             environment_updates={k: v for r in all_pre for k, v in r.environment_updates.items()},
             collection_var_updates={k: v for r in all_pre for k, v in r.collection_var_updates.items()},
         )
-        # Persist pm.* scope changes from pre-request scripts
         _persist_scope_changes(db, combined_pre, proxy_req.collection_id, proxy_req.environment_id)
 
     # ── 3. Resolve variables in URL, headers, body, params ──
@@ -506,10 +513,9 @@ async def execute_proxy_request(
     body = _resolve_variables(req_body, merged_vars) if req_body else None
     params = {k: _resolve_variables(v, merged_vars) for k, v in req_params.items()}
 
-    # ── 3b. URL encoding if request_settings.encode_url is True ──
+    # ── 3b. URL encoding ──
     rs = proxy_req.request_settings
     if rs and rs.encode_url:
-        # Encode URL path segments (leave scheme/host intact)
         from urllib.parse import urlsplit, urlunsplit
         parts = urlsplit(url)
         encoded_path = quote(parts.path, safe="/:@!$&'()*+,;=-._~")
@@ -520,7 +526,6 @@ async def execute_proxy_request(
         resolved_ac = _resolve_auth_config(proxy_req.auth_config, merged_vars)
         headers = _apply_auth(headers, proxy_req.auth_type, resolved_ac)
     else:
-        # Inherit: walk folder tree → collection
         inherited_type, inherited_config = _resolve_inherited_auth(
             db, proxy_req.collection_item_id, collection
         )
@@ -528,18 +533,238 @@ async def execute_proxy_request(
             resolved_ac = _resolve_auth_config(inherited_config, merged_vars)
             headers = _apply_auth(headers, inherited_type, resolved_ac)
 
+    return (
+        url, req_method, headers, body, params,
+        merged_vars, pm_kwargs, collection, folder_chain,
+        combined_pre, proxy_req.body_type, rs,
+    )
+
+
+async def _run_complete_phase(
+    db: Session,
+    status_code: int,
+    response_body: str,
+    response_headers: dict[str, str],
+    elapsed_ms: float,
+    is_binary: bool,
+    content_type: str,
+    body_base64: str | None,
+    merged_vars: dict[str, str],
+    pm_kwargs: dict,
+    collection: Collection | None,
+    folder_chain: list[CollectionItem],
+    post_response_script: str | None,
+    script_language: str,
+    collection_id: str | None,
+    environment_id: str | None,
+    combined_pre: ScriptResultSchema | None,
+) -> ProxyResponse:
+    """Phase 2: Run post-response scripts, persist changes, return final response."""
+    # ── 8a. Collection-level post-response script ──
+    col_post_result: ScriptResultSchema | None = None
+    if collection and collection.post_response_script and collection.post_response_script.strip():
+        col_lang = collection.script_language or "python"
+        raw = await asyncio.to_thread(
+            _run_post_script, collection.post_response_script, col_lang,
+            dict(merged_vars),
+            status_code, response_body, response_headers, round(elapsed_ms, 2),
+            **pm_kwargs,
+        )
+        col_post_result = ScriptResultSchema(**raw)
+        merged_vars.update(col_post_result.variables)
+
+    # ── 8b. Folder-level post-response scripts ──
+    folder_post_results: list[ScriptResultSchema] = []
+    for folder in folder_chain:
+        if folder.post_response_script and folder.post_response_script.strip():
+            f_lang = folder.script_language or "python"
+            raw = await asyncio.to_thread(
+                _run_post_script, folder.post_response_script, f_lang,
+                dict(merged_vars),
+                status_code, response_body, response_headers, round(elapsed_ms, 2),
+                **pm_kwargs,
+            )
+            f_result = ScriptResultSchema(**raw)
+            merged_vars.update(f_result.variables)
+            folder_post_results.append(f_result)
+
+    # ── 8c. Request-level post-response script ──
+    post_result: ScriptResultSchema | None = None
+    if post_response_script and post_response_script.strip():
+        raw = await asyncio.to_thread(
+            _run_post_script, post_response_script, script_language,
+            dict(merged_vars),
+            status_code, response_body, response_headers, round(elapsed_ms, 2),
+            **pm_kwargs,
+        )
+        post_result = ScriptResultSchema(**raw)
+        merged_vars.update(post_result.variables)
+
+    # Combine post results
+    combined_post: ScriptResultSchema | None = None
+    all_post = [r for r in [col_post_result, *folder_post_results, post_result] if r]
+    if all_post:
+        combined_post = ScriptResultSchema(
+            variables=dict(merged_vars),
+            logs=[log for r in all_post for log in r.logs],
+            test_results=[t for r in all_post for t in r.test_results],
+            request_headers={},
+            globals_updates={k: v for r in all_post for k, v in r.globals_updates.items()},
+            environment_updates={k: v for r in all_post for k, v in r.environment_updates.items()},
+            collection_var_updates={k: v for r in all_post for k, v in r.collection_var_updates.items()},
+        )
+        _persist_scope_changes(db, combined_post, collection_id, environment_id)
+
+    return ProxyResponse(
+        status_code=status_code,
+        headers=response_headers,
+        body=response_body,
+        elapsed_ms=round(elapsed_ms, 2),
+        size_bytes=len(response_body.encode()) if response_body else 0,
+        is_binary=is_binary,
+        content_type=content_type,
+        body_base64=body_base64,
+        pre_request_result=combined_pre,
+        script_result=combined_post,
+    )
+
+
+# ── Public API: prepare / complete / execute ──
+
+async def prepare_proxy_request(
+    db: Session,
+    proxy_req: ProxyRequest,
+    extra_variables: dict[str, str] | None = None,
+) -> PreparedRequest:
+    """Resolve variables, run pre-scripts, apply auth. Returns a fully resolved request
+    ready for local execution, plus a signed token for the /complete call."""
+    (
+        url, method, headers, body, params,
+        merged_vars, pm_kwargs, collection, folder_chain,
+        combined_pre, body_type, rs,
+    ) = await _run_prepare_phase(db, proxy_req, extra_variables)
+
+    # Build token context for /complete
+    token_ctx = {
+        "collection_id": proxy_req.collection_id,
+        "environment_id": proxy_req.environment_id,
+        "collection_item_id": proxy_req.collection_item_id,
+        "post_response_script": proxy_req.post_response_script,
+        "script_language": proxy_req.script_language,
+        "merged_vars": merged_vars,
+        "pm_kwargs": pm_kwargs,
+        "folder_chain_ids": [f.id for f in folder_chain],
+        "collection_id_for_scripts": collection.id if collection else None,
+        "request_method": method,
+        "request_url": url,
+        "request_headers": dict(proxy_req.headers or {}),
+        "request_body": proxy_req.body,
+    }
+    token = encode_prepare_token(token_ctx)
+
+    return PreparedRequest(
+        url=url,
+        method=method,
+        headers=headers,
+        body=body,
+        body_type=body_type,
+        query_params=params,
+        form_data=proxy_req.form_data,
+        request_settings=rs,
+        pre_request_result=combined_pre,
+        prepare_token=token,
+    )
+
+
+async def complete_proxy_request(
+    db: Session,
+    local_resp: LocalProxyResponse,
+    current_user_id: str,
+) -> ProxyResponse:
+    """Run post-response scripts, save history, persist pm.* changes."""
+    ctx = decode_prepare_token(local_resp.prepare_token)
+
+    # Reconstruct folder chain from IDs
+    folder_chain: list[CollectionItem] = []
+    for fid in ctx.get("folder_chain_ids", []):
+        item = db.query(CollectionItem).filter(CollectionItem.id == fid).first()
+        if item:
+            folder_chain.append(item)
+
+    # Reconstruct collection
+    collection: Collection | None = None
+    col_id_for_scripts = ctx.get("collection_id_for_scripts")
+    if col_id_for_scripts:
+        collection = db.query(Collection).filter(Collection.id == col_id_for_scripts).first()
+
+    merged_vars = ctx.get("merged_vars", {})
+    pm_kwargs = ctx.get("pm_kwargs", {})
+
+    response_body = local_resp.body
+    response_headers = local_resp.headers
+
+    response = await _run_complete_phase(
+        db=db,
+        status_code=local_resp.status_code,
+        response_body=response_body,
+        response_headers=response_headers,
+        elapsed_ms=local_resp.elapsed_ms,
+        is_binary=local_resp.is_binary,
+        content_type=local_resp.content_type,
+        body_base64=local_resp.body_base64,
+        merged_vars=merged_vars,
+        pm_kwargs=pm_kwargs,
+        collection=collection,
+        folder_chain=folder_chain,
+        post_response_script=ctx.get("post_response_script"),
+        script_language=ctx.get("script_language", "python"),
+        collection_id=ctx.get("collection_id"),
+        environment_id=ctx.get("environment_id"),
+        combined_pre=None,  # already sent in prepare
+    )
+
+    # Save to history
+    from app.models.history import RequestHistory
+    db.add(RequestHistory(
+        user_id=current_user_id,
+        method=ctx.get("request_method", "GET"),
+        url=ctx.get("request_url", ""),
+        request_headers=ctx.get("request_headers"),
+        request_body=ctx.get("request_body"),
+        status_code=local_resp.status_code,
+        response_headers=local_resp.headers,
+        response_body=response_body[:50000] if response_body and not local_resp.is_binary else None,
+        elapsed_ms=local_resp.elapsed_ms,
+        size_bytes=local_resp.size_bytes,
+    ))
+    db.commit()
+
+    return response
+
+
+async def execute_proxy_request(
+    db: Session,
+    proxy_req: ProxyRequest,
+    extra_variables: dict[str, str] | None = None,
+) -> ProxyResponse:
+    """Full server-side proxy: prepare → HTTP call → complete. Used by /proxy/send."""
+    (
+        url, method, headers, body, params,
+        merged_vars, pm_kwargs, collection, folder_chain,
+        combined_pre, body_type, rs,
+    ) = await _run_prepare_phase(db, proxy_req, extra_variables)
+
     # ── 5. Build request kwargs based on body type ──
     request_kwargs: dict = {
-        "method": req_method,
+        "method": method,
         "url": url,
         "headers": headers,
         "params": params,
     }
 
-    body_type = proxy_req.body_type or ""
+    bt = body_type or ""
 
-    if body_type == "x-www-form-urlencoded" and proxy_req.form_data:
-        # Build URL-encoded form data
+    if bt == "x-www-form-urlencoded" and proxy_req.form_data:
         form_dict: dict[str, str] = {}
         for item in proxy_req.form_data:
             if item.enabled and item.key:
@@ -547,8 +772,7 @@ async def execute_proxy_request(
                 v = _resolve_variables(item.value, merged_vars)
                 form_dict[k] = v
         request_kwargs["data"] = form_dict
-    elif body_type == "x-www-form-urlencoded" and body:
-        # Fallback: body is a JSON string of key-value pairs (legacy)
+    elif bt == "x-www-form-urlencoded" and body:
         import json
         try:
             form_dict = json.loads(body)
@@ -557,19 +781,15 @@ async def execute_proxy_request(
             request_kwargs["data"] = form_dict
         except (json.JSONDecodeError, AttributeError):
             request_kwargs["content"] = body
-    elif body_type == "form-data" and proxy_req.form_data:
-        # Build multipart form data
+    elif bt == "form-data" and proxy_req.form_data:
         data, files = _build_form_data(proxy_req.form_data, merged_vars)
         if files:
             request_kwargs["data"] = data
             request_kwargs["files"] = files
         elif data:
-            # No files, just text fields — still multipart
             request_kwargs["data"] = data
-            # Force multipart encoding
             request_kwargs["files"] = []
-    elif body_type == "form-data" and body:
-        # Legacy fallback: body is JSON string
+    elif bt == "form-data" and body:
         import json
         try:
             form_dict = json.loads(body)
@@ -578,11 +798,10 @@ async def execute_proxy_request(
         except (json.JSONDecodeError, AttributeError):
             request_kwargs["content"] = body
     else:
-        # Raw body (json, xml, text, or unknown)
         if body:
             request_kwargs["content"] = body
 
-    # ── 6. Select client (per-request or shared) ──
+    # ── 6. Select client ──
     use_per_request_client = rs is not None
     client: httpx.AsyncClient
 
@@ -612,78 +831,29 @@ async def execute_proxy_request(
 
     if is_binary:
         response_body = ""
-        body_base64 = base64.b64encode(response.content).decode("ascii")
+        body_b64 = base64.b64encode(response.content).decode("ascii")
     else:
         response_body = response.text
-        body_base64 = None
+        body_b64 = None
 
     response_headers = dict(response.headers)
 
-    # ── 8a. Run COLLECTION-level post-response script ──
-    col_post_result: ScriptResultSchema | None = None
-    if collection and collection.post_response_script and collection.post_response_script.strip():
-        col_lang = collection.script_language or "python"
-        raw = await asyncio.to_thread(
-            _run_post_script, collection.post_response_script, col_lang,
-            dict(merged_vars),
-            response.status_code, response_body, response_headers, round(elapsed_ms, 2),
-            **pm_kwargs,
-        )
-        col_post_result = ScriptResultSchema(**raw)
-        merged_vars.update(col_post_result.variables)
-
-    # ── 8b. Run FOLDER-level post-response scripts (root→leaf) ──
-    folder_post_results: list[ScriptResultSchema] = []
-    for folder in folder_chain:
-        if folder.post_response_script and folder.post_response_script.strip():
-            f_lang = folder.script_language or "python"
-            raw = await asyncio.to_thread(
-                _run_post_script, folder.post_response_script, f_lang,
-                dict(merged_vars),
-                response.status_code, response_body, response_headers, round(elapsed_ms, 2),
-                **pm_kwargs,
-            )
-            f_result = ScriptResultSchema(**raw)
-            merged_vars.update(f_result.variables)
-            folder_post_results.append(f_result)
-
-    # ── 8c. Run REQUEST-level post-response script ──
-    post_result: ScriptResultSchema | None = None
-    if proxy_req.post_response_script and proxy_req.post_response_script.strip():
-        raw = await asyncio.to_thread(
-            _run_post_script, proxy_req.post_response_script, proxy_req.script_language,
-            dict(merged_vars),
-            response.status_code, response_body, response_headers, round(elapsed_ms, 2),
-            **pm_kwargs,
-        )
-        post_result = ScriptResultSchema(**raw)
-        merged_vars.update(post_result.variables)
-
-    # Combine post results (collection + folders + request)
-    combined_post: ScriptResultSchema | None = None
-    all_post = [r for r in [col_post_result, *folder_post_results, post_result] if r]
-    if all_post:
-        combined_post = ScriptResultSchema(
-            variables=dict(merged_vars),
-            logs=[log for r in all_post for log in r.logs],
-            test_results=[t for r in all_post for t in r.test_results],
-            request_headers=req_headers,
-            globals_updates={k: v for r in all_post for k, v in r.globals_updates.items()},
-            environment_updates={k: v for r in all_post for k, v in r.environment_updates.items()},
-            collection_var_updates={k: v for r in all_post for k, v in r.collection_var_updates.items()},
-        )
-        # Persist pm.* scope changes from post-response scripts
-        _persist_scope_changes(db, combined_post, proxy_req.collection_id, proxy_req.environment_id)
-
-    return ProxyResponse(
+    return await _run_complete_phase(
+        db=db,
         status_code=response.status_code,
-        headers=response_headers,
-        body=response_body,
-        elapsed_ms=round(elapsed_ms, 2),
-        size_bytes=size_bytes,
+        response_body=response_body,
+        response_headers=response_headers,
+        elapsed_ms=elapsed_ms,
         is_binary=is_binary,
         content_type=raw_ct,
-        body_base64=body_base64,
-        pre_request_result=combined_pre,
-        script_result=combined_post,
+        body_base64=body_b64,
+        merged_vars=merged_vars,
+        pm_kwargs=pm_kwargs,
+        collection=collection,
+        folder_chain=folder_chain,
+        post_response_script=proxy_req.post_response_script,
+        script_language=proxy_req.script_language,
+        collection_id=proxy_req.collection_id,
+        environment_id=proxy_req.environment_id,
+        combined_pre=combined_pre,
     )

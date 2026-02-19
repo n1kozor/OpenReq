@@ -95,6 +95,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      nodeIntegrationInSubFrames: true,
       sandbox: false,
       webviewTag: true,
     },
@@ -133,8 +134,9 @@ function loadSetup() {
 
 function loadApp(url) {
   // Load the shell page which contains a drag bar + webview
+  const webviewPreload = path.join(__dirname, 'webview-preload.js');
   mainWindow.loadFile(path.join(__dirname, 'shell.html'), {
-    query: { url: url },
+    query: { url: url, webviewPreload: webviewPreload },
   });
 }
 
@@ -212,6 +214,88 @@ ipcMain.handle('reset-config', async () => {
   saveConfig({ serverIp: '', serverPort: '80' });
   loadSetup();
   return true;
+});
+
+// ── Local Proxy: execute HTTP requests directly from the desktop ──
+
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
+
+const LOCAL_PROXY_BINARY_PREFIXES = [
+  'image/', 'audio/', 'video/', 'font/',
+  'application/pdf', 'application/zip', 'application/gzip',
+  'application/x-tar', 'application/x-7z-compressed',
+  'application/x-rar-compressed', 'application/octet-stream',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats',
+  'application/msword', 'application/x-bzip2',
+  'application/wasm', 'application/protobuf',
+];
+
+function isLocalProxyBinary(ct) {
+  const lower = (ct || '').toLowerCase().split(';')[0].trim();
+  return LOCAL_PROXY_BINARY_PREFIXES.some(p => lower.startsWith(p));
+}
+
+ipcMain.handle('local-proxy-request', async (_event, { url, method, headers, body, query_params }) => {
+  const urlObj = new URL(url);
+  if (query_params) {
+    for (const [k, v] of Object.entries(query_params)) {
+      urlObj.searchParams.set(k, v);
+    }
+  }
+
+  const isHttps = urlObj.protocol === 'https:';
+  const lib = isHttps ? https : http;
+  const startTime = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const reqOptions = {
+      method: method || 'GET',
+      headers: headers || {},
+      timeout: 120000,
+    };
+
+    // Disable SSL verification for local development scenarios
+    if (isHttps) {
+      reqOptions.rejectUnauthorized = false;
+    }
+
+    const req = lib.request(urlObj.toString(), reqOptions, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const elapsed = Date.now() - startTime;
+        const buffer = Buffer.concat(chunks);
+        const contentType = res.headers['content-type'] || '';
+        const isBinary = isLocalProxyBinary(contentType);
+
+        const respHeaders = {};
+        for (const [k, v] of Object.entries(res.headers)) {
+          respHeaders[k] = Array.isArray(v) ? v.join(', ') : String(v);
+        }
+
+        resolve({
+          status_code: res.statusCode,
+          headers: respHeaders,
+          body: isBinary ? '' : buffer.toString('utf-8'),
+          body_base64: isBinary ? buffer.toString('base64') : null,
+          is_binary: isBinary,
+          content_type: contentType,
+          elapsed_ms: elapsed,
+          size_bytes: buffer.length,
+        });
+      });
+    });
+
+    req.on('error', (err) => reject(new Error(`Local proxy error: ${err.message}`)));
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timeout (120s)')); });
+
+    if (body && !['GET', 'HEAD'].includes((method || 'GET').toUpperCase())) {
+      req.write(body);
+    }
+    req.end();
+  });
 });
 
 // ── App lifecycle ──

@@ -1,6 +1,6 @@
 {
   "name": "openreq-desktop",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "description": "OpenReq Desktop Client",
   "main": "src/main.js",
   "scripts": {

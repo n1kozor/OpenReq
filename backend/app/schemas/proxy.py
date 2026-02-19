@@ -82,3 +82,32 @@ class ProxyResponse(BaseModel):
     # Script results (only present when scripts were executed)
     pre_request_result: ScriptResultSchema | None = None
     script_result: ScriptResultSchema | None = None
+
+
+# ── Local Proxy (prepare/complete flow) ──
+
+class PreparedRequest(BaseModel):
+    """Returned by /proxy/prepare — fully resolved request ready for local execution."""
+    url: str
+    method: str
+    headers: dict[str, str]
+    body: str | None = None
+    body_type: str | None = None
+    query_params: dict[str, str] = {}
+    form_data: list[FormDataItem] | None = None
+    request_settings: RequestSettings | None = None
+    pre_request_result: ScriptResultSchema | None = None
+    prepare_token: str
+
+
+class LocalProxyResponse(BaseModel):
+    """Sent by the client to /proxy/complete — raw response from local HTTP call."""
+    status_code: int
+    headers: dict[str, str]
+    body: str = ""
+    body_base64: str | None = None
+    is_binary: bool = False
+    content_type: str = ""
+    elapsed_ms: float
+    size_bytes: int
+    prepare_token: str

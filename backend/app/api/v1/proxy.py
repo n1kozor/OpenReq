@@ -8,9 +8,9 @@ from app.api.deps import get_current_user
 from app.database import get_db
 from app.models.history import RequestHistory
 from app.models.user import User
-from app.schemas.proxy import ProxyRequest, ProxyResponse
+from app.schemas.proxy import LocalProxyResponse, PreparedRequest, ProxyRequest, ProxyResponse
 from app.services.collection_runner import run_collection_stream
-from app.services.proxy import execute_proxy_request
+from app.services.proxy import execute_proxy_request, prepare_proxy_request, complete_proxy_request
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,46 @@ async def send_request(
         response.is_binary,
     )
     return response
+
+
+@router.post("/prepare", response_model=PreparedRequest)
+async def prepare_request(
+    payload: ProxyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Resolve variables, run pre-scripts, apply auth. Returns fully resolved request
+    for local execution by browser extension or desktop app."""
+    logger.info(
+        "Proxy prepare | user=%s method=%s url=%s",
+        current_user.id, payload.method.value, payload.url,
+    )
+    try:
+        return await prepare_proxy_request(db, payload)
+    except Exception as exc:
+        logger.exception("Proxy prepare failed")
+        raise HTTPException(status_code=500, detail=f"Prepare failed: {exc}")
+
+
+@router.post("/complete", response_model=ProxyResponse)
+async def complete_request(
+    payload: LocalProxyResponse,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Run post-response scripts, save history, persist pm.* changes.
+    Called after the client has executed the request locally."""
+    logger.info(
+        "Proxy complete | user=%s status=%d elapsed=%.2fms",
+        current_user.id, payload.status_code, payload.elapsed_ms,
+    )
+    try:
+        return await complete_proxy_request(db, payload, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Proxy complete failed")
+        raise HTTPException(status_code=500, detail=f"Complete failed: {exc}")
 
 
 @router.post("/run/{collection_id}")

@@ -272,6 +272,33 @@ export interface WebSocketMessage {
   direction: "sent" | "received";
 }
 
+export type ProxyMode = "server" | "local";
+
+export interface PreparedRequest {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body?: string | null;
+  body_type?: string | null;
+  query_params: Record<string, string>;
+  form_data?: { key: string; value: string; type: string; enabled: boolean; file_name?: string | null; file_content_base64?: string | null }[] | null;
+  request_settings?: Record<string, unknown> | null;
+  pre_request_result: ScriptResult | null;
+  prepare_token: string;
+}
+
+export interface LocalProxyResponse {
+  status_code: number;
+  headers: Record<string, string>;
+  body: string;
+  body_base64?: string | null;
+  is_binary: boolean;
+  content_type: string;
+  elapsed_ms: number;
+  size_bytes: number;
+  prepare_token: string;
+}
+
 export type TabType = "request" | "collection" | "testflow" | "folder";
 
 export type ScriptLanguage = "javascript" | "python";

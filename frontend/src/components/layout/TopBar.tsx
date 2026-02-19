@@ -19,7 +19,9 @@ import {
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
+import { Cloud, Lan } from "@mui/icons-material";
 import type { Environment } from "@/types";
+import { useProxyMode } from "@/hooks/useProxyMode";
 
 interface TopBarProps {
   mode: "dark" | "light";
@@ -62,6 +64,8 @@ export default function TopBar({
     i18n.changeLanguage(lang);
     localStorage.setItem("openreq-lang", lang);
   };
+
+  const { proxyMode, setProxyMode, localAvailable } = useProxyMode();
 
   return (
     <AppBar
@@ -241,6 +245,97 @@ export default function TopBar({
             </Select>
           </FormControl>
         )}
+
+        {/* Proxy Mode selector — Server vs Local */}
+        <FormControl size="small">
+          <Select
+            value={proxyMode}
+            onChange={(e) => {
+              const val = e.target.value as typeof proxyMode;
+              if (val === "server" || localAvailable) setProxyMode(val);
+            }}
+            IconComponent={KeyboardArrowDown}
+            renderValue={(val) => {
+              const isLocal = val === "local";
+              const unavailable = isLocal && !localAvailable;
+              return (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                  {isLocal ? (
+                    <Lan sx={{ fontSize: 14, color: unavailable ? theme.palette.error.main : theme.palette.success.main }} />
+                  ) : (
+                    <Cloud sx={{ fontSize: 14 }} />
+                  )}
+                  <span style={{ color: unavailable ? theme.palette.error.main : undefined }}>
+                    {t(`proxyMode.${val}`)}
+                  </span>
+                  {unavailable && (
+                    <Box
+                      sx={{
+                        width: 6, height: 6, borderRadius: "50%",
+                        bgcolor: theme.palette.error.main,
+                        boxShadow: `0 0 6px ${theme.palette.error.main}`,
+                        ml: 0.25,
+                      }}
+                    />
+                  )}
+                </Box>
+              );
+            }}
+            sx={{
+              height: 32,
+              fontSize: "0.8rem",
+              fontWeight: 500,
+              borderRadius: 2,
+              minWidth: 130,
+              backgroundColor: alpha(
+                proxyMode === "local" && !localAvailable ? theme.palette.error.main : theme.palette.text.primary,
+                proxyMode === "local" && !localAvailable ? (isDark ? 0.08 : 0.06) : (isDark ? 0.04 : 0.03),
+              ),
+              border: `1px solid ${alpha(
+                proxyMode === "local" && !localAvailable ? theme.palette.error.main : (isDark ? "#8b949e" : "#64748b"),
+                proxyMode === "local" && !localAvailable ? 0.4 : 0.12,
+              )}`,
+              transition: "all 0.2s ease",
+              "& .MuiOutlinedInput-notchedOutline": { border: "none" },
+              "&:hover": {
+                backgroundColor: alpha(theme.palette.text.primary, isDark ? 0.07 : 0.06),
+                borderColor: alpha(theme.palette.primary.main, 0.4),
+              },
+              "& .MuiSelect-icon": {
+                fontSize: "1.1rem",
+                color: theme.palette.text.secondary,
+              },
+            }}
+          >
+            {/* Server — always available */}
+            <MenuItem value="server">
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Cloud sx={{ fontSize: 16, color: theme.palette.info.main }} />
+                <Box>
+                  <Typography variant="body2" fontWeight={500}>{t("proxyMode.server")}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
+                    {t("proxyMode.serverDesc")}
+                  </Typography>
+                </Box>
+              </Box>
+            </MenuItem>
+
+            {/* Local — disabled with red indicator if no channel available */}
+            <MenuItem value="local" disabled={!localAvailable}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, opacity: localAvailable ? 1 : 0.55 }}>
+                <Lan sx={{ fontSize: 16, color: localAvailable ? theme.palette.success.main : theme.palette.error.main }} />
+                <Box>
+                  <Typography variant="body2" fontWeight={500} sx={{ color: localAvailable ? undefined : theme.palette.error.main }}>
+                    {t("proxyMode.local")}
+                  </Typography>
+                  <Typography variant="caption" sx={{ fontSize: "0.65rem", color: localAvailable ? "text.secondary" : theme.palette.error.main }}>
+                    {localAvailable ? t("proxyMode.localDesc") : t("proxyMode.localNotAvailable")}
+                  </Typography>
+                </Box>
+              </Box>
+            </MenuItem>
+          </Select>
+        </FormControl>
 
         <Box sx={{ flexGrow: 1 }} />
 

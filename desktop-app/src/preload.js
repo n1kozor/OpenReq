@@ -8,4 +8,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimize: () => ipcRenderer.send('window-minimize'),
   maximize: () => ipcRenderer.send('window-maximize'),
   close: () => ipcRenderer.send('window-close'),
+  // Local proxy: execute HTTP requests directly from the desktop app
+  localProxy: (request) => ipcRenderer.invoke('local-proxy-request', request),
 });

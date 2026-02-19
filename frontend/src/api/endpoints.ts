@@ -27,6 +27,8 @@ import type {
   TestFlowRunDetail,
   TestFlowNodeData,
   TestFlowEdgeData,
+  PreparedRequest,
+  LocalProxyResponse,
 } from "@/types";
 
 // ── Auth ──
@@ -200,6 +202,40 @@ export const proxyApi = {
       disabled_tls_protocols: string[];
     };
   }) => client.post<ProxyResponse>("/proxy/send", data),
+
+  prepare: (data: {
+    method: HttpMethod;
+    url: string;
+    headers?: Record<string, string>;
+    body?: string;
+    body_type?: string;
+    form_data?: { key: string; value: string; type: string; enabled: boolean; file_name?: string | null; file_content_base64?: string | null }[];
+    query_params?: Record<string, string>;
+    auth_type?: AuthType;
+    auth_config?: Record<string, string>;
+    environment_id?: string;
+    collection_id?: string;
+    collection_item_id?: string;
+    pre_request_script?: string;
+    post_response_script?: string;
+    script_language?: string;
+    request_settings?: {
+      http_version: string;
+      verify_ssl: boolean;
+      follow_redirects: boolean;
+      follow_original_method: boolean;
+      follow_auth_header: boolean;
+      remove_referer_on_redirect: boolean;
+      encode_url: boolean;
+      max_redirects: number;
+      disable_cookie_jar: boolean;
+      use_server_cipher_suite: boolean;
+      disabled_tls_protocols: string[];
+    };
+  }) => client.post<PreparedRequest>("/proxy/prepare", data),
+
+  complete: (data: LocalProxyResponse) =>
+    client.post<ProxyResponse>("/proxy/complete", data),
 
   runCollection: (
     collectionId: string,
