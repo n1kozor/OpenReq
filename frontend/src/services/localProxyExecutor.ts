@@ -4,6 +4,8 @@
  * the user's machine to reach internal/private APIs.
  */
 
+import { safeRandomUUID } from "@/utils/uuid";
+
 export interface LocalHttpResult {
   status_code: number;
   headers: Record<string, string>;
@@ -29,7 +31,7 @@ export interface LocalProxyRequest {
  */
 export function executeViaExtension(request: LocalProxyRequest): Promise<LocalHttpResult> {
   return new Promise((resolve, reject) => {
-    const requestId = crypto.randomUUID();
+    const requestId = safeRandomUUID();
     let settled = false;
 
     const handler = (event: MessageEvent) => {
@@ -85,7 +87,7 @@ export async function executeViaDesktop(request: LocalProxyRequest): Promise<Loc
  */
 export function wsConnectViaExtension(url: string, headers?: Record<string, string>): Promise<void> {
   return new Promise((resolve, reject) => {
-    const requestId = crypto.randomUUID();
+    const requestId = safeRandomUUID();
     const handler = (event: MessageEvent) => {
       if (event.source !== window) return;
       if (event.data?.type !== "OPENREQ_WS_CONNECTED" || event.data.requestId !== requestId) return;

@@ -26,6 +26,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { testFlowsApi, requestsApi } from "@/api/endpoints";
+import { safeRandomUUID } from "@/utils/uuid";
 import type { Collection, CollectionItem, Environment, TestFlow, TestFlowNodeData, TestFlowEdgeData } from "@/types";
 import { NODE_TYPE_CONFIGS } from "./config/nodeTypes";
 import { edgeTypes, defaultEdgeOptions } from "./config/edgeTypes";
@@ -73,17 +74,6 @@ interface TestFlowCanvasProps {
 }
 
 let nodeCounter = 0;
-const fallbackRandomId = () => {
-  const rand = Math.random().toString(36).slice(2);
-  return `r-${Date.now().toString(36)}-${rand}`;
-};
-
-const safeRandomUUID = () => {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return fallbackRandomId();
-};
 
 export default function TestFlowCanvas({
   flowId,
