@@ -1588,7 +1588,11 @@ function MessageBubble({
       {/* Context badge */}
       {message.context_name && (
         <Typography sx={{ fontSize: 11, color: "text.secondary", mb: 0.25, px: 0.5 }}>
-          {message.context_type === "collection" ? t("collection.collection") : message.context_type === "folder" ? t("collection.folder") : "Request"}: {message.context_name}
+          {message.context_type === "collection"
+            ? (t ? t("collection.collection") : "Collection")
+            : message.context_type === "folder"
+              ? (t ? t("collection.folder") : "Folder")
+              : "Request"}: {message.context_name}
         </Typography>
       )}
       <Box
