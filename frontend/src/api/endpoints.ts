@@ -1,3 +1,4 @@
+import axios from "axios";
 import client, { API_URL } from "./client";
 import type {
   Token,
@@ -29,6 +30,9 @@ import type {
   TestFlowEdgeData,
   PreparedRequest,
   LocalProxyResponse,
+  ShareOut,
+  SharePublicMeta,
+  ShareDocsData,
 } from "@/types";
 
 // ── Auth ──
@@ -981,6 +985,49 @@ export interface DocGenCallbacks {
   }) => void;
   onError: (message: string) => void;
 }
+
+// ── Shares (authenticated) ──
+export const sharesApi = {
+  create: (data: {
+    collection_id: string;
+    folder_id?: string | null;
+    title?: string | null;
+    description_override?: string | null;
+    password?: string | null;
+    expires_at?: string | null;
+  }) => client.post<ShareOut>("/shares/", data),
+
+  list: (collectionId: string) =>
+    client.get<ShareOut[]>("/shares/", { params: { collection_id: collectionId } }),
+
+  update: (id: string, data: {
+    title?: string | null;
+    description_override?: string | null;
+    password?: string | null;
+    remove_password?: boolean;
+    is_active?: boolean;
+    expires_at?: string | null;
+  }) => client.patch<ShareOut>(`/shares/${id}`, data),
+
+  delete: (id: string) => client.delete(`/shares/${id}`),
+};
+
+// ── Public (no auth) ──
+export const publicApi = {
+  getShareMeta: (token: string) =>
+    axios.get<SharePublicMeta>(`${API_URL}/api/v1/public/share/${token}`),
+
+  verifyPassword: (token: string, password: string) =>
+    axios.post<{ session_token: string; expires_in: number }>(
+      `${API_URL}/api/v1/public/share/${token}/verify`,
+      { password },
+    ),
+
+  getShareDocs: (token: string, sessionToken?: string) =>
+    axios.get<ShareDocsData>(`${API_URL}/api/v1/public/share/${token}/docs`, {
+      headers: sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {},
+    }),
+};
 
 export const docsApi = {
   generateStream: (

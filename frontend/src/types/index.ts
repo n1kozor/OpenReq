@@ -491,7 +491,7 @@ export interface AIChatMessage {
   conversation_id: string;
   role: "user" | "assistant" | "system";
   content: string;
-  context_type: "collection" | "request" | null;
+  context_type: "collection" | "request" | "folder" | null;
   context_id: string | null;
   context_name: string | null;
   created_at: string;
@@ -639,4 +639,74 @@ export interface TestFlowRunSummary {
 export interface TestFlowRunDetail extends TestFlowRunSummary {
   final_variables: Record<string, string> | null;
   results: TestFlowRunResult[];
+}
+
+// ── Share / Guest Mode Types ──
+
+export interface ShareOut {
+  id: string;
+  token: string;
+  collection_id: string;
+  folder_id: string | null;
+  title: string | null;
+  description_override: string | null;
+  has_password: boolean;
+  is_active: boolean;
+  view_count: number;
+  expires_at: string | null;
+  created_at: string;
+  share_url: string;
+}
+
+export interface SharePublicMeta {
+  title: string;
+  description: string | null;
+  has_password: boolean;
+  endpoint_count: number;
+  collection_name: string;
+}
+
+export interface DocEndpointHeader {
+  name: string;
+  type: string;
+  description: string;
+  sensitive: boolean;
+}
+
+export interface DocEndpointParam {
+  name: string;
+  type: string;
+  description: string;
+}
+
+export interface DocEndpoint {
+  index: number;
+  name: string;
+  method: string;
+  url: string;
+  protocol: string;
+  folder: string;
+  description: string;
+  notes: string;
+  headers: DocEndpointHeader[];
+  query_params: DocEndpointParam[];
+  body_type: string | null;
+  body_schema: unknown;
+  body_fields_desc: Record<string, string>;
+  auth: { type: string; config_keys: string[] } | null;
+}
+
+export interface DocFolderNode {
+  name: string;
+  endpoints: number[];
+  children: DocFolderNode[];
+}
+
+export interface ShareDocsData {
+  title: string;
+  description: string | null;
+  endpoint_count: number;
+  endpoints: DocEndpoint[];
+  folder_tree: DocFolderNode[];
+  generated_at: string;
 }

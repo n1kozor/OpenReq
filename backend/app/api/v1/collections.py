@@ -336,7 +336,26 @@ def delete_item(
     item = db.query(CollectionItem).filter(CollectionItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
-    db.delete(item)
+    # Explicitly delete descendants to avoid orphaned items when DB FK cascades are not enforced.
+    from app.models.request import Request
+
+    items = db.query(CollectionItem).filter(CollectionItem.collection_id == item.collection_id).all()
+    children_by_parent: dict[str | None, list[CollectionItem]] = {}
+    for it in items:
+        children_by_parent.setdefault(it.parent_id, []).append(it)
+
+    to_delete: list[CollectionItem] = []
+    stack = [item]
+    while stack:
+        current = stack.pop()
+        to_delete.append(current)
+        for child in children_by_parent.get(current.id, []):
+            stack.append(child)
+
+    request_ids = [it.request_id for it in to_delete if it.request_id]
+    if request_ids:
+        db.query(Request).filter(Request.id.in_(request_ids)).delete(synchronize_session=False)
+    db.query(CollectionItem).filter(CollectionItem.id.in_([it.id for it in to_delete])).delete(synchronize_session=False)
     db.commit()
 
 

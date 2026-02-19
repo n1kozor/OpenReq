@@ -42,6 +42,7 @@ import {
   Visibility,
   Assessment,
   Delete,
+  IosShare,
 } from "@mui/icons-material";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -53,6 +54,7 @@ import { VariableValueCell } from "@/components/common/KeyValueEditor";
 import RunReportView from "./RunReportView";
 import { runsApi } from "@/api/endpoints";
 import { formatMs } from "./runnerUtils";
+import ShareManageDialog from "@/components/share/ShareManageDialog";
 import type { Collection, CollectionItem, AuthType, OAuthConfig, ScriptLanguage, CollectionRunSummary } from "@/types";
 import type { VariableInfo, VariableGroup } from "@/hooks/useVariableGroups";
 
@@ -156,6 +158,7 @@ export default function CollectionDetail({
   const [loadingRuns, setLoadingRuns] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [deleteRunConfirm, setDeleteRunConfirm] = useState<string | null>(null);
+  const [showShareDialog, setShowShareDialog] = useState(false);
   const [preRequestScript, setPreRequestScript] = useState(collection.pre_request_script || "");
   const [postResponseScript, setPostResponseScript] = useState(collection.post_response_script || "");
   const [scriptLanguage, setScriptLanguage] = useState<ScriptLanguage>(
@@ -364,6 +367,15 @@ export default function CollectionDetail({
           </Box>
         </Box>
         <Box sx={{ display: "flex", gap: 1, ml: 2, flexShrink: 0 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<IosShare />}
+            onClick={() => setShowShareDialog(true)}
+            sx={{ textTransform: "none" }}
+          >
+            {t("share.title")}
+          </Button>
           <Button
             variant="outlined"
             size="small"
@@ -887,6 +899,13 @@ export default function CollectionDetail({
           </Dialog>
         </Paper>
       )}
+      {/* Share Dialog */}
+      <ShareManageDialog
+        open={showShareDialog}
+        onClose={() => setShowShareDialog(false)}
+        collectionId={collection.id}
+        collectionName={collection.name}
+      />
     </Box>
   );
 }

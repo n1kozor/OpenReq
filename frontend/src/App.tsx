@@ -8,6 +8,7 @@ import AppShell from "@/components/layout/AppShell";
 import Login from "@/pages/Login";
 import SetupWizard from "@/pages/SetupWizard";
 import WorkspaceSelector from "@/pages/WorkspaceSelector";
+import ShareDocPage from "@/pages/ShareDocPage";
 import "@/i18n";
 
 const queryClient = new QueryClient({
@@ -68,6 +69,19 @@ export default function App() {
   const handleWorkspaceSelected = () => {
     setNeedsWorkspace(false);
   };
+
+  // Public share page — no auth needed
+  const isSharePage = window.location.pathname.startsWith("/share/");
+  if (isSharePage) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <ShareDocPage mode={mode} onToggleTheme={toggleTheme} />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+  }
 
   if (loading || checkingSetup) {
     return (

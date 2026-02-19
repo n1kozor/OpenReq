@@ -40,6 +40,7 @@ import {
   ContentCopy,
   Lock,
   Refresh,
+  IosShare,
 } from "@mui/icons-material";
 import { List as VirtualList } from "react-window";
 import { useTranslation } from "react-i18next";
@@ -100,6 +101,7 @@ interface SidebarProps {
   onOpenAIAgent: () => void;
   onOpenTestBuilder: () => void;
   onGenerateDocs: (collectionId: string, collectionName: string, folderId?: string, folderName?: string) => void;
+  onShareDocs: (collectionId: string, collectionName: string, folderId?: string | null, folderName?: string | null) => void;
   onRefreshCollections: () => void;
 }
 
@@ -144,6 +146,7 @@ export default function Sidebar({
   onOpenAIAgent,
   onOpenTestBuilder,
   onGenerateDocs,
+  onShareDocs,
   onRefreshCollections,
 }: SidebarProps) {
   const { t } = useTranslation();
@@ -863,6 +866,15 @@ export default function Sidebar({
         <MuiMenuItem
           onClick={() => {
             setColMenuPos(null);
+            if (colMenuTarget) onShareDocs(colMenuTarget.id, colMenuTarget.name);
+          }}
+        >
+          <IosShare sx={{ mr: 1.5, fontSize: 16, color: "primary.main" }} />{" "}
+          {t("share.title")}
+        </MuiMenuItem>
+        <MuiMenuItem
+          onClick={() => {
+            setColMenuPos(null);
             if (colMenuTarget) onDuplicateCollection(colMenuTarget.id, colMenuTarget.name);
           }}
         >
@@ -904,9 +916,9 @@ export default function Sidebar({
         open={!!itemMenuPos}
         onClose={() => setItemMenuPos(null)}
       >
-        {itemMenuTarget?.is_folder ? (
-          <>
+        {itemMenuTarget?.is_folder ? ([
           <MuiMenuItem
+            key="add-folder"
             onClick={() => {
               setItemMenuPos(null);
               if (itemMenuTarget && itemMenuCollectionId)
@@ -914,8 +926,9 @@ export default function Sidebar({
             }}
           >
             <CreateNewFolder sx={{ mr: 1.5, fontSize: 16 }} /> {t("collection.addFolder")}
-          </MuiMenuItem>
+          </MuiMenuItem>,
           <MuiMenuItem
+            key="add-request"
             onClick={() => {
               setItemMenuPos(null);
               if (itemMenuTarget && itemMenuCollectionId)
@@ -923,9 +936,10 @@ export default function Sidebar({
             }}
           >
             <NoteAdd sx={{ mr: 1.5, fontSize: 16 }} /> {t("collection.addRequest")}
-          </MuiMenuItem>
-          <Divider />
+          </MuiMenuItem>,
+          <Divider key="div" />,
           <MuiMenuItem
+            key="edit-auth"
             onClick={() => {
               setItemMenuPos(null);
               if (itemMenuTarget && itemMenuCollectionId)
@@ -933,8 +947,9 @@ export default function Sidebar({
             }}
           >
             <Lock sx={{ mr: 1.5, fontSize: 16, color: "warning.main" }} /> {t("folder.editAuth")}
-          </MuiMenuItem>
+          </MuiMenuItem>,
           <MuiMenuItem
+            key="export-folder"
             onClick={() => {
               setItemMenuPos(null);
               if (itemMenuTarget)
@@ -942,8 +957,9 @@ export default function Sidebar({
             }}
           >
             <FileDownload sx={{ mr: 1.5, fontSize: 16 }} /> {t("collection.exportFolder")}
-          </MuiMenuItem>
+          </MuiMenuItem>,
           <MuiMenuItem
+            key="generate-docs"
             onClick={() => {
               setItemMenuPos(null);
               if (itemMenuTarget && itemMenuCollectionId)
@@ -952,9 +968,19 @@ export default function Sidebar({
           >
             <AutoAwesome sx={{ mr: 1.5, fontSize: 16, color: "secondary.main" }} />{" "}
             {t("docGenerator.menuItem")}
-          </MuiMenuItem>
-          </>
-        ) : (
+          </MuiMenuItem>,
+          <MuiMenuItem
+            key="share-docs"
+            onClick={() => {
+              setItemMenuPos(null);
+              if (itemMenuTarget && itemMenuCollectionId)
+                onShareDocs(itemMenuCollectionId, "", itemMenuTarget.id, itemMenuTarget.name);
+            }}
+          >
+            <IosShare sx={{ mr: 1.5, fontSize: 16, color: "primary.main" }} />{" "}
+            {t("share.title")}
+          </MuiMenuItem>,
+        ]) : (
           <MuiMenuItem
             onClick={() => {
               setItemMenuPos(null);

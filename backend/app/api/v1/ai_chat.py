@@ -64,7 +64,7 @@ class MessageOut(BaseModel):
 
 class SendMessageRequest(BaseModel):
     content: str
-    context_type: str | None = None  # "collection" | "request"
+    context_type: str | None = None  # "collection" | "folder" | "request"
     context_id: str | None = None
     context_name: str | None = None
     provider: str | None = None

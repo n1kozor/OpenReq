@@ -45,13 +45,18 @@ import {
   Public,
   PublicOff,
   DriveFileRenameOutline,
+  FolderOpen,
+  Http,
+  Cable,
+  Hub,
 } from "@mui/icons-material";
 import { alpha, useTheme } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
-import { aiChatApi, appSettingsApi } from "@/api/endpoints";
+import { aiChatApi, appSettingsApi, collectionsApi } from "@/api/endpoints";
 import { API_URL } from "@/api/client";
 import type {
   Collection,
+  CollectionItem,
   RequestTab,
   AIConversation,
   AIChatMessage,
@@ -466,11 +471,15 @@ export default function AIAgentDrawer({
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
 
   // Context
-  const [contextType, setContextType] = useState<"collection" | "request" | null>(null);
+  const [contextType, setContextType] = useState<"collection" | "request" | "folder" | null>(null);
   const [contextId, setContextId] = useState<string | null>(null);
   const [contextName, setContextName] = useState<string | null>(null);
   const [attachMenuAnchor, setAttachMenuAnchor] = useState<HTMLElement | null>(null);
-  const [collectionMenuAnchor, setCollectionMenuAnchor] = useState<HTMLElement | null>(null);
+  const [showAttachDialog, setShowAttachDialog] = useState(false);
+  const [attachCollectionId, setAttachCollectionId] = useState<string>("");
+  const [attachItems, setAttachItems] = useState<Record<string, CollectionItem[]>>({});
+  const [attachLoading, setAttachLoading] = useState<Record<string, boolean>>({});
+  const [attachSearch, setAttachSearch] = useState("");
 
   // Delete confirm
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
@@ -503,13 +512,13 @@ export default function AIAgentDrawer({
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         // If context menu or dialog is open, don't close drawer
-        if (convContextMenu || deleteTarget || renameTarget) return;
+        if (convContextMenu || deleteTarget || renameTarget || showAttachDialog) return;
         onClose();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose, convContextMenu, deleteTarget, renameTarget]);
+  }, [open, onClose, convContextMenu, deleteTarget, renameTarget, showAttachDialog]);
 
   // ── Load settings + conversations on open ──
   useEffect(() => {
@@ -722,7 +731,7 @@ export default function AIAgentDrawer({
 
   // ── Run collection tests ──
   const handleRunCollection = useCallback(async () => {
-    const collectionId = contextId || activeTab?.collectionId;
+    const collectionId = contextType === "collection" ? contextId : activeTab?.collectionId;
     if (!collectionId || isRunningCollection || isStreaming) return;
 
     setIsRunningCollection(true);
@@ -833,7 +842,7 @@ export default function AIAgentDrawer({
       };
       setMessages((prev) => [...prev, errMsg]);
     }
-  }, [contextId, activeTab?.collectionId, isRunningCollection, isStreaming, activeConvId, sendMessageProgrammatic]);
+  }, [contextType, contextId, activeTab?.collectionId, isRunningCollection, isStreaming, activeConvId, sendMessageProgrammatic]);
 
   // ── Delete conversation ──
   const handleDelete = useCallback(async () => {
@@ -872,13 +881,103 @@ export default function AIAgentDrawer({
   }, []);
 
   // ── Attach context ──
-  const handleAttachCollection = useCallback((col: Collection) => {
+  const loadAttachItems = useCallback(async (collectionId: string) => {
+    if (!collectionId || attachLoading[collectionId]) return;
+    setAttachLoading((prev) => ({ ...prev, [collectionId]: true }));
+    try {
+      const { data } = await collectionsApi.listItems(collectionId);
+      setAttachItems((prev) => ({ ...prev, [collectionId]: data }));
+    } catch {
+      /* ignore */
+    } finally {
+      setAttachLoading((prev) => ({ ...prev, [collectionId]: false }));
+    }
+  }, [attachLoading]);
+
+  useEffect(() => {
+    if (!showAttachDialog) return;
+    const nextId = attachCollectionId || activeTab?.collectionId || collections[0]?.id || "";
+    if (nextId && nextId !== attachCollectionId) setAttachCollectionId(nextId);
+  }, [showAttachDialog, attachCollectionId, activeTab?.collectionId, collections]);
+
+  useEffect(() => {
+    if (!showAttachDialog || !attachCollectionId) return;
+    if (!attachItems[attachCollectionId]) loadAttachItems(attachCollectionId);
+  }, [showAttachDialog, attachCollectionId, attachItems, loadAttachItems]);
+
+  const attachRows = useMemo(() => {
+    const items = attachItems[attachCollectionId] ?? [];
+    if (items.length === 0) return [] as Array<{ item: CollectionItem; depth: number }>;
+
+    const childrenByParent = new Map<string | null, CollectionItem[]>();
+    for (const item of items) {
+      const parent = item.parent_id ?? null;
+      const list = childrenByParent.get(parent) ?? [];
+      list.push(item);
+      childrenByParent.set(parent, list);
+    }
+    for (const list of childrenByParent.values()) {
+      list.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    }
+
+    const rows: Array<{ item: CollectionItem; depth: number }> = [];
+    const walk = (parentId: string | null, depth: number) => {
+      const nodes = childrenByParent.get(parentId) ?? [];
+      for (const node of nodes) {
+        rows.push({ item: node, depth });
+        if (node.is_folder) walk(node.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+
+    const term = attachSearch.trim().toLowerCase();
+    if (!term) return rows;
+    return rows.filter((r) => r.item.name.toLowerCase().includes(term));
+  }, [attachItems, attachCollectionId, attachSearch]);
+
+  const getAttachPath = useCallback((itemId: string | null) => {
+    if (!itemId) return "";
+    const items = attachItems[attachCollectionId] ?? [];
+    const map = new Map<string, CollectionItem>(items.map((i) => [i.id, i]));
+    const parts: string[] = [];
+    let cur = map.get(itemId);
+    while (cur) {
+      parts.push(cur.name);
+      if (!cur.parent_id) break;
+      cur = map.get(cur.parent_id);
+    }
+    return parts.reverse().join(" / ");
+  }, [attachItems, attachCollectionId]);
+
+  const handleAttachCollection = useCallback((collectionId: string) => {
+    const col = collections.find((c) => c.id === collectionId);
     setContextType("collection");
-    setContextId(col.id);
-    setContextName(col.name);
-    setCollectionMenuAnchor(null);
+    setContextId(collectionId);
+    setContextName(col?.name ?? "Collection");
+    setShowAttachDialog(false);
     setAttachMenuAnchor(null);
-  }, []);
+  }, [collections]);
+
+  const handleAttachFolder = useCallback((folder: CollectionItem) => {
+    const col = collections.find((c) => c.id === attachCollectionId);
+    const path = getAttachPath(folder.id);
+    setContextType("folder");
+    setContextId(folder.id);
+    setContextName(col ? `${col.name} / ${path}` : path || folder.name);
+    setShowAttachDialog(false);
+    setAttachMenuAnchor(null);
+  }, [collections, attachCollectionId, getAttachPath]);
+
+  const handleAttachRequestFromTree = useCallback((item: CollectionItem) => {
+    if (!item.request_id) return;
+    const col = collections.find((c) => c.id === attachCollectionId);
+    const path = getAttachPath(item.id);
+    setContextType("request");
+    setContextId(item.request_id);
+    setContextName(col ? `${col.name} / ${path}` : path || item.name);
+    setShowAttachDialog(false);
+    setAttachMenuAnchor(null);
+  }, [collections, attachCollectionId, getAttachPath]);
 
   const handleAttachRequest = useCallback(() => {
     if (!activeTab?.savedRequestId) return;
@@ -1173,7 +1272,7 @@ export default function AIAgentDrawer({
           <Box sx={{ px: 2, py: 0.5, borderTop: 1, borderColor: "divider" }}>
             <Chip
               size="small"
-              label={`${contextType === "collection" ? "Collection" : "Request"}: ${contextName}`}
+              label={`${contextType === "collection" ? t("collection.collection") : contextType === "folder" ? t("collection.folder") : "Request"}: ${contextName}`}
               onDelete={() => {
                 setContextType(null);
                 setContextId(null);
@@ -1310,12 +1409,13 @@ export default function AIAgentDrawer({
         onClose={() => setAttachMenuAnchor(null)}
       >
         <MenuItem
-          onClick={(e) => {
-            setCollectionMenuAnchor(e.currentTarget);
+          onClick={() => {
+            setShowAttachDialog(true);
+            setAttachMenuAnchor(null);
           }}
           sx={{ fontSize: 13 }}
         >
-          {t("aiAgent.attachCollection")}
+          {t("aiAgent.attachContext")}
         </MenuItem>
         <MenuItem
           onClick={handleAttachRequest}
@@ -1326,32 +1426,100 @@ export default function AIAgentDrawer({
         </MenuItem>
       </Menu>
 
-      {/* ── Collection picker submenu ── */}
-      <Menu
-        anchorEl={collectionMenuAnchor}
-        open={!!collectionMenuAnchor}
-        onClose={() => {
-          setCollectionMenuAnchor(null);
-          setAttachMenuAnchor(null);
-        }}
-      >
-        {collections.map((col) => (
-          <MenuItem
-            key={col.id}
-            onClick={() => handleAttachCollection(col)}
-            sx={{ fontSize: 13 }}
-          >
-            {col.name}
-          </MenuItem>
-        ))}
-        {collections.length === 0 && (
-          <MenuItem disabled sx={{ fontSize: 13 }}>
-            No collections
-          </MenuItem>
-        )}
-      </Menu>
+      {/* ── Attach Context Dialog ── */}
+      <Dialog open={showAttachDialog} onClose={() => setShowAttachDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{t("aiAgent.attachContext")}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: 1 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel>{t("collection.collection")}</InputLabel>
+              <Select
+                value={attachCollectionId || ""}
+                label={t("collection.collection")}
+                onChange={(e) => setAttachCollectionId(String(e.target.value))}
+              >
+                {collections.map((col) => (
+                  <MenuItem key={col.id} value={col.id}>{col.name}</MenuItem>
+                ))}
+                {collections.length === 0 && (
+                  <MenuItem disabled value="">
+                    {t("dashboard.noCollections")}
+                  </MenuItem>
+                )}
+              </Select>
+            </FormControl>
 
-      {/* ── Delete Confirmation Dialog ── */}
+            <TextField
+              size="small"
+              placeholder={t("common.search")}
+              value={attachSearch}
+              onChange={(e) => setAttachSearch(e.target.value)}
+              fullWidth
+            />
+
+            {attachCollectionId && attachLoading[attachCollectionId] && (
+              <LinearProgress />
+            )}
+
+            <List dense sx={{ maxHeight: 360, overflow: "auto", border: "1px solid", borderColor: "divider", borderRadius: 1 }}>
+              {attachRows.length === 0 && !attachLoading[attachCollectionId] && (
+                <ListItemText
+                  primary={collections.length === 0 ? t("dashboard.noCollections") : t("common.noData")}
+                  sx={{ px: 2, py: 1.5, color: "text.secondary" }}
+                />
+              )}
+              {attachRows.map(({ item, depth }) => {
+                const isFolder = item.is_folder;
+                const label = isFolder
+                  ? t("collection.folder")
+                  : item.protocol === "websocket"
+                    ? "WS"
+                    : item.protocol === "graphql"
+                      ? "GraphQL"
+                      : (item.method ? item.method.toUpperCase() : "HTTP");
+                return (
+                  <ListItemButton
+                    key={item.id}
+                    onClick={() => (isFolder ? handleAttachFolder(item) : handleAttachRequestFromTree(item))}
+                    sx={{ pl: 2 + depth * 2 }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 28 }}>
+                      {isFolder ? (
+                        <FolderOpen sx={{ fontSize: 18, color: "warning.main" }} />
+                      ) : item.protocol === "websocket" ? (
+                        <Cable sx={{ fontSize: 18, color: "#14b8a6" }} />
+                      ) : item.protocol === "graphql" ? (
+                        <Hub sx={{ fontSize: 18, color: "#e879f9" }} />
+                      ) : (
+                        <Http sx={{ fontSize: 18, color: "#34d399" }} />
+                      )}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.name}
+                      secondary={label}
+                      primaryTypographyProps={{ noWrap: true }}
+                    />
+                  </ListItemButton>
+                );
+              })}
+            </List>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowAttachDialog(false)}>{t("common.cancel")}</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (attachCollectionId) handleAttachCollection(attachCollectionId);
+            }}
+            disabled={!attachCollectionId}
+          >
+            {t("aiAgent.attachCollection")}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
         <DialogTitle>{t("aiAgent.deleteChat")}</DialogTitle>
         <DialogContent>
@@ -1420,7 +1588,7 @@ function MessageBubble({
       {/* Context badge */}
       {message.context_name && (
         <Typography sx={{ fontSize: 11, color: "text.secondary", mb: 0.25, px: 0.5 }}>
-          {message.context_type === "collection" ? "Collection" : "Request"}: {message.context_name}
+          {message.context_type === "collection" ? t("collection.collection") : message.context_type === "folder" ? t("collection.folder") : "Request"}: {message.context_name}
         </Typography>
       )}
       <Box
@@ -1452,3 +1620,4 @@ function MessageBubble({
     </Box>
   );
 }
+

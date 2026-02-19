@@ -352,26 +352,128 @@ def build_context_text(db: Session, context_type: str | None, context_id: str | 
         if collection.post_response_script:
             lines.append(f"Collection post-response script:\n```\n{collection.post_response_script}\n```")
 
-        # List requests in the collection
+        # Build tree with folders + requests (includes subfolders)
         request_items = [i for i in items if not i.is_folder and i.request_id]
         folder_items = [i for i in items if i.is_folder]
+        request_ids = [i.request_id for i in request_items if i.request_id]
+        requests = (
+            db.query(Request)
+            .filter(Request.id.in_(request_ids))
+            .all()
+            if request_ids
+            else []
+        )
+        req_by_id = {r.id: r for r in requests}
 
-        if folder_items:
-            lines.append(f"\nFolders ({len(folder_items)}):")
-            for f in folder_items:
-                lines.append(f"  - {f.name}")
+        if folder_items or request_items:
+            lines.append(f"\nStructure ({len(folder_items)} folders, {len(request_items)} requests):")
 
-        if request_items:
-            lines.append(f"\nRequests ({len(request_items)}):")
-            for item in request_items[:30]:  # Limit to 30 requests for context size
-                req = db.query(Request).filter(Request.id == item.request_id).first()
-                if req:
-                    lines.append(f"  - {req.method.value} {req.url} ({req.name})")
-                    if req.pre_request_script:
-                        lines.append(f"    Pre-request script: {req.pre_request_script[:200]}...")
-                    if req.post_response_script:
-                        lines.append(f"    Post-response script: {req.post_response_script[:200]}...")
+            children_by_parent: dict[str | None, list[CollectionItem]] = {}
+            for item in items:
+                parent = item.parent_id
+                children_by_parent.setdefault(parent, []).append(item)
 
+            def render_nodes(parent_id: str | None, depth: int, line_count: int) -> int:
+                nodes = children_by_parent.get(parent_id, [])
+                nodes.sort(key=lambda x: x.sort_order or 0)
+                for node in nodes:
+                    if line_count >= 220:
+                        lines.append("  " * depth + "… (truncated)")
+                        return line_count
+                    if node.is_folder:
+                        lines.append("  " * depth + f"[Folder] {node.name}")
+                    else:
+                        req = req_by_id.get(node.request_id)
+                        if req:
+                            lines.append(
+                                "  " * depth + f"- {req.method.value} {req.url} ({req.name})"
+                            )
+                        else:
+                            lines.append("  " * depth + f"- (missing request) {node.name}")
+                    line_count += 1
+                    if node.is_folder:
+                        line_count = render_nodes(node.id, depth + 1, line_count)
+                        if line_count >= 220:
+                            return line_count
+                return line_count
+
+            render_nodes(None, 0, 0)
+
+        return "\n".join(lines)
+
+    elif context_type == "folder":
+        folder = db.query(CollectionItem).filter(
+            CollectionItem.id == context_id,
+            CollectionItem.is_folder == True,  # noqa: E712
+        ).first()
+        if not folder:
+            return None
+
+        collection = db.query(Collection).filter(Collection.id == folder.collection_id).first()
+        items = db.query(CollectionItem).filter(
+            CollectionItem.collection_id == folder.collection_id
+        ).order_by(CollectionItem.sort_order).all()
+
+        items_by_id = {i.id: i for i in items}
+        def build_path(item_id: str) -> list[str]:
+            parts: list[str] = []
+            cur = items_by_id.get(item_id)
+            while cur:
+                parts.append(cur.name)
+                if not cur.parent_id:
+                    break
+                cur = items_by_id.get(cur.parent_id)
+            return list(reversed(parts))
+
+        folder_path = " / ".join(build_path(folder.id))
+        lines = [
+            f"[Folder Context: {folder_path}]",
+            f"Collection: {collection.name if collection else folder.collection_id}",
+        ]
+
+        request_items = [i for i in items if not i.is_folder and i.request_id]
+        request_ids = [i.request_id for i in request_items if i.request_id]
+        requests = (
+            db.query(Request)
+            .filter(Request.id.in_(request_ids))
+            .all()
+            if request_ids
+            else []
+        )
+        req_by_id = {r.id: r for r in requests}
+
+        children_by_parent: dict[str | None, list[CollectionItem]] = {}
+        for item in items:
+            parent = item.parent_id
+            children_by_parent.setdefault(parent, []).append(item)
+
+        lines.append("\nStructure:")
+
+        def render_nodes(parent_id: str | None, depth: int, line_count: int) -> int:
+            nodes = children_by_parent.get(parent_id, [])
+            nodes.sort(key=lambda x: x.sort_order or 0)
+            for node in nodes:
+                if line_count >= 220:
+                    lines.append("  " * depth + "… (truncated)")
+                    return line_count
+                if node.is_folder:
+                    lines.append("  " * depth + f"[Folder] {node.name}")
+                else:
+                    req = req_by_id.get(node.request_id)
+                    if req:
+                        lines.append(
+                            "  " * depth + f"- {req.method.value} {req.url} ({req.name})"
+                        )
+                    else:
+                        lines.append("  " * depth + f"- (missing request) {node.name}")
+                line_count += 1
+                if node.is_folder:
+                    line_count = render_nodes(node.id, depth + 1, line_count)
+                    if line_count >= 220:
+                        return line_count
+            return line_count
+
+        render_nodes(folder.id, 0, 0)
         return "\n".join(lines)
 
     elif context_type == "request":

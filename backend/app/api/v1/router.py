@@ -4,7 +4,7 @@ from app.api.v1 import (
     auth, users, workspaces, collections, requests, environments,
     proxy, history, ai, import_export, codegen, oauth, websocket_proxy, sdk,
     setup, app_settings, collection_runs, network, ai_chat, test_flows,
-    docs,
+    docs, shares, public,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -30,3 +30,5 @@ api_router.include_router(network.router, prefix="/network", tags=["Network"])
 api_router.include_router(ai_chat.router, prefix="/ai/chat", tags=["AI Chat"])
 api_router.include_router(test_flows.router, prefix="/test-flows", tags=["Test Flows"])
 api_router.include_router(docs.router, prefix="/docs", tags=["Documentation"])
+api_router.include_router(shares.router, prefix="/shares", tags=["Shares"])
+api_router.include_router(public.router, prefix="/public", tags=["Public"])

@@ -29,6 +29,7 @@ import CodeGenDialog from "@/components/codegen/CodeGenDialog";
 import SDKGeneratorDialog from "@/components/sdk/SDKGeneratorDialog";
 import CollectionRunnerDialog from "@/components/collection/CollectionRunnerDialog";
 import DocGeneratorDialog from "@/components/collection/DocGeneratorDialog";
+import ShareManageDialog from "@/components/share/ShareManageDialog";
 import ScriptEditor from "@/components/request/ScriptEditor";
 import PanelGridLayout from "./PanelGridLayout";
 import AIAgentDrawer, { DRAWER_WIDTH, type ApplyScriptPayload } from "@/components/ai/AIAgentDrawer";
@@ -253,6 +254,12 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     collectionName: string;
     folderId?: string;
     folderName?: string;
+  } | null>(null);
+  const [showShareDocs, setShowShareDocs] = useState<{
+    collectionId: string;
+    collectionName: string;
+    folderId?: string | null;
+    folderName?: string | null;
   } | null>(null);
   const didInitCollections = useRef(false);
   const didInitWorkspaces = useRef(false);
@@ -1234,6 +1241,13 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     }
   }, [showDuplicateCol, loadCollections, t]);
 
+  const ensureHasCollection = useCallback(() => {
+    if (collections.length > 0) return true;
+    setSnack({ msg: t("dashboard.noCollections"), severity: "error" });
+    setShowCreateCol(true);
+    return false;
+  }, [collections.length, t]);
+
   const handleNewRequest = useCallback((collectionId: string, folderId?: string) => {
     setSaveTarget({ collectionId, folderId });
     handleNewTab();
@@ -1266,6 +1280,19 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     (collectionId: string, collectionName: string, folderId?: string, folderName?: string) => {
       const col = collections.find((c) => c.id === collectionId);
       setShowDocGen({
+        collectionId,
+        collectionName: col?.name ?? (collectionName || "Collection"),
+        folderId,
+        folderName,
+      });
+    },
+    [collections],
+  );
+
+  const handleShareDocs = useCallback(
+    (collectionId: string, collectionName: string, folderId?: string | null, folderName?: string | null) => {
+      const col = collections.find((c) => c.id === collectionId);
+      setShowShareDocs({
         collectionId,
         collectionName: col?.name ?? (collectionName || "Collection"),
         folderId,
@@ -1500,6 +1527,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onDeleteItem={(id, name) => setShowDelete({ id, name, type: "item" })}
         onRunCollection={handleRunCollection}
         onGenerateDocs={handleGenerateDocs}
+        onShareDocs={handleShareDocs}
         onOpenEnvironments={() => setShowEnvManager(true)}
         onOpenHistory={() => setShowHistory(true)}
         onOpenSettings={() => setView("settings")}
@@ -1623,13 +1651,13 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
               <Dashboard
                 collections={collections}
                 collectionItems={collectionItems}
-                onNewRequest={handleNewTab}
+                onNewRequest={() => { if (ensureHasCollection()) handleNewTab(); }}
                 onNewCollection={() => setShowCreateCol(true)}
                 onOpenImport={() => setShowImport(true)}
                 onOpenAIWizard={() => setShowAIWizard(true)}
                 onOpenHistory={() => setShowHistory(true)}
-                onNewWebSocket={() => handleNewTab("websocket")}
-                onNewGraphQL={() => handleNewTab("graphql")}
+                onNewWebSocket={() => { if (ensureHasCollection()) handleNewTab("websocket"); }}
+                onNewGraphQL={() => { if (ensureHasCollection()) handleNewTab("graphql"); }}
                 onOpenCollection={handleOpenCollection}
               />
             )}
@@ -1696,7 +1724,9 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                 <FolderDetail
                   key={activeTab.collectionId}
                   folder={folder}
+                  collectionId={parentColId}
                   onSave={(data) => handleSaveFolder(activeTab.collectionId!, parentColId!, data)}
+                  onShareDocs={handleShareDocs}
                   onDirtyChange={(dirty) => {
                     setTabs((prev) => {
                       const tab = prev.find((t) => t.id === activeTab.id);
@@ -1738,7 +1768,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                   onOAuthConfigChange={(config) => updateTab(activeTabId, { oauthConfig: config })}
                   onWsMessagesChange={(msgs) => updateTab(activeTabId, { wsMessages: msgs })}
                   onWsConnectedChange={(connected) => updateTab(activeTabId, { wsConnected: connected })}
-                  onSave={() => activeTab.savedRequestId ? handleQuickSave() : setShowSaveRequest(true)}
+                  onSave={() => activeTab.savedRequestId ? handleQuickSave() : (ensureHasCollection() && setShowSaveRequest(true))}
                   environments={environments}
                   selectedEnvId={selectedEnvId}
                   envOverrideId={activeTab.envOverrideId}
@@ -1779,7 +1809,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                   onApiKeyPlacementChange={(v) => updateTab(activeTabId, { apiKeyPlacement: v })}
                   onOAuthConfigChange={(config) => updateTab(activeTabId, { oauthConfig: config })}
                   onSend={handleSend}
-                  onSave={() => activeTab.savedRequestId ? handleQuickSave() : setShowSaveRequest(true)}
+                  onSave={() => activeTab.savedRequestId ? handleQuickSave() : (ensureHasCollection() && setShowSaveRequest(true))}
                   environments={environments}
                   selectedEnvId={selectedEnvId}
                   envOverrideId={activeTab.envOverrideId}
@@ -1837,7 +1867,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                       requestSettings={activeTab.requestSettings ?? defaultRequestSettings}
                       onRequestSettingsChange={(s) => updateTab(activeTabId, { requestSettings: s })}
                       onSend={handleSend}
-                      onSave={() => activeTab.savedRequestId ? handleQuickSave() : setShowSaveRequest(true)}
+                      onSave={() => activeTab.savedRequestId ? handleQuickSave() : (ensureHasCollection() && setShowSaveRequest(true))}
                     />
                   ),
                   scriptEditor: (
@@ -2055,6 +2085,18 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           collectionName={showDocGen.collectionName}
           folderId={showDocGen.folderId}
           folderName={showDocGen.folderName}
+        />
+      )}
+
+      {/* Share Documentation */}
+      {showShareDocs && (
+        <ShareManageDialog
+          open={!!showShareDocs}
+          onClose={() => setShowShareDocs(null)}
+          collectionId={showShareDocs.collectionId}
+          collectionName={showShareDocs.collectionName}
+          folderId={showShareDocs.folderId}
+          folderName={showShareDocs.folderName}
         />
       )}
 

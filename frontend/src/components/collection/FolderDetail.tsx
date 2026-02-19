@@ -25,6 +25,7 @@ import {
   Description,
   Edit as EditIcon,
   Visibility,
+  IosShare,
 } from "@mui/icons-material";
 import Editor from "@monaco-editor/react";
 import ReactMarkdown from "react-markdown";
@@ -43,6 +44,7 @@ interface VarRow {
 
 interface FolderDetailProps {
   folder: CollectionItem;
+  collectionId?: string;
   onSave: (data: {
     name: string;
     description: string | null;
@@ -54,14 +56,17 @@ interface FolderDetailProps {
     script_language: string | null;
   }) => Promise<void>;
   onDirtyChange: (isDirty: boolean) => void;
+  onShareDocs?: (collectionId: string, collectionName: string, folderId: string, folderName: string) => void;
   resolvedVariables?: Map<string, VariableInfo>;
   variableGroups?: VariableGroup[];
 }
 
 export default function FolderDetail({
   folder,
+  collectionId,
   onSave,
   onDirtyChange,
+  onShareDocs,
   resolvedVariables,
   variableGroups,
 }: FolderDetailProps) {
@@ -271,6 +276,17 @@ export default function FolderDetail({
             }}
           />
         </Box>
+        {onShareDocs && collectionId && (
+          <Button
+            variant="outlined"
+            startIcon={<IosShare />}
+            onClick={() => onShareDocs(collectionId, "", folder.id, folder.name)}
+            size="small"
+            sx={{ textTransform: "none", borderRadius: 2 }}
+          >
+            {t("share.title")}
+          </Button>
+        )}
         <Button
           variant="contained"
           startIcon={saving ? <CircularProgress size={16} /> : <Save />}
