@@ -1495,8 +1495,6 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     }
   }, [loadCollections, t]);
 
-  const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId);
-
   return (
     <ProxyModeContext.Provider value={proxyModeValue}>
     <Box sx={{ display: "flex", height: "100vh", overflow: "hidden" }}>
@@ -1508,7 +1506,9 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         environments={environments}
         selectedEnvironmentId={selectedEnvId}
         onSelectEnvironment={handleSelectEnvironment}
-        workspaceName={currentWorkspace?.name}
+        workspaces={workspaces}
+        currentWorkspaceId={currentWorkspaceId}
+        onSelectWorkspace={handleSelectWorkspace}
       />
 
       <NavRail

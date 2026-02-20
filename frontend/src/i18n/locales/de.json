@@ -219,7 +219,8 @@
     "selectWorkspaceDescription": "Wählen Sie einen Arbeitsbereich zum Beitreten. Sie werden als Betrachter hinzugefügt.",
     "joinWorkspace": "Beitreten",
     "joining": "Beitritt...",
-    "noWorkspacesAvailable": "Keine Arbeitsbereiche verfügbar. Kontaktieren Sie einen Administrator."
+    "noWorkspacesAvailable": "Keine Arbeitsbereiche verfügbar. Kontaktieren Sie einen Administrator.",
+    "search": "Arbeitsbereiche suchen…"
   },
   "ai": {
     "wizardTitle": "AI Collection Generator",

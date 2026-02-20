@@ -219,7 +219,8 @@
     "selectWorkspaceDescription": "Válaszd ki, melyik munkaterülethez szeretnél csatlakozni. Megtekintőként kerülsz hozzáadásra.",
     "joinWorkspace": "Csatlakozás",
     "joining": "Csatlakozás...",
-    "noWorkspacesAvailable": "Nincs elérhető munkaterület. Lépj kapcsolatba egy adminisztrátorral."
+    "noWorkspacesAvailable": "Nincs elérhető munkaterület. Lépj kapcsolatba egy adminisztrátorral.",
+    "search": "Munkaterület keresése…"
   },
   "ai": {
     "wizardTitle": "AI Gyűjtemény Generátor",

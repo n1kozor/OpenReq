@@ -219,7 +219,8 @@
     "selectWorkspaceDescription": "Choose a workspace to join. You will be added as a viewer.",
     "joinWorkspace": "Join Workspace",
     "joining": "Joining...",
-    "noWorkspacesAvailable": "No workspaces available. Contact an administrator."
+    "noWorkspacesAvailable": "No workspaces available. Contact an administrator.",
+    "search": "Search workspaces…"
   },
   "ai": {
     "wizardTitle": "AI Collection Generator",

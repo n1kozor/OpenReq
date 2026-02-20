@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   AppBar,
   Toolbar,
@@ -10,17 +11,22 @@ import {
   Tooltip,
   FormControl,
   Avatar,
+  TextField,
+  InputAdornment,
+  ListSubheader,
 } from "@mui/material";
 import {
   DarkMode,
   LightMode,
   Logout,
   KeyboardArrowDown,
+  Workspaces,
+  Search,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import { Cloud, Lan } from "@mui/icons-material";
-import type { Environment } from "@/types";
+import type { Environment, Workspace } from "@/types";
 import { useProxyMode } from "@/hooks/useProxyMode";
 
 interface TopBarProps {
@@ -31,7 +37,9 @@ interface TopBarProps {
   environments: Environment[];
   selectedEnvironmentId: string | null;
   onSelectEnvironment: (id: string | null) => void;
-  workspaceName?: string;
+  workspaces: Workspace[];
+  currentWorkspaceId: string | null;
+  onSelectWorkspace: (id: string) => void;
 }
 
 const LANGUAGES = [
@@ -54,11 +62,14 @@ export default function TopBar({
   environments,
   selectedEnvironmentId,
   onSelectEnvironment,
-  workspaceName,
+  workspaces,
+  currentWorkspaceId,
+  onSelectWorkspace,
 }: TopBarProps) {
   const { t, i18n } = useTranslation();
   const theme = useTheme();
   const isDark = mode === "dark";
+  const [wsSearch, setWsSearch] = useState("");
 
   const handleLanguageChange = (lang: string) => {
     i18n.changeLanguage(lang);
@@ -126,7 +137,7 @@ export default function TopBar({
             }}
           />
 
-          {workspaceName && (
+          {workspaces.length > 0 && (
             <>
               <Typography
                 sx={{
@@ -139,22 +150,89 @@ export default function TopBar({
               >
                 /
               </Typography>
-              <Chip
-                label={workspaceName}
-                size="small"
-                sx={{
-                  height: 24,
-                  fontSize: "0.75rem",
-                  fontWeight: 500,
-                  borderRadius: 1.5,
-                  backgroundColor: alpha(
-                    theme.palette.text.primary,
-                    isDark ? 0.06 : 0.05
-                  ),
-                  color: theme.palette.text.secondary,
-                  border: "none",
-                }}
-              />
+              <FormControl size="small">
+                <Select
+                  value={currentWorkspaceId ?? ""}
+                  onChange={(e) => onSelectWorkspace(e.target.value)}
+                  IconComponent={KeyboardArrowDown}
+                  onOpen={() => setWsSearch("")}
+                  renderValue={(val) => {
+                    const ws = workspaces.find((w) => w.id === val);
+                    return (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                        <Workspaces sx={{ fontSize: 14, color: theme.palette.primary.main }} />
+                        <span>{ws?.name ?? t("workspace.select")}</span>
+                      </Box>
+                    );
+                  }}
+                  MenuProps={{
+                    PaperProps: { sx: { maxHeight: 320 } },
+                    autoFocus: false,
+                  }}
+                  sx={{
+                    height: 30,
+                    fontSize: "0.8rem",
+                    fontWeight: 500,
+                    borderRadius: 2,
+                    minWidth: 140,
+                    backgroundColor: alpha(
+                      theme.palette.text.primary,
+                      isDark ? 0.04 : 0.03
+                    ),
+                    border: `1px solid ${alpha(
+                      isDark ? "#8b949e" : "#64748b",
+                      0.12
+                    )}`,
+                    transition: "all 0.2s ease",
+                    "& .MuiOutlinedInput-notchedOutline": { border: "none" },
+                    "&:hover": {
+                      backgroundColor: alpha(
+                        theme.palette.text.primary,
+                        isDark ? 0.07 : 0.06
+                      ),
+                      borderColor: alpha(theme.palette.primary.main, 0.4),
+                    },
+                    "& .MuiSelect-icon": {
+                      fontSize: "1.1rem",
+                      color: theme.palette.text.secondary,
+                    },
+                  }}
+                >
+                  {workspaces.length >= 6 && (
+                    <ListSubheader sx={{ p: 1, lineHeight: "unset" }}>
+                      <TextField
+                        size="small"
+                        autoFocus
+                        placeholder={t("workspace.search")}
+                        fullWidth
+                        value={wsSearch}
+                        onChange={(e) => setWsSearch(e.target.value)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment position="start">
+                              <Search sx={{ fontSize: 16 }} />
+                            </InputAdornment>
+                          ),
+                          sx: { fontSize: "0.8rem" },
+                        }}
+                      />
+                    </ListSubheader>
+                  )}
+                  {workspaces
+                    .filter((ws) =>
+                      !wsSearch || ws.name.toLowerCase().includes(wsSearch.toLowerCase())
+                    )
+                    .map((ws) => (
+                      <MenuItem key={ws.id} value={ws.id}>
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                          <Workspaces sx={{ fontSize: 16, color: ws.id === currentWorkspaceId ? theme.palette.primary.main : theme.palette.text.secondary, opacity: 0.7 }} />
+                          <span style={{ fontWeight: ws.id === currentWorkspaceId ? 600 : 400 }}>{ws.name}</span>
+                        </Box>
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
             </>
           )}
         </Box>
