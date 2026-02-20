@@ -122,7 +122,7 @@ export default function CollectionDetail({
     (collection.auth_type as AuthType) || "none"
   );
   const [bearerToken, setBearerToken] = useState(
-    collection.auth_config?.token || ""
+    collection.auth_config?.bearer_token || collection.auth_config?.token || ""
   );
   const [basicUsername, setBasicUsername] = useState(
     collection.auth_config?.username || ""
@@ -131,24 +131,24 @@ export default function CollectionDetail({
     collection.auth_config?.password || ""
   );
   const [apiKeyName, setApiKeyName] = useState(
-    collection.auth_config?.key || "X-API-Key"
+    collection.auth_config?.api_key_name || collection.auth_config?.key || "X-API-Key"
   );
   const [apiKeyValue, setApiKeyValue] = useState(
-    collection.auth_config?.value || ""
+    collection.auth_config?.api_key_value || collection.auth_config?.value || ""
   );
   const [apiKeyPlacement, setApiKeyPlacement] = useState<"header" | "query">(
-    (collection.auth_config?.placement as "header" | "query") || "header"
+    (collection.auth_config?.api_key_placement as "header" | "query") || (collection.auth_config?.placement as "header" | "query") || "header"
   );
   const [oauthConfig, setOauthConfig] = useState<OAuthConfig>({
-    grantType: "authorization_code",
-    authUrl: "",
-    tokenUrl: "",
-    clientId: "",
-    clientSecret: "",
-    redirectUri: "http://localhost:5173/oauth/callback",
-    scope: "",
-    usePkce: false,
-    accessToken: collection.auth_config?.token || collection.auth_config?.access_token || "",
+    grantType: (collection.auth_config?.grant_type as OAuthConfig["grantType"]) || "authorization_code",
+    authUrl: collection.auth_config?.auth_url || "",
+    tokenUrl: collection.auth_config?.token_url || "",
+    clientId: collection.auth_config?.client_id || "",
+    clientSecret: collection.auth_config?.client_secret || "",
+    redirectUri: collection.auth_config?.redirect_uri || "http://localhost:5173/oauth/callback",
+    scope: collection.auth_config?.scope || "",
+    usePkce: collection.auth_config?.use_pkce === "true",
+    accessToken: collection.auth_config?.access_token || collection.auth_config?.token || "",
   });
   const [saving, setSaving] = useState(false);
   const [descriptionMode, setDescriptionMode] = useState<"write" | "preview">("preview");
@@ -180,16 +180,25 @@ export default function CollectionDetail({
     const at = (collection.auth_type as AuthType) || "none";
     setAuthType(at);
     const cfg = collection.auth_config || {};
-    setBearerToken(cfg.token || "");
+    setBearerToken(cfg.bearer_token || cfg.token || "");
     setBasicUsername(cfg.username || "");
     setBasicPassword(cfg.password || "");
-    setApiKeyName(cfg.key || "X-API-Key");
-    setApiKeyValue(cfg.value || "");
-    setApiKeyPlacement((cfg.placement as "header" | "query") || "header");
-    setOauthConfig((prev) => ({
-      ...prev,
-      accessToken: cfg.token || cfg.access_token || "",
-    }));
+    setApiKeyName(cfg.api_key_name || cfg.key || "X-API-Key");
+    setApiKeyValue(cfg.api_key_value || cfg.value || "");
+    setApiKeyPlacement((cfg.api_key_placement as "header" | "query") || (cfg.placement as "header" | "query") || "header");
+    if (at === "oauth2") {
+      setOauthConfig({
+        grantType: (cfg.grant_type as OAuthConfig["grantType"]) || "authorization_code",
+        authUrl: cfg.auth_url || "",
+        tokenUrl: cfg.token_url || "",
+        clientId: cfg.client_id || "",
+        clientSecret: cfg.client_secret || "",
+        redirectUri: cfg.redirect_uri || "http://localhost:5173/oauth/callback",
+        scope: cfg.scope || "",
+        usePkce: cfg.use_pkce === "true",
+        accessToken: cfg.access_token || "",
+      });
+    }
     // Sync scripts
     setPreRequestScript(collection.pre_request_script || "");
     setPostResponseScript(collection.post_response_script || "");
@@ -199,10 +208,23 @@ export default function CollectionDetail({
   // Build current auth config from state
   const buildAuthConfig = (): Record<string, string> | null => {
     if (authType === "none") return null;
-    if (authType === "bearer") return { token: bearerToken };
+    if (authType === "bearer") return { bearer_token: bearerToken };
     if (authType === "basic") return { username: basicUsername, password: basicPassword };
-    if (authType === "api_key") return { key: apiKeyName, value: apiKeyValue, placement: apiKeyPlacement };
-    if (authType === "oauth2") return { token: oauthConfig.accessToken };
+    if (authType === "api_key")
+      return { api_key_name: apiKeyName, api_key_value: apiKeyValue, api_key_placement: apiKeyPlacement };
+    if (authType === "oauth2") {
+      return {
+        grant_type: oauthConfig.grantType,
+        auth_url: oauthConfig.authUrl,
+        token_url: oauthConfig.tokenUrl,
+        client_id: oauthConfig.clientId,
+        client_secret: oauthConfig.clientSecret,
+        redirect_uri: oauthConfig.redirectUri,
+        scope: oauthConfig.scope,
+        use_pkce: String(oauthConfig.usePkce),
+        access_token: oauthConfig.accessToken,
+      };
+    }
     return null;
   };
 

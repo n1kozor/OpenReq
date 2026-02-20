@@ -172,11 +172,12 @@ def _apply_auth(headers: dict[str, str], auth_type: AuthType, auth_config: dict 
     if not auth_config:
         return headers
     if auth_type == AuthType.BEARER:
-        headers["Authorization"] = f"Bearer {auth_config.get('token', '')}"
+        token = auth_config.get("bearer_token") or auth_config.get("token", "")
+        headers["Authorization"] = f"Bearer {token}"
     elif auth_type == AuthType.API_KEY:
-        key_name = auth_config.get("key", "X-API-Key")
-        key_value = auth_config.get("value", "")
-        placement = auth_config.get("placement", "header")
+        key_name = auth_config.get("api_key_name") or auth_config.get("key", "X-API-Key")
+        key_value = auth_config.get("api_key_value") or auth_config.get("value", "")
+        placement = auth_config.get("api_key_placement") or auth_config.get("placement", "header")
         if placement == "header":
             headers[key_name] = key_value
     elif auth_type == AuthType.BASIC:
@@ -185,7 +186,7 @@ def _apply_auth(headers: dict[str, str], auth_type: AuthType, auth_config: dict 
         credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
         headers["Authorization"] = f"Basic {credentials}"
     elif auth_type == AuthType.OAUTH2:
-        token = auth_config.get("token", auth_config.get("access_token", ""))
+        token = auth_config.get("token") or auth_config.get("access_token") or auth_config.get("accessToken", "")
         if token:
             headers["Authorization"] = f"Bearer {token}"
     return headers
