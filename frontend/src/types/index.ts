@@ -375,6 +375,47 @@ export interface RequestTab {
   wsConnected?: boolean;
 }
 
+// ── GraphQL Schema Introspection Types ──
+
+export interface GQLTypeRef {
+  kind: string;
+  name: string | null;
+  ofType: GQLTypeRef | null;
+}
+
+export interface GQLInputValue {
+  name: string;
+  description: string | null;
+  type: string;
+  defaultValue: string | null;
+}
+
+export interface GQLTypeField {
+  name: string;
+  description: string | null;
+  type: string;
+  typeRef: GQLTypeRef;
+  args: GQLInputValue[];
+  isDeprecated: boolean;
+}
+
+export interface GQLType {
+  kind: string;
+  name: string;
+  description: string | null;
+  fields: GQLTypeField[];
+  inputFields: GQLInputValue[];
+  enumValues: { name: string; description: string | null }[];
+  possibleTypes: string[];
+}
+
+export interface GQLSchema {
+  queryType: string | null;
+  mutationType: string | null;
+  subscriptionType: string | null;
+  types: Record<string, GQLType>;
+}
+
 // ── Collection Runner Types ──
 
 export interface CollectionRunResultItem {

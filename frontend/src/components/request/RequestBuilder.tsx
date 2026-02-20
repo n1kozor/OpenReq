@@ -16,7 +16,7 @@ import {
   Tooltip,
   Portal,
 } from "@mui/material";
-import { Send, Save, Dns, NetworkPing } from "@mui/icons-material";
+import { Send, Save, Dns, NetworkPing, Code } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import KeyValueEditor from "@/components/common/KeyValueEditor";
@@ -27,6 +27,7 @@ import AuthEditor from "./AuthEditor";
 import BodyEditor from "./BodyEditor";
 import RequestSettingsEditor from "./RequestSettingsEditor";
 import { DnsResolveModal, PingModal } from "./NetworkToolsModals";
+import CodeGenDialog from "@/components/codegen/CodeGenDialog";
 import type { HttpMethod, AuthType, BodyType, KeyValuePair, Environment, OAuthConfig, RequestSettings } from "@/types";
 import { defaultRequestSettings } from "@/types";
 
@@ -118,6 +119,27 @@ export default function RequestBuilder(props: RequestBuilderProps) {
 
   const [dnsOpen, setDnsOpen] = useState(false);
   const [pingOpen, setPingOpen] = useState(false);
+  const [showCodeGen, setShowCodeGen] = useState(false);
+
+  const codeGenData = useMemo(() => {
+    const headers: Record<string, string> = {};
+    for (const h of props.headers) {
+      if (h.enabled && h.key) headers[h.key] = h.value;
+    }
+    const queryParams: Record<string, string> = {};
+    for (const p of props.queryParams) {
+      if (p.enabled && p.key) queryParams[p.key] = p.value;
+    }
+    const authConfig: Record<string, string> = {};
+    if (props.authType === "bearer") authConfig.token = props.bearerToken;
+    else if (props.authType === "basic") { authConfig.username = props.basicUsername; authConfig.password = props.basicPassword; }
+    else if (props.authType === "api_key") { authConfig.key = props.apiKeyName; authConfig.value = props.apiKeyValue; authConfig.placement = props.apiKeyPlacement; }
+    return {
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+      queryParams: Object.keys(queryParams).length > 0 ? queryParams : undefined,
+      authConfig: Object.keys(authConfig).length > 0 ? authConfig : undefined,
+    };
+  }, [props.headers, props.queryParams, props.authType, props.bearerToken, props.basicUsername, props.basicPassword, props.apiKeyName, props.apiKeyValue, props.apiKeyPlacement]);
 
   const hostname = useMemo(() => {
     let resolved = props.url;
@@ -351,6 +373,16 @@ export default function RequestBuilder(props: RequestBuilderProps) {
           >
             {t("common.save")}
           </Button>
+          <Tooltip title={t("codegen.generateCode")}>
+            <IconButton
+              onClick={() => setShowCodeGen(true)}
+              disabled={!props.url}
+              size="small"
+              sx={{ height: 36, width: 36 }}
+            >
+              <Code sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       </Box>
 
@@ -490,6 +522,19 @@ export default function RequestBuilder(props: RequestBuilderProps) {
           </Button>
         </Portal>
       )}
+
+      <CodeGenDialog
+        open={showCodeGen}
+        onClose={() => setShowCodeGen(false)}
+        method={props.method}
+        url={props.url}
+        headers={codeGenData.headers}
+        body={props.body || undefined}
+        bodyType={props.bodyType}
+        queryParams={codeGenData.queryParams}
+        authType={props.authType}
+        authConfig={codeGenData.authConfig}
+      />
     </Box>
   );
 }

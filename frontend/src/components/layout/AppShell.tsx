@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Box, Toolbar, Snackbar, Alert, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import TopBar from "./TopBar";
+import NavRail from "./NavRail";
 import Sidebar from "./Sidebar";
 import TabBar from "./TabBar";
 import RequestBuilder from "@/components/request/RequestBuilder";
@@ -25,7 +26,6 @@ import AICollectionWizard from "@/components/collection/AICollectionWizard";
 import HistoryPanel from "@/components/history/HistoryPanel";
 import WorkspaceManager from "@/components/workspace/WorkspaceManager";
 import ImportExportDialog from "@/components/import/ImportExportDialog";
-import CodeGenDialog from "@/components/codegen/CodeGenDialog";
 import SDKGeneratorDialog from "@/components/sdk/SDKGeneratorDialog";
 import CollectionRunnerDialog from "@/components/collection/CollectionRunnerDialog";
 import DocGeneratorDialog from "@/components/collection/DocGeneratorDialog";
@@ -244,9 +244,11 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const [showWorkspaces, setShowWorkspaces] = useState(false);
   const [showAIWizard, setShowAIWizard] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [showCodeGen, setShowCodeGen] = useState(false);
   const [showSDK, setShowSDK] = useState(false);
   const [showAIAgent, setShowAIAgent] = useState(false);
+  const [showCollectionsSidebar, setShowCollectionsSidebar] = useState(() => {
+    return localStorage.getItem("openreq-collections-sidebar") !== "false";
+  });
   const [showTestFlowList, setShowTestFlowList] = useState(false);
   const [showRunner, setShowRunner] = useState<{ id: string; name: string } | null>(null);
   const [showDocGen, setShowDocGen] = useState<{
@@ -1509,7 +1511,27 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         workspaceName={currentWorkspace?.name}
       />
 
-      <Sidebar
+      <NavRail
+        showCollectionsSidebar={showCollectionsSidebar}
+        onToggleCollections={() => {
+          setShowCollectionsSidebar((prev) => {
+            const next = !prev;
+            localStorage.setItem("openreq-collections-sidebar", String(next));
+            return next;
+          });
+        }}
+        onOpenWorkspaces={() => setShowWorkspaces(true)}
+        onOpenEnvironments={() => setShowEnvManager(true)}
+        onOpenHistory={() => setShowHistory(true)}
+        onOpenTestBuilder={() => setShowTestFlowList(true)}
+        onOpenImport={() => setShowImport(true)}
+        onOpenSDK={() => setShowSDK(true)}
+        onOpenAIAgent={() => setShowAIAgent(true)}
+        onOpenSettings={() => setView("settings")}
+        activeNavItem={view === "settings" ? "settings" : showAIAgent ? "aiAgent" : null}
+      />
+
+      {showCollectionsSidebar && <Sidebar
         collections={collections}
         collectionItems={collectionItems}
         collectionTrees={collectionTrees}
@@ -1528,10 +1550,6 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onRunCollection={handleRunCollection}
         onGenerateDocs={handleGenerateDocs}
         onShareDocs={handleShareDocs}
-        onOpenEnvironments={() => setShowEnvManager(true)}
-        onOpenHistory={() => setShowHistory(true)}
-        onOpenSettings={() => setView("settings")}
-        onOpenWorkspaces={() => setShowWorkspaces(true)}
         onOpenAIWizard={() => setShowAIWizard(true)}
         onOpenImport={() => setShowImport(true)}
         onExportCollection={async (colId) => {
@@ -1583,13 +1601,9 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onRequestCollectionTree={loadCollectionTree}
         onRequestAllCollectionItems={loadAllCollectionItems}
         onMoveItem={handleMoveItem}
-        onOpenCodeGen={() => setShowCodeGen(true)}
-        onOpenSDK={() => setShowSDK(true)}
-        onOpenAIAgent={() => setShowAIAgent(true)}
-        onOpenTestBuilder={() => setShowTestFlowList(true)}
         onOpenFolder={handleOpenFolder}
         onRefreshCollections={loadCollections}
-      />
+      />}
 
       <Box sx={{
         flexGrow: 1,
@@ -1815,6 +1829,15 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                   envOverrideId={activeTab.envOverrideId}
                   collectionVariables={activeCollectionVars}
                   workspaceGlobals={workspaceGlobals}
+                  sentRequest={activeTab.sentRequest ?? null}
+                  scriptResult={activeTab.scriptResult}
+                  preRequestResult={activeTab.preRequestResult}
+                  preRequestScript={activeTab.preRequestScript}
+                  postResponseScript={activeTab.postResponseScript}
+                  scriptLanguage={activeTab.scriptLanguage}
+                  onPreRequestScriptChange={(s) => updateTab(activeTabId, { preRequestScript: s })}
+                  onPostResponseScriptChange={(s) => updateTab(activeTabId, { postResponseScript: s })}
+                  onScriptLanguageChange={(lang) => updateTab(activeTabId, { scriptLanguage: lang })}
                 />
               </Box>
             )}
@@ -2013,40 +2036,6 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
             setSnack({ msg: t("common.error"), severity: "error" });
           }
         }}
-      />
-
-      <CodeGenDialog
-        open={showCodeGen}
-        onClose={() => setShowCodeGen(false)}
-        method={activeTab?.method ?? "GET"}
-        url={activeTab?.url ?? ""}
-        headers={(() => {
-          if (!activeTab) return undefined;
-          const h: Record<string, string> = {};
-          for (const pair of activeTab.headers) {
-            if (pair.enabled && pair.key) h[pair.key] = pair.value;
-          }
-          return Object.keys(h).length > 0 ? h : undefined;
-        })()}
-        body={activeTab?.body || undefined}
-        bodyType={activeTab?.bodyType ?? "none"}
-        queryParams={(() => {
-          if (!activeTab) return undefined;
-          const p: Record<string, string> = {};
-          for (const pair of activeTab.queryParams) {
-            if (pair.enabled && pair.key) p[pair.key] = pair.value;
-          }
-          return Object.keys(p).length > 0 ? p : undefined;
-        })()}
-        authType={activeTab?.authType ?? "none"}
-        authConfig={(() => {
-          if (!activeTab) return undefined;
-          const c: Record<string, string> = {};
-          if (activeTab.authType === "bearer") c.token = activeTab.bearerToken;
-          else if (activeTab.authType === "basic") { c.username = activeTab.basicUsername; c.password = activeTab.basicPassword; }
-          else if (activeTab.authType === "api_key") { c.key = activeTab.apiKeyName; c.value = activeTab.apiKeyValue; c.placement = activeTab.apiKeyPlacement; }
-          return Object.keys(c).length > 0 ? c : undefined;
-        })()}
       />
 
       <SDKGeneratorDialog

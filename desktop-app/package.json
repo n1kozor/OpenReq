@@ -1,6 +1,6 @@
 {
   "name": "openreq-desktop",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "OpenReq Desktop Client",
   "main": "src/main.js",
   "scripts": {
@@ -9,6 +9,15 @@
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "asarUnpack": [
+      "src/webview-preload.js"
+    ],
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false
+    }
   },
   "devDependencies": {
     "electron": "^33.0.0",

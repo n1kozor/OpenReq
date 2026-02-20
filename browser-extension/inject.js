@@ -1,3 +1,3 @@
 // Runs in the page's MAIN world — has direct access to window
-window.__OPENREQ_EXTENSION__ = { version: "1.0.4" };
+window.__OPENREQ_EXTENSION__ = { version: "1.0.5" };
 window.dispatchEvent(new Event("openreq-extension-ready"));

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import {
   Box,
   TextField,
@@ -23,11 +23,13 @@ import {
   ArrowUpward,
   ArrowDownward,
   Save,
+  Code,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import KeyValueEditor from "@/components/common/KeyValueEditor";
 import { VariableValueCell } from "@/components/common/KeyValueEditor";
 import AuthEditor from "./AuthEditor";
+import CodeGenDialog from "@/components/codegen/CodeGenDialog";
 import { useVariableGroups } from "@/hooks/useVariableGroups";
 import type { KeyValuePair, AuthType, OAuthConfig, WebSocketMessage, Environment, EnvironmentVariable } from "@/types";
 import { API_URL } from "@/api/client";
@@ -75,6 +77,22 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const connectButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showFloatingConnect, setShowFloatingConnect] = useState(false);
+  const [showCodeGen, setShowCodeGen] = useState(false);
+
+  const codeGenData = useMemo(() => {
+    const headers: Record<string, string> = {};
+    for (const h of props.headers) {
+      if (h.enabled && h.key) headers[h.key] = h.value;
+    }
+    const authConfig: Record<string, string> = {};
+    if (props.authType === "bearer") authConfig.token = props.bearerToken;
+    else if (props.authType === "basic") { authConfig.username = props.basicUsername; authConfig.password = props.basicPassword; }
+    else if (props.authType === "api_key") { authConfig.key = props.apiKeyName; authConfig.value = props.apiKeyValue; authConfig.placement = props.apiKeyPlacement; }
+    return {
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+      authConfig: Object.keys(authConfig).length > 0 ? authConfig : undefined,
+    };
+  }, [props.headers, props.authType, props.bearerToken, props.basicUsername, props.basicPassword, props.apiKeyName, props.apiKeyValue, props.apiKeyPlacement]);
 
   // Variable resolution
   const activeEnvId = props.envOverrideId ?? props.selectedEnvId ?? null;
@@ -272,6 +290,16 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
           >
             {t("common.save")}
           </Button>
+          <Tooltip title={t("codegen.generateCode")}>
+            <IconButton
+              onClick={() => setShowCodeGen(true)}
+              disabled={!props.url}
+              size="small"
+              sx={{ height: 36, width: 36 }}
+            >
+              <Code sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Tooltip>
         </Box>
       </Box>
 
@@ -492,6 +520,16 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
           )}
         </Portal>
       )}
+
+      <CodeGenDialog
+        open={showCodeGen}
+        onClose={() => setShowCodeGen(false)}
+        method="GET"
+        url={props.url}
+        headers={codeGenData.headers}
+        authType={props.authType}
+        authConfig={codeGenData.authConfig}
+      />
     </Box>
   );
 }

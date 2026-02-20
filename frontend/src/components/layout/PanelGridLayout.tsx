@@ -16,7 +16,7 @@ import {
   GRID_MARGIN,
   GRID_CONTAINER_PADDING,
   LAYOUT_PRESETS,
-  LAYOUT_DEFAULT,
+  LAYOUT_SIDE_BY_SIDE,
   PANEL_META,
   CUSTOM_PRESETS_STORAGE_KEY,
   MAX_CUSTOM_PRESETS,
@@ -98,8 +98,8 @@ export default function PanelGridLayout({
     if (persisted) return persisted;
     return {
       version: LAYOUT_VERSION,
-      activePresetId: "default",
-      items: LAYOUT_DEFAULT.items,
+      activePresetId: "sideBySide",
+      items: LAYOUT_SIDE_BY_SIDE.items,
       minimizedPanels: [],
     };
   });
@@ -159,8 +159,8 @@ export default function PanelGridLayout({
   const handleResetLayout = useCallback(() => {
     setLayoutState({
       version: LAYOUT_VERSION,
-      activePresetId: "default",
-      items: LAYOUT_DEFAULT.items,
+      activePresetId: "sideBySide",
+      items: LAYOUT_SIDE_BY_SIDE.items,
       minimizedPanels: [],
     });
   }, []);

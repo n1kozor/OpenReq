@@ -38,3 +38,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     });
   },
 });
+
+// Notify React app that desktop local proxy is available
+window.addEventListener('DOMContentLoaded', () => {
+  window.dispatchEvent(new Event('openreq-desktop-ready'));
+});

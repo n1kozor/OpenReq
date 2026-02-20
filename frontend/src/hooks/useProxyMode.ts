@@ -55,11 +55,16 @@ export function useProxyModeProvider(): ProxyModeContextValue {
 
   useEffect(() => {
     const checkDesktop = () => {
-      setDesktopAvailable(!!(window as any).electronAPI?.localProxy);
+      const available = !!(window as any).electronAPI?.localProxy;
+      setDesktopAvailable(available);
+      if (available) setDetectionDone(true);
     };
     checkDesktop();
     window.addEventListener("openreq-desktop-ready", checkDesktop);
-    const timer = setTimeout(checkDesktop, 2000);
+    const timer = setTimeout(() => {
+      checkDesktop();
+      setDetectionDone(true);
+    }, 2000);
     return () => {
       window.removeEventListener("openreq-desktop-ready", checkDesktop);
       clearTimeout(timer);

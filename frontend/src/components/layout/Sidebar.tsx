@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Drawer,
   Toolbar,
-  List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
@@ -17,9 +16,6 @@ import {
   InputAdornment,
 } from "@mui/material";
 import {
-  Dns,
-  History,
-  Settings,
   Add,
   ExpandMore,
   ChevronRight,
@@ -28,19 +24,16 @@ import {
   NoteAdd,
   Edit,
   Delete,
-  Workspaces,
   PlayArrow,
   AutoAwesome,
   FileDownload,
-  Code,
   Search,
   SwapHoriz,
-  SmartToy,
-  AccountTree,
   ContentCopy,
   Lock,
   Refresh,
   IosShare,
+  Settings,
 } from "@mui/icons-material";
 import { List as VirtualList } from "react-window";
 import { useTranslation } from "react-i18next";
@@ -51,7 +44,6 @@ const DRAWER_WIDTH = 264;
 const MIN_DRAWER_WIDTH = 220;
 const MAX_DRAWER_WIDTH = 420;
 const SIDEBAR_WIDTH_STORAGE_KEY = "openreq-sidebar-width";
-const SIDEBAR_BOTTOM_NAV_STORAGE_KEY = "openreq-sidebar-bottom-nav-open";
 const COLLECTION_ROW_HEIGHT = 32;
 const ITEM_ROW_HEIGHT = 30;
 
@@ -82,10 +74,6 @@ interface SidebarProps {
   onRenameItem: (itemId: string, currentName: string) => void;
   onDeleteItem: (itemId: string, name: string) => void;
   onRunCollection: (collectionId: string) => void;
-  onOpenEnvironments: () => void;
-  onOpenHistory: () => void;
-  onOpenSettings: () => void;
-  onOpenWorkspaces: () => void;
   onOpenAIWizard: () => void;
   onOpenImport: () => void;
   onExportCollection: (collectionId: string) => void;
@@ -96,10 +84,6 @@ interface SidebarProps {
   onRequestCollectionTree: (collectionId: string) => void;
   onRequestAllCollectionItems: () => void;
   onMoveItem: (collectionId: string, itemId: string, parentId: string | null) => void;
-  onOpenCodeGen: () => void;
-  onOpenSDK: () => void;
-  onOpenAIAgent: () => void;
-  onOpenTestBuilder: () => void;
   onGenerateDocs: (collectionId: string, collectionName: string, folderId?: string, folderName?: string) => void;
   onShareDocs: (collectionId: string, collectionName: string, folderId?: string | null, folderName?: string | null) => void;
   onRefreshCollections: () => void;
@@ -127,10 +111,6 @@ export default function Sidebar({
   onRenameItem,
   onDeleteItem,
   onRunCollection,
-  onOpenEnvironments,
-  onOpenHistory,
-  onOpenSettings,
-  onOpenWorkspaces,
   onOpenAIWizard,
   onOpenImport,
   onDuplicateCollection,
@@ -141,10 +121,6 @@ export default function Sidebar({
   onRequestCollectionTree,
   onRequestAllCollectionItems,
   onMoveItem,
-  onOpenCodeGen,
-  onOpenSDK,
-  onOpenAIAgent,
-  onOpenTestBuilder,
   onGenerateDocs,
   onShareDocs,
   onRefreshCollections,
@@ -159,11 +135,6 @@ export default function Sidebar({
       return Math.min(MAX_DRAWER_WIDTH, Math.max(MIN_DRAWER_WIDTH, saved));
     }
     return DRAWER_WIDTH;
-  });
-  const [bottomNavOpen, setBottomNavOpen] = useState(() => {
-    const saved = localStorage.getItem(SIDEBAR_BOTTOM_NAV_STORAGE_KEY);
-    if (saved === null) return true;
-    return saved === "true";
   });
   const [collectionOpen, setCollectionOpen] = useState<Record<string, boolean>>({});
   const [folderOpen, setFolderOpen] = useState<Record<string, boolean>>({});
@@ -257,18 +228,6 @@ export default function Sidebar({
     });
   }, [collections, collectionTrees, searchTerm]);
 
-  const navItems = [
-    { icon: <Workspaces sx={{ fontSize: 17 }} />, label: t("nav.workspace"), onClick: onOpenWorkspaces },
-    { icon: <Dns sx={{ fontSize: 17 }} />, label: t("nav.environments"), onClick: onOpenEnvironments },
-    { icon: <History sx={{ fontSize: 17 }} />, label: t("nav.history"), onClick: onOpenHistory },
-    { icon: <Code sx={{ fontSize: 17 }} />, label: t("codegen.generateCode"), onClick: onOpenCodeGen },
-    { icon: <AccountTree sx={{ fontSize: 17 }} />, label: t("nav.testBuilder"), onClick: onOpenTestBuilder },
-    { icon: <SwapHoriz sx={{ fontSize: 17 }} />, label: t("importExport.title"), onClick: onOpenImport },
-    { icon: <FileDownload sx={{ fontSize: 17 }} />, label: t("sdk.title"), onClick: onOpenSDK },
-    { icon: <SmartToy sx={{ fontSize: 17 }} />, label: t("nav.aiAgent"), onClick: onOpenAIAgent },
-    { icon: <Settings sx={{ fontSize: 17 }} />, label: t("nav.settings"), onClick: onOpenSettings },
-  ];
-
   useEffect(() => {
     const el = listContainerRef.current;
     if (!el) return;
@@ -322,18 +281,6 @@ export default function Sidebar({
 
   const itemSize = (index: number) =>
     flatRows[index]?.type === "collection" ? COLLECTION_ROW_HEIGHT : ITEM_ROW_HEIGHT;
-
-  const handleToggleBottomNav = () => {
-    setBottomNavOpen((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(SIDEBAR_BOTTOM_NAV_STORAGE_KEY, String(next));
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  };
 
   return (
     <Drawer
@@ -1023,74 +970,6 @@ export default function Sidebar({
           {t("common.delete")}
         </MuiMenuItem>
       </Menu>
-
-      {/* Bottom navigation */}
-      <Divider />
-      <List dense sx={{ py: 0.5, flexShrink: 0 }}>
-        <ListItemButton
-          onClick={handleToggleBottomNav}
-          sx={{
-            py: 0.5,
-            minHeight: 30,
-            borderRadius: 1.5,
-            mx: 1,
-          }}
-        >
-          <ListItemIcon
-            sx={{
-              minWidth: 22,
-              color: "text.secondary",
-            }}
-          >
-            {bottomNavOpen ? (
-              <ExpandMore sx={{ fontSize: 16 }} />
-            ) : (
-              <ChevronRight sx={{ fontSize: 16 }} />
-            )}
-          </ListItemIcon>
-          <ListItemText
-            primary={t("nav.shortcuts")}
-            primaryTypographyProps={{
-              variant: "caption",
-              fontWeight: 700,
-              fontSize: "0.65rem",
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "text.secondary",
-            }}
-          />
-        </ListItemButton>
-        {bottomNavOpen &&
-          navItems.map((item) => (
-            <ListItemButton
-              key={item.label}
-              onClick={item.onClick}
-              sx={{
-                py: 0.5,
-                minHeight: 32,
-                borderRadius: 1.5,
-                mx: 1,
-              }}
-            >
-              <ListItemIcon
-                sx={{
-                  minWidth: 28,
-                  color: "text.secondary",
-                }}
-              >
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText
-                primary={item.label}
-                primaryTypographyProps={{
-                  variant: "body2",
-                  fontSize: 12.5,
-                  fontWeight: 500,
-                }}
-              />
-            </ListItemButton>
-          ))}
-      </List>
 
       <Box
         onMouseDown={(e) => {

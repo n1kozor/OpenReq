@@ -134,7 +134,12 @@ function loadSetup() {
 
 function loadApp(url) {
   // Load the shell page which contains a drag bar + webview
-  const webviewPreload = path.join(__dirname, 'webview-preload.js');
+  // In production (asar), webview preload must point to the unpacked file
+  // because <webview preload="file://..."> cannot load from inside app.asar
+  let webviewPreload = path.join(__dirname, 'webview-preload.js');
+  if (webviewPreload.includes('app.asar')) {
+    webviewPreload = webviewPreload.replace('app.asar', 'app.asar.unpacked');
+  }
   mainWindow.loadFile(path.join(__dirname, 'shell.html'), {
     query: { url: url, webviewPreload: webviewPreload },
   });
