@@ -364,6 +364,7 @@ export interface RequestTab {
   envOverrideId: string | null;
   requestSettings: RequestSettings;
   response: ProxyResponse | null;
+  responseTimestamp: number | null;
   scriptResult: ScriptResult | null;
   preRequestResult: ScriptResult | null;
   sentRequest?: SentRequestSnapshot | null;

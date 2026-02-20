@@ -118,6 +118,7 @@ function createNewTab(protocol: Protocol = "http"): RequestTab {
     scriptLanguage: "javascript",
     envOverrideId: null,
     response: null,
+    responseTimestamp: null,
     scriptResult: null,
     preRequestResult: null,
     sentRequest: null,
@@ -132,6 +133,7 @@ function stripRuntimeTab(tab: RequestTab): RequestTab {
   return {
     ...tab,
     response: null,
+    responseTimestamp: null,
     scriptResult: null,
     preRequestResult: null,
     sentRequest: null,
@@ -498,6 +500,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         savedRequestId: undefined,
         isDirty: true,
         response: null,
+        responseTimestamp: null,
         scriptResult: null,
         preRequestResult: null,
       };
@@ -585,6 +588,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         collectionId: targetCollectionId,
         isDirty: false,
         response: null,
+        responseTimestamp: null,
         scriptResult: null,
         preRequestResult: null,
       };
@@ -876,6 +880,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
       updateTab(activeTabId, {
         response,
+        responseTimestamp: Date.now(),
         preRequestResult: response.pre_request_result ?? null,
         scriptResult: response.script_result ?? null,
       });
@@ -1908,7 +1913,12 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                     />
                   ),
                   responsePanel: (
-                    <ResponsePanel response={activeTab.response} sentRequest={activeTab.sentRequest ?? null} />
+                    <ResponsePanel
+                      response={activeTab.response}
+                      sentRequest={activeTab.sentRequest ?? null}
+                      responseTimestamp={activeTab.responseTimestamp ?? null}
+                      onClearResponse={() => updateTab(activeTabId, { response: null, responseTimestamp: null, scriptResult: null, preRequestResult: null, sentRequest: null })}
+                    />
                   ),
                 }}
               </PanelGridLayout>

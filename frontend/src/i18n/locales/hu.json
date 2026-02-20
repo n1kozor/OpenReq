@@ -90,7 +90,8 @@
     "sentRequest": "Küldött kérés",
     "noSentRequest": "Még nem lett kérés elküldve.",
     "showSecrets": "Titkok megjelenítése",
-    "hideSecrets": "Titkok elrejtése"
+    "hideSecrets": "Titkok elrejtése",
+    "clear": "Válasz törlése"
   },
   "collection": {
     "new": "Új gyűjtemény",

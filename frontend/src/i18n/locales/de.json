@@ -90,7 +90,8 @@
     "sentRequest": "Gesendete Anfrage",
     "noSentRequest": "Es wurde noch keine Anfrage gesendet.",
     "showSecrets": "Geheimnisse anzeigen",
-    "hideSecrets": "Geheimnisse verbergen"
+    "hideSecrets": "Geheimnisse verbergen",
+    "clear": "Antwort löschen"
   },
   "collection": {
     "new": "Neue Sammlung",

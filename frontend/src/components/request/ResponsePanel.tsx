@@ -26,6 +26,8 @@ import {
   Storage,
   Send,
   Download,
+  Schedule,
+  ClearAll,
 } from "@mui/icons-material";
 import { Suspense, lazy, memo, useMemo, useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
@@ -152,9 +154,11 @@ type BodyViewMode = "pretty" | "raw" | "tree" | "preview";
 interface ResponsePanelProps {
   response: ProxyResponse | null;
   sentRequest: SentRequestSnapshot | null;
+  responseTimestamp?: number | null;
+  onClearResponse?: () => void;
 }
 
-function ResponsePanel({ response, sentRequest }: ResponsePanelProps) {
+function ResponsePanel({ response, sentRequest, responseTimestamp, onClearResponse }: ResponsePanelProps) {
   const { t } = useTranslation();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
@@ -419,7 +423,59 @@ function ResponsePanel({ response, sentRequest }: ResponsePanelProps) {
           </Typography>
         </Box>
 
-        <Box sx={{ flexGrow: 1 }} />
+        {/* Timestamp + Clear */}
+        {responseTimestamp && (
+          <Tooltip title={new Date(responseTimestamp).toLocaleString()}>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 0.5,
+                px: 1,
+                py: 0.25,
+                borderRadius: 1.5,
+                backgroundColor: alpha(theme.palette.text.secondary, 0.06),
+                cursor: "default",
+              }}
+            >
+              <Schedule sx={{ fontSize: 13, color: theme.palette.text.secondary }} />
+              <Typography
+                variant="caption"
+                sx={{
+                  fontWeight: 500,
+                  color: theme.palette.text.secondary,
+                  fontSize: "0.7rem",
+                }}
+              >
+                {new Date(responseTimestamp).toLocaleTimeString()}
+              </Typography>
+            </Box>
+          </Tooltip>
+        )}
+        {onClearResponse && (
+          <Button
+            size="small"
+            variant="text"
+            startIcon={<ClearAll sx={{ fontSize: 14 }} />}
+            onClick={onClearResponse}
+            sx={{
+              textTransform: "none",
+              fontSize: "0.72rem",
+              fontWeight: 500,
+              color: theme.palette.text.secondary,
+              minWidth: "auto",
+              px: 1,
+              py: 0.25,
+              borderRadius: 1.5,
+              "&:hover": {
+                color: theme.palette.warning.main,
+                backgroundColor: alpha(theme.palette.warning.main, 0.08),
+              },
+            }}
+          >
+            {t("response.clear")}
+          </Button>
+        )}
 
         {/* Download button for binary responses */}
         {isBinary && bodyBase64 && (

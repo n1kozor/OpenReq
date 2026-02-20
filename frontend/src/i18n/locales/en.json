@@ -90,7 +90,8 @@
     "sentRequest": "Sent Request",
     "noSentRequest": "No request has been sent yet.",
     "showSecrets": "Show secrets",
-    "hideSecrets": "Hide secrets"
+    "hideSecrets": "Hide secrets",
+    "clear": "Clear response"
   },
   "collection": {
     "new": "New Collection",
