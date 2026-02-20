@@ -124,7 +124,15 @@ export default function PanelGridLayout({
     [layoutState, visiblePanelIds],
   );
 
+  const userDragged = useMemo(() => ({ current: false }), []);
+
+  const handleDragStart = useCallback((..._args: unknown[]) => { userDragged.current = true; }, [userDragged]);
+  const handleResizeStart = useCallback((..._args: unknown[]) => { userDragged.current = true; }, [userDragged]);
+
   const handleLayoutChange = useCallback((newLayout: Layout) => {
+    const wasUserAction = userDragged.current;
+    userDragged.current = false;
+
     setLayoutState((prev) => {
       const updatedItems = prev.items.map((item) => {
         const rglItem = (newLayout as readonly LayoutItem[]).find((l) => l.i === item.i);
@@ -137,13 +145,17 @@ export default function PanelGridLayout({
           h: prev.minimizedPanels.includes(item.i as PanelId) ? item.h : rglItem.h,
         };
       });
+
+      // Only switch to "custom" if user actually dragged/resized a panel
+      const newPresetId = wasUserAction ? "custom" : prev.activePresetId;
+
       return {
         ...prev,
         items: updatedItems,
-        activePresetId: "custom",
+        activePresetId: newPresetId,
       };
     });
-  }, []);
+  }, [userDragged]);
 
   const handleSelectPreset = useCallback((presetId: string) => {
     const preset = LAYOUT_PRESETS.find((p) => p.id === presetId);
@@ -251,6 +263,8 @@ export default function PanelGridLayout({
             dragConfig={{ handle: ".panel-drag-handle" }}
             resizeConfig={{ handles: ['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne'] }}
             onLayoutChange={handleLayoutChange}
+            onDragStart={handleDragStart}
+            onResizeStart={handleResizeStart}
             compactor={verticalCompactor}
           >
             {visiblePanelIds.map((panelId) => {
