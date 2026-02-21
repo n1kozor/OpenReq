@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useRef, type ReactNode } from "react";
 import { Box, Typography, IconButton, Tooltip } from "@mui/material";
-import { DragIndicator, Minimize, CropSquare } from "@mui/icons-material";
+import { Minimize, CropSquare } from "@mui/icons-material";
 import { alpha, useTheme } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
 
@@ -44,18 +44,17 @@ const DraggablePanel = forwardRef<HTMLDivElement, DraggablePanelProps>(
         sx={{
           display: "flex",
           flexDirection: "column",
-          borderRadius: 2.5,
-          border: `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.1)}`,
-          backgroundColor: isDark ? alpha("#111620", 0.6) : "#ffffff",
-          backdropFilter: isDark ? "blur(8px)" : undefined,
+          borderRadius: 0,
+          border: `1px solid ${isDark ? "#4e5157" : "#d1d1d1"}`,
+          backgroundColor: isDark ? "#2b2d30" : "#ffffff",
           overflow: "hidden",
-          transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+          transition: "border-color 0.1s ease",
           "&:hover": {
-            borderColor: alpha(isDark ? "#8b949e" : "#64748b", 0.2),
+            borderColor: isDark ? "#4e5157" : "#b0b0b0",
           },
           "&.react-draggable-dragging": {
-            boxShadow: `0 8px 32px ${alpha("#000", isDark ? 0.5 : 0.15)}`,
-            borderColor: alpha(theme.palette.primary.main, 0.4),
+            boxShadow: `0 4px 16px ${alpha("#000", isDark ? 0.4 : 0.12)}`,
+            borderColor: theme.palette.primary.main,
             zIndex: 1000,
           },
           height: "100%",
@@ -68,41 +67,27 @@ const DraggablePanel = forwardRef<HTMLDivElement, DraggablePanelProps>(
             display: "flex",
             alignItems: "center",
             gap: 0.75,
-            px: 1.5,
-            py: 0.5,
-            minHeight: 32,
+            px: 1,
+            py: 0.25,
+            minHeight: 26,
             cursor: "grab",
             borderBottom: isMinimized
               ? "none"
-              : `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.08)}`,
-            backgroundColor: alpha(
-              isDark ? "#1a1f2e" : "#f8fafc",
-              isDark ? 0.5 : 0.8,
-            ),
+              : `1px solid ${isDark ? "#4e5157" : "#d1d1d1"}`,
+            backgroundColor: isDark ? "#393b40" : "#e8e8e8",
             userSelect: "none",
             flexShrink: 0,
             "&:active": { cursor: "grabbing" },
           }}
         >
-          <DragIndicator
-            sx={{
-              fontSize: 14,
-              color: "text.secondary",
-              opacity: 0.4,
-              transition: "opacity 0.15s",
-              ".panel-drag-handle:hover &": { opacity: 0.8 },
-            }}
-          />
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, color: "text.secondary" }}>
             {icon}
           </Box>
           <Typography
             variant="caption"
             sx={{
-              fontWeight: 600,
+              fontWeight: 500,
               fontSize: "0.72rem",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
               color: "text.secondary",
             }}
           >

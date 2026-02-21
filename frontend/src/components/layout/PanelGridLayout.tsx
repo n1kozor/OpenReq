@@ -124,15 +124,14 @@ export default function PanelGridLayout({
     [layoutState, visiblePanelIds],
   );
 
-  const userDragged = useMemo(() => ({ current: false }), []);
+  const interacting = useMemo(() => ({ current: false }), []);
 
-  const handleDragStart = useCallback((..._args: unknown[]) => { userDragged.current = true; }, [userDragged]);
-  const handleResizeStart = useCallback((..._args: unknown[]) => { userDragged.current = true; }, [userDragged]);
+  const handleDragStart = useCallback((..._args: unknown[]) => { interacting.current = true; }, [interacting]);
+  const handleResizeStart = useCallback((..._args: unknown[]) => { interacting.current = true; }, [interacting]);
 
-  const handleLayoutChange = useCallback((newLayout: Layout) => {
-    const wasUserAction = userDragged.current;
-    userDragged.current = false;
-
+  // Commit layout to state only when drag/resize ends — avoids re-render lag during interaction
+  const commitLayout = useCallback((newLayout: Layout) => {
+    interacting.current = false;
     setLayoutState((prev) => {
       const updatedItems = prev.items.map((item) => {
         const rglItem = (newLayout as readonly LayoutItem[]).find((l) => l.i === item.i);
@@ -145,17 +144,36 @@ export default function PanelGridLayout({
           h: prev.minimizedPanels.includes(item.i as PanelId) ? item.h : rglItem.h,
         };
       });
-
-      // Only switch to "custom" if user actually dragged/resized a panel
-      const newPresetId = wasUserAction ? "custom" : prev.activePresetId;
-
-      return {
-        ...prev,
-        items: updatedItems,
-        activePresetId: newPresetId,
-      };
+      return { ...prev, items: updatedItems, activePresetId: "custom" };
     });
-  }, [userDragged]);
+  }, [interacting]);
+
+  const handleDragStop = useCallback((...args: unknown[]) => {
+    commitLayout(args[0] as Layout);
+  }, [commitLayout]);
+
+  const handleResizeStop = useCallback((...args: unknown[]) => {
+    commitLayout(args[0] as Layout);
+  }, [commitLayout]);
+
+  // Only handle non-user layout changes (e.g. mount, preset switch)
+  const handleLayoutChange = useCallback((newLayout: Layout) => {
+    if (interacting.current) return; // skip during drag/resize — will commit on stop
+    setLayoutState((prev) => {
+      const updatedItems = prev.items.map((item) => {
+        const rglItem = (newLayout as readonly LayoutItem[]).find((l) => l.i === item.i);
+        if (!rglItem) return item;
+        return {
+          ...item,
+          x: rglItem.x,
+          y: rglItem.y,
+          w: rglItem.w,
+          h: prev.minimizedPanels.includes(item.i as PanelId) ? item.h : rglItem.h,
+        };
+      });
+      return { ...prev, items: updatedItems };
+    });
+  }, [interacting]);
 
   const handleSelectPreset = useCallback((presetId: string) => {
     const preset = LAYOUT_PRESETS.find((p) => p.id === presetId);
@@ -264,7 +282,9 @@ export default function PanelGridLayout({
             resizeConfig={{ handles: ['s', 'w', 'e', 'n', 'sw', 'nw', 'se', 'ne'] }}
             onLayoutChange={handleLayoutChange}
             onDragStart={handleDragStart}
+            onDragStop={handleDragStop}
             onResizeStart={handleResizeStart}
+            onResizeStop={handleResizeStop}
             compactor={verticalCompactor}
           >
             {visiblePanelIds.map((panelId) => {

@@ -46,7 +46,7 @@ CRITICAL URL RULES:
 - Example: if base is "https://api.example.com/v1" and path is "/users", the url must be "https://api.example.com/v1/users"
 - If the documentation does NOT specify a clear base URL, use "https://api.example.com" as the base
 - NEVER return just a path like "/users" — always return "https://something.com/users"
-- Replace path parameters with example values in curly braces, e.g., https://api.example.com/users/{user_id}
+- Replace path parameters with example values using double-curly placeholders, e.g., https://api.example.com/users/{{user_id}}
 
 For each endpoint, extract:
 - name: A short descriptive name (e.g., "List Users", "Create Order")

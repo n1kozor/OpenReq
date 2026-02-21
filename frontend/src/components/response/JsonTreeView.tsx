@@ -38,6 +38,18 @@ function JsonNode({
     : [];
   const count = entries.length;
 
+  const colorSwatches = (() => {
+    if (!isObject || isArray) return null;
+    const colors = (value as Record<string, unknown>)?.colors;
+    if (!Array.isArray(colors)) return null;
+    const hexColors = colors
+      .filter((c) => typeof c === "string")
+      .map((c) => (c as string).trim())
+      .filter((c) => /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(c));
+    if (hexColors.length === 0) return null;
+    return hexColors.slice(0, 8);
+  })();
+
   const renderValue = (v: unknown) => {
     if (v === null) return <span style={{ color: "#808080" }}>null</span>;
     if (typeof v === "string")
@@ -110,10 +122,34 @@ function JsonNode({
           </span>
         )}
         <span>{openBracket}</span>
+        {isArray && (
+          <span style={{ color: "#808080" }}>
+            {" "}
+            {count} {count === 1 ? "item" : "items"}
+          </span>
+        )}
+        {colorSwatches && (
+          <Box sx={{ display: "flex", gap: 0.5, mx: 0.75 }}>
+            {colorSwatches.map((c) => (
+              <Box
+                key={c}
+                title={c}
+                sx={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: "2px",
+                  bgcolor: c,
+                  border: "1px solid rgba(255,255,255,0.25)",
+                  boxShadow: "0 0 0 1px rgba(0,0,0,0.2)",
+                }}
+              />
+            ))}
+          </Box>
+        )}
         {!expanded && (
           <span style={{ color: "#808080" }}>
             {" "}
-            {count} {count === 1 ? "item" : "items"} {closeBracket}
+            {closeBracket}
             {comma}
           </span>
         )}

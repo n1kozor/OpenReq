@@ -83,12 +83,12 @@ export default function LayoutToolbar({
       sx={{
         display: "flex",
         alignItems: "center",
-        gap: 1,
-        px: 2,
-        py: 0.5,
-        borderBottom: `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.06)}`,
-        backgroundColor: alpha(isDark ? "#0d1117" : "#f8fafc", isDark ? 0.3 : 0.5),
-        minHeight: 36,
+        gap: 0.75,
+        px: 1,
+        py: 0.25,
+        borderBottom: `1px solid ${isDark ? "#4e5157" : "#d1d1d1"}`,
+        backgroundColor: isDark ? "#2b2d30" : "#f0f0f0",
+        minHeight: 28,
         flexWrap: "wrap",
       }}
     >
@@ -118,10 +118,10 @@ export default function LayoutToolbar({
             value={preset.id}
             sx={{
               py: 0.25,
-              px: 1,
+              px: 0.75,
               gap: 0.5,
               fontSize: "0.7rem",
-              borderRadius: "6px !important",
+              borderRadius: "3px !important",
             }}
           >
             <Tooltip title={t(preset.nameKey)}>

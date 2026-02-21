@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Box, Toolbar, Snackbar, Alert, Typography } from "@mui/material";
 import { useTranslation } from "react-i18next";
 import TopBar from "./TopBar";
-import NavRail from "./NavRail";
+// StatusBar removed — all selectors moved to TopBar
+// NavRail removed — nav items moved to TopBar
 import Sidebar from "./Sidebar";
 import TabBar from "./TabBar";
 import RequestBuilder from "@/components/request/RequestBuilder";
@@ -419,6 +420,16 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     didInitCollections.current = true;
     loadCollections();
   }, [loadCollections]);
+
+  // Ensure folder tabs can render even if the parent collection is collapsed in the sidebar.
+  useEffect(() => {
+    if (!activeTab || activeTab.tabType !== "folder") return;
+    const parentColId = activeTab.parentCollectionId;
+    if (!parentColId) return;
+    if (!collectionItems[parentColId] && !collectionTreeLoading[parentColId]) {
+      loadCollectionTree(parentColId);
+    }
+  }, [activeTab, collectionItems, collectionTreeLoading, loadCollectionTree]);
   // Reload collections when workspace changes
   const lastColWorkspaceId = useRef<string | null>(null);
   useEffect(() => {
@@ -1502,39 +1513,34 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
   return (
     <ProxyModeContext.Provider value={proxyModeValue}>
+    <TopBar
+      mode={mode}
+      onToggleTheme={onToggleTheme}
+      onLogout={onLogout}
+      username={user.username}
+      workspaces={workspaces}
+      currentWorkspaceId={currentWorkspaceId}
+      onSelectWorkspace={handleSelectWorkspace}
+      environments={environments}
+      selectedEnvironmentId={selectedEnvId}
+      onSelectEnvironment={handleSelectEnvironment}
+      showCollectionsSidebar={showCollectionsSidebar}
+      onToggleCollections={() => {
+        setShowCollectionsSidebar((prev) => {
+          const next = !prev;
+          localStorage.setItem("openreq-collections-sidebar", String(next));
+          return next;
+        });
+      }}
+      onOpenHistory={() => setShowHistory(true)}
+      onOpenTestBuilder={() => setShowTestFlowList(true)}
+      onOpenImport={() => setShowImport(true)}
+      onOpenSDK={() => setShowSDK(true)}
+      onOpenAIAgent={() => setShowAIAgent(true)}
+      onOpenSettings={() => setView("settings")}
+      activeNavItem={view === "settings" ? "settings" : showAIAgent ? "aiAgent" : null}
+    />
     <Box sx={{ display: "flex", height: "100vh", overflow: "hidden" }}>
-      <TopBar
-        mode={mode}
-        onToggleTheme={onToggleTheme}
-        onLogout={onLogout}
-        username={user.username}
-        environments={environments}
-        selectedEnvironmentId={selectedEnvId}
-        onSelectEnvironment={handleSelectEnvironment}
-        workspaces={workspaces}
-        currentWorkspaceId={currentWorkspaceId}
-        onSelectWorkspace={handleSelectWorkspace}
-      />
-
-      <NavRail
-        showCollectionsSidebar={showCollectionsSidebar}
-        onToggleCollections={() => {
-          setShowCollectionsSidebar((prev) => {
-            const next = !prev;
-            localStorage.setItem("openreq-collections-sidebar", String(next));
-            return next;
-          });
-        }}
-        onOpenWorkspaces={() => setShowWorkspaces(true)}
-        onOpenEnvironments={() => setShowEnvManager(true)}
-        onOpenHistory={() => setShowHistory(true)}
-        onOpenTestBuilder={() => setShowTestFlowList(true)}
-        onOpenImport={() => setShowImport(true)}
-        onOpenSDK={() => setShowSDK(true)}
-        onOpenAIAgent={() => setShowAIAgent(true)}
-        onOpenSettings={() => setView("settings")}
-        activeNavItem={view === "settings" ? "settings" : showAIAgent ? "aiAgent" : null}
-      />
 
       {showCollectionsSidebar && <Sidebar
         collections={collections}
@@ -1618,7 +1624,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         transition: "margin-right 225ms cubic-bezier(0, 0, 0.2, 1)",
         marginRight: showAIAgent ? `${DRAWER_WIDTH}px` : 0,
       }}>
-        <Toolbar sx={{ minHeight: "52px !important" }} />
+        <Toolbar sx={{ minHeight: "40px !important" }} />
 
         {view === "request" && (
           <>
@@ -1931,6 +1937,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
             <SettingsPage mode={mode} onToggleTheme={onToggleTheme} user={user} onClose={() => setView("request")} />
           </Box>
         )}
+
       </Box>
 
       {/* ── Dialogs ── */}

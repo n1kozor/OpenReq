@@ -89,7 +89,7 @@ function createWindow() {
     minHeight: 600,
     frame: false,
     // NO transparent: true — let Windows 11 DWM handle rounded corners natively
-    backgroundColor: '#0b0e14',
+    backgroundColor: '#2b2d30',
     hasShadow: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

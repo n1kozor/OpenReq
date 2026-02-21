@@ -89,14 +89,9 @@ export default function TabBar({
       sx={{
         display: "flex",
         alignItems: "center",
-        borderBottom: `1px solid ${alpha(
-          isDark ? "#8b949e" : "#64748b",
-          0.1
-        )}`,
-        minHeight: 40,
-        backgroundColor: isDark
-          ? alpha("#0d1117", 0.5)
-          : alpha("#f1f5f9", 0.5),
+        borderBottom: `1px solid ${isDark ? "#4e5157" : "#d1d1d1"}`,
+        minHeight: 34,
+        backgroundColor: isDark ? "#1e1f22" : "#e8e8e8",
       }}
     >
       <Tabs
@@ -108,10 +103,10 @@ export default function TabBar({
         variant="scrollable"
         scrollButtons="auto"
         sx={{
-          minHeight: 40,
+          minHeight: 34,
           "& .MuiTabs-indicator": {
             height: 2,
-            borderRadius: "2px 2px 0 0",
+            borderRadius: 0,
           },
         }}
       >
@@ -119,10 +114,14 @@ export default function TabBar({
           <Tab
             key={tab.id}
             sx={{
-              minHeight: 40,
+              minHeight: 34,
               px: 1.5,
               py: 0,
-              transition: "all 0.15s ease",
+              borderRadius: 0,
+              transition: "all 0.1s ease",
+              "&.Mui-selected": {
+                backgroundColor: isDark ? "#2b2d30" : "#ffffff",
+              },
             }}
             onContextMenu={(e) => handleContextMenu(e, tab.id)}
             label={

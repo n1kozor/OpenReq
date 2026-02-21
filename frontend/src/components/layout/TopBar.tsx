@@ -7,10 +7,8 @@ import {
   Select,
   MenuItem,
   Box,
-  Chip,
   Tooltip,
   FormControl,
-  Avatar,
   TextField,
   InputAdornment,
   ListSubheader,
@@ -19,27 +17,46 @@ import {
   DarkMode,
   LightMode,
   Logout,
-  KeyboardArrowDown,
   Workspaces,
+  Cloud,
+  Lan,
   Search,
+  FiberManualRecord,
+  KeyboardArrowDown,
+  FolderOpen,
+  History,
+  AccountTree,
+  SwapHoriz,
+  FileDownload,
+  SmartToy,
+  Settings,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
-import { alpha, useTheme } from "@mui/material/styles";
-import { Cloud, Lan } from "@mui/icons-material";
-import type { Environment, Workspace } from "@/types";
+import { useTheme } from "@mui/material/styles";
 import { useProxyMode } from "@/hooks/useProxyMode";
+import type { Environment, Workspace } from "@/types";
 
 interface TopBarProps {
   mode: "dark" | "light";
   onToggleTheme: () => void;
   onLogout: () => void;
   username?: string;
-  environments: Environment[];
-  selectedEnvironmentId: string | null;
-  onSelectEnvironment: (id: string | null) => void;
   workspaces: Workspace[];
   currentWorkspaceId: string | null;
   onSelectWorkspace: (id: string) => void;
+  environments: Environment[];
+  selectedEnvironmentId: string | null;
+  onSelectEnvironment: (id: string | null) => void;
+  // Nav actions
+  showCollectionsSidebar: boolean;
+  onToggleCollections: () => void;
+  onOpenHistory: () => void;
+  onOpenTestBuilder: () => void;
+  onOpenImport: () => void;
+  onOpenSDK: () => void;
+  onOpenAIAgent: () => void;
+  onOpenSettings: () => void;
+  activeNavItem: "settings" | "aiAgent" | null;
 }
 
 const LANGUAGES = [
@@ -49,9 +66,9 @@ const LANGUAGES = [
 ];
 
 const ENV_COLORS: Record<string, string> = {
-  LIVE: "#ef4444",
-  TEST: "#f59e0b",
-  DEV: "#10b981",
+  LIVE: "#cf5b56",
+  TEST: "#e9b84a",
+  DEV: "#59a869",
 };
 
 export default function TopBar({
@@ -59,24 +76,47 @@ export default function TopBar({
   onToggleTheme,
   onLogout,
   username,
-  environments,
-  selectedEnvironmentId,
-  onSelectEnvironment,
   workspaces,
   currentWorkspaceId,
   onSelectWorkspace,
+  environments,
+  selectedEnvironmentId,
+  onSelectEnvironment,
+  showCollectionsSidebar,
+  onToggleCollections,
+  onOpenHistory,
+  onOpenTestBuilder,
+  onOpenImport,
+  onOpenSDK,
+  onOpenAIAgent,
+  onOpenSettings,
+  activeNavItem,
 }: TopBarProps) {
   const { t, i18n } = useTranslation();
   const theme = useTheme();
   const isDark = mode === "dark";
+  const { proxyMode, setProxyMode, localAvailable } = useProxyMode();
   const [wsSearch, setWsSearch] = useState("");
+
+  const currentWs = workspaces.find((w) => w.id === currentWorkspaceId);
+  const currentEnv = environments.find((e) => e.id === selectedEnvironmentId);
 
   const handleLanguageChange = (lang: string) => {
     i18n.changeLanguage(lang);
     localStorage.setItem("openreq-lang", lang);
   };
 
-  const { proxyMode, setProxyMode, localAvailable } = useProxyMode();
+  const navBtnSx = (active: boolean) => ({
+    width: 28,
+    height: 28,
+    borderRadius: 1,
+    color: active ? theme.palette.primary.main : theme.palette.text.secondary,
+    backgroundColor: active ? (isDark ? "#2d4a6e" : "#cce0f5") : "transparent",
+    "&:hover": {
+      color: theme.palette.primary.main,
+      backgroundColor: isDark ? "#4e5157" : "#e0e0e0",
+    },
+  });
 
   return (
     <AppBar
@@ -84,383 +124,230 @@ export default function TopBar({
       elevation={0}
       sx={{
         zIndex: theme.zIndex.drawer + 1,
-        borderBottom: `1px solid ${alpha(
-          isDark ? "#8b949e" : "#64748b",
-          0.1
-        )}`,
-        backgroundColor: isDark
-          ? alpha("#0b0e14", 0.85)
-          : alpha("#ffffff", 0.85),
-        backdropFilter: "blur(20px) saturate(180%)",
+        borderBottom: `1px solid ${isDark ? "#4e5157" : "#d1d1d1"}`,
+        backgroundColor: isDark ? "#3c3f41" : "#f7f8fa",
         color: theme.palette.text.primary,
       }}
     >
-      <Toolbar sx={{ gap: 1.5, minHeight: "52px !important", px: 2.5 }}>
+      <Toolbar
+        sx={{
+          gap: 0.25,
+          minHeight: "40px !important",
+          maxHeight: 40,
+          px: "8px !important",
+        }}
+      >
         {/* Brand */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexShrink: 0 }}>
-          {/* Logo mark */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, flexShrink: 0, mr: 0.5 }}>
           <Box
             component="img"
             src="/logo.png"
             alt="OpenReq"
-            sx={{
-              width: 32,
-              height: 32,
-              filter: isDark
-                ? "drop-shadow(0 2px 8px rgba(129, 140, 248, 0.3))"
-                : "drop-shadow(0 2px 8px rgba(99, 102, 241, 0.2))",
-            }}
+            sx={{ width: 22, height: 22 }}
           />
           <Typography
-            variant="h6"
             sx={{
-              fontWeight: 700,
-              fontSize: "1.05rem",
-              letterSpacing: "-0.02em",
+              fontWeight: 600,
+              fontSize: "0.85rem",
               color: theme.palette.text.primary,
             }}
           >
             OpenReq
           </Typography>
-          <Chip
-            label={`v${__APP_VERSION__}`}
-            size="small"
-            sx={{
-              height: 18,
-              fontSize: "0.6rem",
-              fontWeight: 600,
-              borderRadius: 1,
-              backgroundColor: alpha(theme.palette.primary.main, isDark ? 0.15 : 0.1),
-              color: theme.palette.primary.main,
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-              "& .MuiChip-label": { px: 0.75 },
-            }}
-          />
-
-          {workspaces.length > 0 && (
-            <>
-              <Typography
-                sx={{
-                  color: theme.palette.text.secondary,
-                  opacity: 0.3,
-                  fontSize: "1rem",
-                  fontWeight: 300,
-                  mx: -0.5,
-                }}
-              >
-                /
-              </Typography>
-              <FormControl size="small">
-                <Select
-                  value={currentWorkspaceId ?? ""}
-                  onChange={(e) => onSelectWorkspace(e.target.value)}
-                  IconComponent={KeyboardArrowDown}
-                  onOpen={() => setWsSearch("")}
-                  renderValue={(val) => {
-                    const ws = workspaces.find((w) => w.id === val);
-                    return (
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                        <Workspaces sx={{ fontSize: 14, color: theme.palette.primary.main }} />
-                        <span>{ws?.name ?? t("workspace.select")}</span>
-                      </Box>
-                    );
-                  }}
-                  MenuProps={{
-                    PaperProps: { sx: { maxHeight: 320 } },
-                    autoFocus: false,
-                  }}
-                  sx={{
-                    height: 30,
-                    fontSize: "0.8rem",
-                    fontWeight: 500,
-                    borderRadius: 2,
-                    minWidth: 140,
-                    backgroundColor: alpha(
-                      theme.palette.text.primary,
-                      isDark ? 0.04 : 0.03
-                    ),
-                    border: `1px solid ${alpha(
-                      isDark ? "#8b949e" : "#64748b",
-                      0.12
-                    )}`,
-                    transition: "all 0.2s ease",
-                    "& .MuiOutlinedInput-notchedOutline": { border: "none" },
-                    "&:hover": {
-                      backgroundColor: alpha(
-                        theme.palette.text.primary,
-                        isDark ? 0.07 : 0.06
-                      ),
-                      borderColor: alpha(theme.palette.primary.main, 0.4),
-                    },
-                    "& .MuiSelect-icon": {
-                      fontSize: "1.1rem",
-                      color: theme.palette.text.secondary,
-                    },
-                  }}
-                >
-                  {workspaces.length >= 6 && (
-                    <ListSubheader sx={{ p: 1, lineHeight: "unset" }}>
-                      <TextField
-                        size="small"
-                        autoFocus
-                        placeholder={t("workspace.search")}
-                        fullWidth
-                        value={wsSearch}
-                        onChange={(e) => setWsSearch(e.target.value)}
-                        onKeyDown={(e) => e.stopPropagation()}
-                        InputProps={{
-                          startAdornment: (
-                            <InputAdornment position="start">
-                              <Search sx={{ fontSize: 16 }} />
-                            </InputAdornment>
-                          ),
-                          sx: { fontSize: "0.8rem" },
-                        }}
-                      />
-                    </ListSubheader>
-                  )}
-                  {workspaces
-                    .filter((ws) =>
-                      !wsSearch || ws.name.toLowerCase().includes(wsSearch.toLowerCase())
-                    )
-                    .map((ws) => (
-                      <MenuItem key={ws.id} value={ws.id}>
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                          <Workspaces sx={{ fontSize: 16, color: ws.id === currentWorkspaceId ? theme.palette.primary.main : theme.palette.text.secondary, opacity: 0.7 }} />
-                          <span style={{ fontWeight: ws.id === currentWorkspaceId ? 600 : 400 }}>{ws.name}</span>
-                        </Box>
-                      </MenuItem>
-                    ))}
-                </Select>
-              </FormControl>
-            </>
-          )}
         </Box>
 
-        <Box sx={{ flexGrow: 1 }} />
+        <VerticalDivider />
 
-        {/* Environment Selector */}
-        {environments.length > 0 && (
-          <FormControl size="small">
-            <Select
-              value={selectedEnvironmentId ?? "__none__"}
-              onChange={(e) =>
-                onSelectEnvironment(
-                  e.target.value === "__none__" ? null : e.target.value
-                )
-              }
-              displayEmpty
-              IconComponent={KeyboardArrowDown}
-              sx={{
-                height: 32,
-                fontSize: "0.8rem",
-                fontWeight: 500,
-                borderRadius: 2,
-                minWidth: 180,
-                backgroundColor: alpha(
-                  theme.palette.text.primary,
-                  isDark ? 0.04 : 0.03
-                ),
-                border: `1px solid ${alpha(
-                  isDark ? "#8b949e" : "#64748b",
-                  0.12
-                )}`,
-                transition: "all 0.2s ease",
-                "& .MuiOutlinedInput-notchedOutline": { border: "none" },
-                "&:hover": {
-                  backgroundColor: alpha(
-                    theme.palette.text.primary,
-                    isDark ? 0.07 : 0.06
-                  ),
-                  borderColor: alpha(theme.palette.primary.main, 0.4),
-                },
-                "& .MuiSelect-icon": {
-                  fontSize: "1.1rem",
-                  color: theme.palette.text.secondary,
-                },
-              }}
-            >
-              <MenuItem value="__none__">
-                <em style={{ opacity: 0.6 }}>{t("environment.select")}</em>
-              </MenuItem>
-              {environments.map((env) => (
-                <MenuItem key={env.id} value={env.id}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: "50%",
-                        bgcolor: ENV_COLORS[env.env_type] ?? "#888",
-                        boxShadow: `0 0 6px ${
-                          ENV_COLORS[env.env_type] ?? "#888"
-                        }60`,
-                      }}
-                    />
-                    <span style={{ fontWeight: 500 }}>{env.name}</span>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: "text.secondary",
-                        ml: 0.5,
-                        fontSize: "0.65rem",
-                        fontWeight: 600,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                      }}
-                    >
-                      {env.env_type}
-                    </Typography>
+        {/* Nav items */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+          <Tooltip title={t("nav.collections")}>
+            <IconButton size="small" onClick={onToggleCollections} sx={navBtnSx(showCollectionsSidebar)}>
+              <FolderOpen sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t("nav.history")}>
+            <IconButton size="small" onClick={onOpenHistory} sx={navBtnSx(false)}>
+              <History sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t("nav.testBuilder")}>
+            <IconButton size="small" onClick={onOpenTestBuilder} sx={navBtnSx(false)}>
+              <AccountTree sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t("importExport.title")}>
+            <IconButton size="small" onClick={onOpenImport} sx={navBtnSx(false)}>
+              <SwapHoriz sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t("sdk.title")}>
+            <IconButton size="small" onClick={onOpenSDK} sx={navBtnSx(false)}>
+              <FileDownload sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t("nav.aiAgent")}>
+            <IconButton size="small" onClick={onOpenAIAgent} sx={navBtnSx(activeNavItem === "aiAgent")}>
+              <SmartToy sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t("nav.settings")}>
+            <IconButton size="small" onClick={onOpenSettings} sx={navBtnSx(activeNavItem === "settings")}>
+              <Settings sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+
+        <VerticalDivider />
+
+        {/* Workspace selector */}
+        <FormControl size="small" sx={{ minWidth: 0 }}>
+          <Select
+            value={currentWorkspaceId ?? ""}
+            onChange={(e) => onSelectWorkspace(e.target.value)}
+            onOpen={() => setWsSearch("")}
+            IconComponent={KeyboardArrowDown}
+            variant="standard"
+            disableUnderline
+            renderValue={() => (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                <Workspaces sx={{ fontSize: 13, color: theme.palette.primary.main }} />
+                <Typography variant="caption" sx={{ fontSize: "0.72rem", fontWeight: 500 }}>
+                  {currentWs?.name ?? t("workspace.select")}
+                </Typography>
+              </Box>
+            )}
+            MenuProps={{ PaperProps: { sx: { maxHeight: 280 } }, autoFocus: false }}
+            sx={{
+              fontSize: "0.72rem",
+              "& .MuiSelect-select": { py: "0px !important", pl: "4px !important", pr: "20px !important", display: "flex", alignItems: "center" },
+              "& .MuiSelect-icon": { fontSize: 14 },
+            }}
+          >
+            {workspaces.length >= 6 && (
+              <ListSubheader sx={{ p: 0.5, lineHeight: "unset" }}>
+                <TextField
+                  size="small"
+                  autoFocus
+                  placeholder={t("workspace.search")}
+                  fullWidth
+                  value={wsSearch}
+                  onChange={(e) => setWsSearch(e.target.value)}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><Search sx={{ fontSize: 14 }} /></InputAdornment>,
+                    sx: { fontSize: "0.75rem" },
+                  }}
+                />
+              </ListSubheader>
+            )}
+            {workspaces
+              .filter((ws) => !wsSearch || ws.name.toLowerCase().includes(wsSearch.toLowerCase()))
+              .map((ws) => (
+                <MenuItem key={ws.id} value={ws.id} sx={{ fontSize: "0.78rem" }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                    <Workspaces sx={{ fontSize: 13, color: ws.id === currentWorkspaceId ? theme.palette.primary.main : theme.palette.text.secondary }} />
+                    <span style={{ fontWeight: ws.id === currentWorkspaceId ? 600 : 400 }}>{ws.name}</span>
                   </Box>
                 </MenuItem>
               ))}
-            </Select>
-          </FormControl>
-        )}
+          </Select>
+        </FormControl>
 
-        {/* Proxy Mode selector — Server vs Local */}
-        <FormControl size="small">
+        <VerticalDivider />
+
+        {/* Environment selector */}
+        <FormControl size="small" sx={{ minWidth: 0 }}>
           <Select
-            value={proxyMode}
-            onChange={(e) => {
-              const val = e.target.value as typeof proxyMode;
-              if (val === "server" || localAvailable) setProxyMode(val);
-            }}
+            value={selectedEnvironmentId ?? "__none__"}
+            onChange={(e) => onSelectEnvironment(e.target.value === "__none__" ? null : e.target.value)}
+            variant="standard"
+            disableUnderline
             IconComponent={KeyboardArrowDown}
-            renderValue={(val) => {
-              const isLocal = val === "local";
-              const unavailable = isLocal && !localAvailable;
+            renderValue={() => {
+              if (!currentEnv) return (
+                <Typography variant="caption" sx={{ fontSize: "0.72rem", opacity: 0.6 }}>
+                  {t("environment.select")}
+                </Typography>
+              );
+              const dotColor = ENV_COLORS[currentEnv.env_type] ?? "#888";
               return (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                  {isLocal ? (
-                    <Lan sx={{ fontSize: 14, color: unavailable ? theme.palette.error.main : theme.palette.success.main }} />
-                  ) : (
-                    <Cloud sx={{ fontSize: 14 }} />
-                  )}
-                  <span style={{ color: unavailable ? theme.palette.error.main : undefined }}>
-                    {t(`proxyMode.${val}`)}
-                  </span>
-                  {unavailable && (
-                    <Box
-                      sx={{
-                        width: 6, height: 6, borderRadius: "50%",
-                        bgcolor: theme.palette.error.main,
-                        boxShadow: `0 0 6px ${theme.palette.error.main}`,
-                        ml: 0.25,
-                      }}
-                    />
-                  )}
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                  <FiberManualRecord sx={{ fontSize: 7, color: dotColor }} />
+                  <Typography variant="caption" sx={{ fontSize: "0.72rem", fontWeight: 500 }}>
+                    {currentEnv.name}
+                  </Typography>
                 </Box>
               );
             }}
             sx={{
-              height: 32,
-              fontSize: "0.8rem",
-              fontWeight: 500,
-              borderRadius: 2,
-              minWidth: 130,
-              backgroundColor: alpha(
-                proxyMode === "local" && !localAvailable ? theme.palette.error.main : theme.palette.text.primary,
-                proxyMode === "local" && !localAvailable ? (isDark ? 0.08 : 0.06) : (isDark ? 0.04 : 0.03),
-              ),
-              border: `1px solid ${alpha(
-                proxyMode === "local" && !localAvailable ? theme.palette.error.main : (isDark ? "#8b949e" : "#64748b"),
-                proxyMode === "local" && !localAvailable ? 0.4 : 0.12,
-              )}`,
-              transition: "all 0.2s ease",
-              "& .MuiOutlinedInput-notchedOutline": { border: "none" },
-              "&:hover": {
-                backgroundColor: alpha(theme.palette.text.primary, isDark ? 0.07 : 0.06),
-                borderColor: alpha(theme.palette.primary.main, 0.4),
-              },
-              "& .MuiSelect-icon": {
-                fontSize: "1.1rem",
-                color: theme.palette.text.secondary,
-              },
+              fontSize: "0.72rem",
+              "& .MuiSelect-select": { py: "0px !important", pl: "4px !important", pr: "20px !important", display: "flex", alignItems: "center" },
+              "& .MuiSelect-icon": { fontSize: 14 },
             }}
           >
-            {/* Server — always available */}
-            <MenuItem value="server">
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Cloud sx={{ fontSize: 16, color: theme.palette.info.main }} />
-                <Box>
-                  <Typography variant="body2" fontWeight={500}>{t("proxyMode.server")}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem" }}>
-                    {t("proxyMode.serverDesc")}
+            <MenuItem value="__none__" sx={{ fontSize: "0.78rem" }}>
+              <em style={{ opacity: 0.6 }}>{t("environment.select")}</em>
+            </MenuItem>
+            {environments.map((env) => (
+              <MenuItem key={env.id} value={env.id} sx={{ fontSize: "0.78rem" }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                  <FiberManualRecord sx={{ fontSize: 7, color: ENV_COLORS[env.env_type] ?? "#888" }} />
+                  <span>{env.name}</span>
+                  <Typography variant="caption" sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>
+                    {env.env_type}
                   </Typography>
                 </Box>
-              </Box>
-            </MenuItem>
-
-            {/* Local — disabled with red indicator if no channel available */}
-            <MenuItem value="local" disabled={!localAvailable}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1, opacity: localAvailable ? 1 : 0.55 }}>
-                <Lan sx={{ fontSize: 16, color: localAvailable ? theme.palette.success.main : theme.palette.error.main }} />
-                <Box>
-                  <Typography variant="body2" fontWeight={500} sx={{ color: localAvailable ? undefined : theme.palette.error.main }}>
-                    {t("proxyMode.local")}
-                  </Typography>
-                  <Typography variant="caption" sx={{ fontSize: "0.65rem", color: localAvailable ? "text.secondary" : theme.palette.error.main }}>
-                    {localAvailable ? t("proxyMode.localDesc") : t("proxyMode.localNotAvailable")}
-                  </Typography>
-                </Box>
-              </Box>
-            </MenuItem>
+              </MenuItem>
+            ))}
           </Select>
         </FormControl>
+
+        <VerticalDivider />
+
+        {/* Proxy mode */}
+        <Tooltip title={proxyMode === "local" ? t("proxyMode.localDesc") : t("proxyMode.serverDesc")}>
+          <Box
+            onClick={() => {
+              if (proxyMode === "server" && localAvailable) setProxyMode("local");
+              else setProxyMode("server");
+            }}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0.5,
+              px: 0.75,
+              cursor: "pointer",
+              height: 28,
+              borderRadius: 1,
+              "&:hover": { backgroundColor: isDark ? "#4e5157" : "#e0e0e0" },
+            }}
+          >
+            {proxyMode === "local" ? (
+              <Lan sx={{ fontSize: 13, color: localAvailable ? theme.palette.success.main : theme.palette.error.main }} />
+            ) : (
+              <Cloud sx={{ fontSize: 13, color: theme.palette.text.secondary }} />
+            )}
+            <Typography variant="caption" sx={{ fontSize: "0.72rem", fontWeight: 400 }}>
+              {t(`proxyMode.${proxyMode}`)}
+            </Typography>
+          </Box>
+        </Tooltip>
 
         <Box sx={{ flexGrow: 1 }} />
 
         {/* Right actions */}
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 0.5,
-            flexShrink: 0,
-          }}
-        >
-          {/* User avatar + name */}
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, flexShrink: 0 }}>
           {username && (
-            <Box
+            <Typography
+              variant="body2"
               sx={{
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                px: 1,
-                py: 0.5,
-                borderRadius: 2,
+                fontSize: "0.75rem",
+                color: theme.palette.text.secondary,
                 mr: 0.5,
               }}
             >
-              <Avatar
-                sx={{
-                  width: 24,
-                  height: 24,
-                  fontSize: "0.7rem",
-                  fontWeight: 600,
-                  background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                }}
-              >
-                {username.charAt(0).toUpperCase()}
-              </Avatar>
-              <Typography
-                variant="body2"
-                sx={{
-                  fontWeight: 500,
-                  fontSize: "0.8rem",
-                  color: theme.palette.text.primary,
-                }}
-              >
-                {username}
-              </Typography>
-            </Box>
+              {username}
+            </Typography>
           )}
 
           {/* Language */}
@@ -473,62 +360,40 @@ export default function TopBar({
               renderValue={(value) => {
                 const lang = LANGUAGES.find((l) => l.code === value);
                 return lang ? (
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 0.5,
-                    }}
-                  >
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                     <img
                       src={`https://flagcdn.com/w40/${lang.flag}.png`}
                       alt={lang.label}
-                      style={{
-                        width: 18,
-                        height: 13,
-                        objectFit: "cover",
-                        borderRadius: 2,
-                      }}
+                      style={{ width: 16, height: 11, objectFit: "cover", borderRadius: 1 }}
                     />
-                    <Typography
-                      variant="body2"
-                      sx={{ fontWeight: 600, fontSize: "0.75rem" }}
-                    >
+                    <Typography variant="caption" sx={{ fontWeight: 500, fontSize: "0.7rem" }}>
                       {lang.code.toUpperCase()}
                     </Typography>
                   </Box>
-                ) : (
-                  value
-                );
+                ) : value;
               }}
               sx={{
-                minWidth: 60,
+                minWidth: 50,
                 cursor: "pointer",
                 "& .MuiSelect-select": {
                   display: "flex",
                   alignItems: "center",
                   gap: 0.5,
-                  py: "4px !important",
-                  px: "6px !important",
+                  py: "2px !important",
+                  pl: "4px !important",
+                  pr: "20px !important",
                 },
               }}
             >
               {LANGUAGES.map((lang) => (
                 <MenuItem key={lang.code} value={lang.code}>
-                  <Box
-                    sx={{ display: "flex", alignItems: "center", gap: 1 }}
-                  >
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                     <img
                       src={`https://flagcdn.com/w40/${lang.flag}.png`}
                       alt={lang.label}
-                      style={{
-                        width: 20,
-                        height: 14,
-                        objectFit: "cover",
-                        borderRadius: 2,
-                      }}
+                      style={{ width: 18, height: 12, objectFit: "cover", borderRadius: 1 }}
                     />
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 400 }}>
                       {lang.label}
                     </Typography>
                   </Box>
@@ -538,34 +403,19 @@ export default function TopBar({
           </FormControl>
 
           {/* Theme toggle */}
-          <Tooltip
-            title={
-              mode === "dark" ? t("common.lightMode") : t("common.darkMode")
-            }
-          >
+          <Tooltip title={mode === "dark" ? t("common.lightMode") : t("common.darkMode")}>
             <IconButton
               onClick={onToggleTheme}
               size="small"
               sx={{
-                width: 32,
-                height: 32,
-                borderRadius: 2,
+                width: 28,
+                height: 28,
+                borderRadius: 1,
                 color: theme.palette.text.secondary,
-                transition: "all 0.2s ease",
-                "&:hover": {
-                  backgroundColor: alpha(
-                    theme.palette.text.primary,
-                    isDark ? 0.08 : 0.06
-                  ),
-                  color: theme.palette.warning.main,
-                },
+                "&:hover": { color: theme.palette.text.primary },
               }}
             >
-              {mode === "dark" ? (
-                <LightMode sx={{ fontSize: 18 }} />
-              ) : (
-                <DarkMode sx={{ fontSize: 18 }} />
-              )}
+              {mode === "dark" ? <LightMode sx={{ fontSize: 16 }} /> : <DarkMode sx={{ fontSize: 16 }} />}
             </IconButton>
           </Tooltip>
 
@@ -575,22 +425,34 @@ export default function TopBar({
               onClick={onLogout}
               size="small"
               sx={{
-                width: 32,
-                height: 32,
-                borderRadius: 2,
+                width: 28,
+                height: 28,
+                borderRadius: 1,
                 color: theme.palette.text.secondary,
-                transition: "all 0.2s ease",
-                "&:hover": {
-                  backgroundColor: alpha(theme.palette.error.main, 0.1),
-                  color: theme.palette.error.main,
-                },
+                "&:hover": { color: theme.palette.error.main },
               }}
             >
-              <Logout sx={{ fontSize: 17 }} />
+              <Logout sx={{ fontSize: 15 }} />
             </IconButton>
           </Tooltip>
         </Box>
       </Toolbar>
     </AppBar>
+  );
+}
+
+function VerticalDivider() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === "dark";
+  return (
+    <Box
+      sx={{
+        width: "1px",
+        height: 18,
+        backgroundColor: isDark ? "#4e5157" : "#c4c4c4",
+        mx: 0.5,
+        flexShrink: 0,
+      }}
+    />
   );
 }

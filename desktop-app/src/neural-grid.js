@@ -17,10 +17,10 @@
   var NODE_BASE_RADIUS = 1.6;
   var ROTATION_SPEED = (2 * Math.PI) / (600 * 60);
 
-  var gridLineColor = [139, 148, 158];
-  var gridLineAlpha = 0.07;
-  var dotColor = [154, 164, 178];
-  var accentColor = [129, 140, 248];
+  var gridLineColor = [78, 81, 87];
+  var gridLineAlpha = 0.09;
+  var dotColor = [108, 112, 120];
+  var accentColor = [74, 136, 199];
   var neuralLineAlpha = 0.18;
 
   var nodes = [];

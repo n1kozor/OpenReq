@@ -11,8 +11,8 @@ html, body {
   font-family: 'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont,
                'Segoe UI', sans-serif;
   font-size: 13px;
-  color: #e6edf3;
-  background: #0b0e14;
+  color: #dfe1e5;
+  background: #2b2d30;
 }
 
 /* ── Drag Region (thin strip at very top + wider area above content) ── */
@@ -72,7 +72,7 @@ html, body {
   position: relative;
   border-radius: 12px;
   overflow: hidden;
-  background: #0b0e14;
+  background: #2b2d30;
 }
 
 /* ── Animated Neural Grid Canvas ── */
@@ -106,15 +106,15 @@ html, body {
   width: 72px;
   height: 72px;
   margin-bottom: 16px;
-  filter: drop-shadow(0 6px 24px rgba(129, 140, 248, 0.5))
-          drop-shadow(0 2px 8px rgba(192, 132, 252, 0.3));
+  filter: drop-shadow(0 6px 24px rgba(74, 136, 199, 0.5))
+          drop-shadow(0 2px 8px rgba(74, 136, 199, 0.3));
 }
 
 .logo-text {
   font-size: 2rem;
   font-weight: 800;
   letter-spacing: -0.03em;
-  background: linear-gradient(135deg, #c7d2fe 0%, #818cf8 45%, #c084fc 100%);
+  background: linear-gradient(135deg, #a0c4e8 0%, #4a88c7 45%, #6ba3d6 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -125,7 +125,7 @@ html, body {
   font-weight: 500;
   font-size: 0.875rem;
   letter-spacing: 0.02em;
-  background: linear-gradient(90deg, #94a3b8 0%, #818cf8 100%);
+  background: linear-gradient(90deg, #9da0a8 0%, #4a88c7 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -137,12 +137,12 @@ html, body {
   max-width: 90vw;
   padding: 36px;
   border-radius: 16px;
-  border: 1px solid rgba(139, 148, 158, 0.12);
-  background: rgba(17, 22, 32, 0.8);
+  border: 1px solid rgba(78, 81, 87, 0.5);
+  background: rgba(30, 31, 34, 0.92);
   backdrop-filter: blur(20px) saturate(150%);
   box-shadow:
     0 32px 64px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(139, 148, 158, 0.06);
+    0 0 0 1px rgba(78, 81, 87, 0.15);
   animation: fadeIn 0.4s ease;
 }
 
@@ -156,12 +156,12 @@ html, body {
   font-weight: 700;
   letter-spacing: -0.01em;
   margin-bottom: 4px;
-  color: #e6edf3;
+  color: #dfe1e5;
 }
 
 .card-subtitle {
   font-size: 0.82rem;
-  color: #8b949e;
+  color: #9da0a8;
   margin-bottom: 28px;
   line-height: 1.5;
 }
@@ -175,7 +175,7 @@ html, body {
   display: block;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #8b949e;
+  color: #9da0a8;
   margin-bottom: 6px;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -192,7 +192,7 @@ html, body {
   left: 12px;
   width: 16px;
   height: 16px;
-  color: #8b949e;
+  color: #9da0a8;
   opacity: 0.5;
   pointer-events: none;
 }
@@ -203,28 +203,28 @@ html, body {
   padding: 0 14px 0 40px;
   font-family: inherit;
   font-size: 0.875rem;
-  color: #e6edf3;
-  background: rgba(139, 148, 158, 0.06);
-  border: 1px solid rgba(139, 148, 158, 0.15);
+  color: #dfe1e5;
+  background: rgba(78, 81, 87, 0.15);
+  border: 1px solid rgba(78, 81, 87, 0.4);
   border-radius: 10px;
   outline: none;
   transition: all 0.2s ease;
 }
 
 .input-wrapper input::placeholder {
-  color: rgba(139, 148, 158, 0.45);
+  color: rgba(157, 160, 168, 0.45);
 }
 
 .input-wrapper input:hover {
-  border-color: rgba(129, 140, 248, 0.3);
-  background: rgba(139, 148, 158, 0.08);
+  border-color: rgba(74, 136, 199, 0.4);
+  background: rgba(78, 81, 87, 0.2);
 }
 
 .input-wrapper input:focus {
-  border-color: #818cf8;
+  border-color: #4a88c7;
   border-width: 1.5px;
-  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.1);
-  background: rgba(139, 148, 158, 0.08);
+  box-shadow: 0 0 0 3px rgba(74, 136, 199, 0.15);
+  background: rgba(78, 81, 87, 0.2);
 }
 
 /* ── Status Indicator ── */
@@ -245,9 +245,9 @@ html, body {
 }
 
 .status.loading {
-  background: rgba(129, 140, 248, 0.08);
+  background: rgba(74, 136, 199, 0.12);
   border: 1px solid rgba(129, 140, 248, 0.2);
-  color: #a5b4fc;
+  color: #7bb8e0;
 }
 
 .status.success {
@@ -270,7 +270,7 @@ html, body {
 }
 
 .status.loading .status-icon {
-  background: #818cf8;
+  background: #4a88c7;
   animation: pulse 1.2s ease infinite;
 }
 
@@ -325,13 +325,13 @@ html, body {
 
 .btn-outline {
   background: transparent;
-  border: 1px solid rgba(139, 148, 158, 0.2);
-  color: #e6edf3;
+  border: 1px solid rgba(78, 81, 87, 0.5);
+  color: #dfe1e5;
 }
 
 .btn-outline:hover {
-  border-color: #818cf8;
-  background: rgba(129, 140, 248, 0.08);
+  border-color: #4a88c7;
+  background: rgba(74, 136, 199, 0.12);
 }
 
 .btn-outline:disabled {
@@ -340,7 +340,7 @@ html, body {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+  background: linear-gradient(135deg, #4a88c7 0%, #3d7ab5 100%);
   color: #ffffff;
   border: none;
   position: relative;
@@ -348,8 +348,8 @@ html, body {
 }
 
 .btn-primary:hover:not(:disabled) {
-  box-shadow: 0 4px 16px rgba(129, 140, 248, 0.4);
-  background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 100%);
+  box-shadow: 0 4px 16px rgba(74, 136, 199, 0.4);
+  background: linear-gradient(135deg, #7bb8e0 0%, #4a88c7 100%);
 }
 
 .btn-primary:disabled {
@@ -361,6 +361,6 @@ html, body {
 .footer-hint {
   margin-top: 24px;
   font-size: 0.72rem;
-  color: rgba(139, 148, 158, 0.5);
+  color: rgba(157, 160, 168, 0.5);
   letter-spacing: 0.01em;
 }

@@ -91,6 +91,39 @@ function extractJsonFromMixed(raw: string): { json: unknown; pretty: string } | 
   }
 }
 
+function extractHexColors(value: unknown, limit = 20, depth = 4): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const isHex = (v: string) => /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(v);
+
+  const visit = (v: unknown, d: number) => {
+    if (out.length >= limit || d < 0) return;
+    if (Array.isArray(v)) {
+      for (const item of v) visit(item, d - 1);
+      return;
+    }
+    if (v && typeof v === "object") {
+      const obj = v as Record<string, unknown>;
+      if (Array.isArray(obj.colors)) {
+        for (const c of obj.colors) {
+          if (typeof c === "string") {
+            const trimmed = c.trim();
+            if (isHex(trimmed) && !seen.has(trimmed)) {
+              seen.add(trimmed);
+              out.push(trimmed);
+              if (out.length >= limit) return;
+            }
+          }
+        }
+      }
+      for (const val of Object.values(obj)) visit(val, d - 1);
+    }
+  };
+
+  visit(value, depth);
+  return out;
+}
+
 type ContentCategory = "json" | "xml" | "html" | "image" | "text" | "binary";
 
 function detectContentType(body: string, headers: Record<string, string>, isBinary: boolean, contentType: string): {
@@ -224,6 +257,14 @@ function ResponsePanel({ response, sentRequest, responseTimestamp, onClearRespon
     if (!canRenderTree) return null;
     return tryParseJson(responseBody);
   }, [isJson, bodyView, canRenderTree, responseBody]);
+
+  const prettyViewColors = useMemo(() => {
+    if (!isJson || isBinary) return [];
+    if (bodyView !== "pretty") return [];
+    const parsed = tryParseJson(responseBody);
+    if (!parsed) return [];
+    return extractHexColors(parsed, 20, 5);
+  }, [isJson, isBinary, bodyView, responseBody]);
 
   const sentBody = sentRequest?.body ?? "";
   const sentBodyType = sentRequest?.body_type ?? "none";
@@ -530,7 +571,7 @@ function ResponsePanel({ response, sentRequest, responseTimestamp, onClearRespon
         <Box sx={{ animation: "fadeIn 0.2s ease", flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
           {/* View mode */}
           {availableViews.length > 0 && (
-            <Box sx={{ mb: 1 }}>
+            <Box sx={{ mb: 1, display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
               <ToggleButtonGroup
                 value={bodyView}
                 exclusive
@@ -560,12 +601,31 @@ function ResponsePanel({ response, sentRequest, responseTimestamp, onClearRespon
                   size="small"
                   variant="outlined"
                   onClick={() => setCleanMixed((prev) => !prev)}
-                  sx={{ ml: 1, textTransform: "none", fontSize: "0.72rem" }}
+                  sx={{ textTransform: "none", fontSize: "0.72rem" }}
                 >
                   {cleanMixed ? t("response.showRaw", "Show raw") : t("response.cleanMixed", "Clean & pretty")}
                 </Button>
               )}
 
+            </Box>
+          )}
+
+          {bodyView === "pretty" && prettyViewColors.length > 0 && (
+            <Box sx={{ mb: 1, display: "flex", alignItems: "center", gap: 0.75, flexWrap: "wrap" }}>
+              {prettyViewColors.map((c) => (
+                <Box
+                  key={c}
+                  title={c}
+                  sx={{
+                    width: 14,
+                    height: 14,
+                    borderRadius: "3px",
+                    bgcolor: c,
+                    border: "1px solid rgba(255,255,255,0.25)",
+                    boxShadow: "0 0 0 1px rgba(0,0,0,0.2)",
+                  }}
+                />
+              ))}
             </Box>
           )}
 
@@ -714,7 +774,7 @@ function ResponsePanel({ response, sentRequest, responseTimestamp, onClearRespon
                     wordWrap: "on",
                     automaticLayout: true,
                     padding: { top: 8, bottom: 8 },
-                    lineNumbers: "off",
+                    lineNumbers: "on",
                     renderLineHighlight: "none",
                     overviewRulerBorder: false,
                     scrollbar: {

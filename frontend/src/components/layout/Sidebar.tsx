@@ -296,18 +296,15 @@ export default function Sidebar({
           height: "100%",
           overflow: "hidden",
           boxSizing: "border-box",
-          borderRight: `1px solid ${alpha(
-            isDark ? "#8b949e" : "#64748b",
-            0.1
-          )}`,
-          background: isDark ? "#0d1117" : "#fafbfc",
+          borderRight: `1px solid ${isDark ? "#4e5157" : "#d1d1d1"}`,
+          background: isDark ? "#2b2d30" : "#f0f0f0",
         },
       }}
     >
-      <Toolbar variant="dense" sx={{ minHeight: "52px !important" }} />
+      <Toolbar variant="dense" sx={{ minHeight: "40px !important" }} />
 
       {/* Search */}
-      <Box sx={{ px: 1.5, py: 1.5 }}>
+      <Box sx={{ px: 1, py: 0.75 }}>
         <TextField
           fullWidth
           size="small"
@@ -317,19 +314,16 @@ export default function Sidebar({
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <Search sx={{ fontSize: 16, color: "text.secondary", opacity: 0.6 }} />
+                <Search sx={{ fontSize: 14, color: "text.secondary", opacity: 0.6 }} />
               </InputAdornment>
             ),
           }}
           sx={{
             "& .MuiOutlinedInput-root": {
-              height: 32,
-              fontSize: "0.8rem",
-              borderRadius: 2,
-              backgroundColor: alpha(
-                theme.palette.text.primary,
-                isDark ? 0.04 : 0.03
-              ),
+              height: 28,
+              fontSize: "0.78rem",
+              borderRadius: 1,
+              backgroundColor: isDark ? "#1e1f22" : "#ffffff",
             },
           }}
         />
@@ -338,8 +332,8 @@ export default function Sidebar({
       {/* Collections header */}
       <Box
         sx={{
-          px: 2,
-          py: 0.75,
+          px: 1,
+          py: 0.5,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -462,8 +456,8 @@ export default function Sidebar({
                       sx={{
                         py: 0.5,
                         minHeight: COLLECTION_ROW_HEIGHT,
-                        borderRadius: 1.5,
-                        mx: 1,
+                        borderRadius: 0,
+                        mx: 0,
                         backgroundColor: isDragTarget ? alpha(theme.palette.primary.main, 0.12) : "transparent",
                       }}
                       onClick={() => {
@@ -566,8 +560,8 @@ export default function Sidebar({
                         pl: 1.5 + row.depth * 1.5,
                         py: 0.4,
                         minHeight: ITEM_ROW_HEIGHT,
-                        borderRadius: 1.5,
-                        mx: 1,
+                        borderRadius: 0,
+                        mx: 0,
                       }}
                     >
                       <ListItemText
