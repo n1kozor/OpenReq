@@ -1,4 +1,6 @@
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,7 +14,16 @@ from app.config import settings
 from app.database import create_tables
 from app.services.proxy import close_proxy_client
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "static"
+def _resolve_frontend_dir() -> Path:
+    override = os.getenv("OPENREQ_STATIC_DIR")
+    if override:
+        return Path(override).expanduser().resolve()
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS) / "app" / "static"
+    return Path(__file__).resolve().parent.parent / "static"
+
+
+FRONTEND_DIR = _resolve_frontend_dir()
 
 logging.basicConfig(
     level=logging.INFO,

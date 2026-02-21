@@ -1,6 +1,7 @@
 import axios from "axios";
 
 export const API_URL = import.meta.env.VITE_API_URL || "";
+const IS_STANDALONE = import.meta.env.VITE_STANDALONE === "true";
 
 const client = axios.create({
   baseURL: `${API_URL}/api/v1`,
@@ -21,7 +22,7 @@ let lastRefresh = Date.now();
 
 async function maybeRefreshToken() {
   const token = localStorage.getItem("openreq-token");
-  if (!token) return;
+  if (!token || IS_STANDALONE) return;
   if (Date.now() - lastRefresh < REFRESH_INTERVAL_MS) return;
 
   try {
@@ -50,7 +51,7 @@ client.interceptors.request.use(async (config) => {
 client.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (!IS_STANDALONE && error.response?.status === 401) {
       localStorage.removeItem("openreq-token");
       window.location.href = "/login";
     }

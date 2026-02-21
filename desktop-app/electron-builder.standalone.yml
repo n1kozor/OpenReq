@@ -1,5 +1,5 @@
-appId: com.openreq.desktop
-productName: OpenReq
+appId: com.openreq.standalone
+productName: OpenReq Standalone
 copyright: Copyright 2026 OpenReq
 
 afterPack: scripts/afterPack.js
@@ -8,10 +8,17 @@ directories:
   output: dist
   buildResources: assets
 
+extraMetadata:
+  main: src/main-standalone.js
+
 files:
   - src/**/*
   - assets/**/*
   - node_modules/**/*
+
+extraResources:
+  - from: resources/backend
+    to: backend
 
 win:
   target: nsis
@@ -34,6 +41,6 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: OpenReq
+  shortcutName: OpenReq Standalone
   installerHeader: assets/nsis/installerHeader.png
   installerSidebar: assets/nsis/installerSidebar.png

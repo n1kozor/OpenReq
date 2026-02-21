@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
 
 
@@ -7,6 +10,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     DATABASE_URL: str = "sqlite:///./data/openreq.db"
+    STANDALONE_MODE: bool = False
 
     JWT_SECRET_KEY: str = "super-secret-change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
@@ -25,3 +29,19 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+_standalone_flag = os.getenv("OPENREQ_STANDALONE", "").lower()
+if _standalone_flag in ("1", "true", "yes", "on"):
+    settings.STANDALONE_MODE = True
+
+_db_path = os.getenv("OPENREQ_DB_PATH")
+if _db_path:
+    db_path = Path(_db_path).expanduser().resolve()
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.DATABASE_URL = f"sqlite:///{db_path.as_posix()}"
+else:
+    _data_dir = os.getenv("OPENREQ_DATA_DIR")
+    if _data_dir:
+        data_dir = Path(_data_dir).expanduser().resolve()
+        data_dir.mkdir(parents=True, exist_ok=True)
+        settings.DATABASE_URL = f"sqlite:///{(data_dir / 'openreq.db').as_posix()}"

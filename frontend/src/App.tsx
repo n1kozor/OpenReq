@@ -11,6 +11,8 @@ import WorkspaceSelector from "@/pages/WorkspaceSelector";
 import ShareDocPage from "@/pages/ShareDocPage";
 import "@/i18n";
 
+const IS_STANDALONE = import.meta.env.VITE_STANDALONE === "true";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: 1, refetchOnWindowFocus: false },
@@ -33,6 +35,11 @@ export default function App() {
 
   // Check if first-run setup is needed
   useEffect(() => {
+    if (IS_STANDALONE) {
+      setSetupRequired(false);
+      setCheckingSetup(false);
+      return;
+    }
     setupApi
       .status()
       .then(({ data }) => setSetupRequired(data.setup_required))
@@ -42,6 +49,10 @@ export default function App() {
 
   // Check if user needs to select a workspace (after login)
   useEffect(() => {
+    if (IS_STANDALONE) {
+      setNeedsWorkspace(false);
+      return;
+    }
     if (user && setupRequired === false) {
       workspacesApi
         .list()

@@ -1,11 +1,13 @@
 {
   "name": "openreq-desktop",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "OpenReq Desktop Client",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
+    "build:client": "node scripts/gen-installer-assets.js && electron-builder --config electron-builder.yml --win",
+    "build:standalone": "node scripts/build-standalone.js",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux"
