@@ -97,6 +97,7 @@ export interface Collection {
   pre_request_script: string | null;
   post_response_script: string | null;
   script_language: string | null;
+  sort_order?: number;
 }
 
 export interface CollectionItem {
@@ -227,6 +228,7 @@ export interface ProxyResponse {
   body_base64?: string | null;
   pre_request_result: ScriptResult | null;
   script_result: ScriptResult | null;
+  resolved_request?: SentRequestSnapshot | null;
 }
 
 export interface Environment {

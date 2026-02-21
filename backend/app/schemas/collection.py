@@ -25,6 +25,7 @@ class CollectionOut(BaseModel):
     variables: dict[str, str] | None = None
     auth_type: str | None = None
     auth_config: dict | None = None
+    sort_order: int | None = 0
     pre_request_script: str | None = None
     post_response_script: str | None = None
     script_language: str | None = "python"

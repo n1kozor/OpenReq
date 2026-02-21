@@ -82,6 +82,8 @@ class ProxyResponse(BaseModel):
     # Script results (only present when scripts were executed)
     pre_request_result: ScriptResultSchema | None = None
     script_result: ScriptResultSchema | None = None
+    # Fully resolved request snapshot (what was actually sent)
+    resolved_request: dict[str, Any] | None = None
 
 
 # ── Local Proxy (prepare/complete flow) ──

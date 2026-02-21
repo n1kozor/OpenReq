@@ -45,12 +45,22 @@ async def send_request(
         raise HTTPException(status_code=502, detail=f"Upstream request failed: {exc}")
 
     # Save to history (skip binary body to avoid bloating history)
+    resolved = response.resolved_request or {
+        "method": payload.method.value,
+        "url": payload.url,
+        "headers": payload.headers or {},
+        "query_params": payload.query_params or {},
+        "body": payload.body,
+        "body_type": payload.body_type,
+        "form_data": payload.form_data,
+    }
     db.add(RequestHistory(
         user_id=current_user.id,
-        method=payload.method.value,
-        url=payload.url,
-        request_headers=payload.headers,
-        request_body=payload.body,
+        method=resolved.get("method", payload.method.value),
+        url=resolved.get("url", payload.url),
+        request_headers=resolved.get("headers") or payload.headers,
+        request_body=resolved.get("body", payload.body),
+        resolved_request=resolved,
         status_code=response.status_code,
         response_headers=response.headers,
         response_body=response.body[:50000] if response.body and not response.is_binary else None,

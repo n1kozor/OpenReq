@@ -329,6 +329,24 @@ def _build_form_data(
     return data, files
 
 
+def _resolve_form_data_snapshot(items: list[FormDataItem], variables: dict[str, str]) -> list[dict]:
+    """Resolve variables for form-data snapshot (no file bytes)."""
+    snapshot: list[dict] = []
+    for item in items:
+        if not item.enabled or not item.key:
+            continue
+        key = _resolve_variables(item.key, variables)
+        value = _resolve_variables(item.value or "", variables)
+        snapshot.append({
+            "key": key,
+            "value": value,
+            "type": item.type or "text",
+            "enabled": item.enabled,
+            "file_name": item.file_name,
+        })
+    return snapshot
+
+
 def _persist_scope_changes(
     db: Session,
     script_result: ScriptResultSchema,
@@ -644,6 +662,7 @@ async def prepare_proxy_request(
         merged_vars, pm_kwargs, collection, folder_chain,
         combined_pre, body_type, rs,
     ) = await _run_prepare_phase(db, proxy_req, extra_variables)
+    resolved_form_data = _resolve_form_data_snapshot(proxy_req.form_data, merged_vars) if proxy_req.form_data else None
 
     # Build token context for /complete
     token_ctx = {
@@ -658,8 +677,11 @@ async def prepare_proxy_request(
         "collection_id_for_scripts": collection.id if collection else None,
         "request_method": method,
         "request_url": url,
-        "request_headers": dict(proxy_req.headers or {}),
-        "request_body": proxy_req.body,
+        "request_headers": dict(headers or {}),
+        "request_body": body,
+        "request_query_params": params,
+        "request_body_type": body_type,
+        "request_form_data": resolved_form_data,
     }
     token = encode_prepare_token(token_ctx)
 
@@ -670,7 +692,7 @@ async def prepare_proxy_request(
         body=body,
         body_type=body_type,
         query_params=params,
-        form_data=proxy_req.form_data,
+        form_data=resolved_form_data,
         request_settings=rs,
         pre_request_result=combined_pre,
         prepare_token=token,
@@ -724,14 +746,25 @@ async def complete_proxy_request(
         combined_pre=None,  # already sent in prepare
     )
 
+    resolved_request = {
+        "method": ctx.get("request_method", "GET"),
+        "url": ctx.get("request_url", ""),
+        "headers": ctx.get("request_headers") or {},
+        "query_params": ctx.get("request_query_params") or {},
+        "body": ctx.get("request_body"),
+        "body_type": ctx.get("request_body_type"),
+        "form_data": ctx.get("request_form_data") or None,
+    }
+
     # Save to history
     from app.models.history import RequestHistory
     db.add(RequestHistory(
         user_id=current_user_id,
-        method=ctx.get("request_method", "GET"),
-        url=ctx.get("request_url", ""),
-        request_headers=ctx.get("request_headers"),
-        request_body=ctx.get("request_body"),
+        method=resolved_request["method"],
+        url=resolved_request["url"],
+        request_headers=resolved_request["headers"],
+        request_body=resolved_request["body"],
+        resolved_request=resolved_request,
         status_code=local_resp.status_code,
         response_headers=local_resp.headers,
         response_body=response_body[:50000] if response_body and not local_resp.is_binary else None,
@@ -740,6 +773,7 @@ async def complete_proxy_request(
     ))
     db.commit()
 
+    response.resolved_request = resolved_request
     return response
 
 
@@ -839,7 +873,7 @@ async def execute_proxy_request(
 
     response_headers = dict(response.headers)
 
-    return await _run_complete_phase(
+    resp = await _run_complete_phase(
         db=db,
         status_code=response.status_code,
         response_body=response_body,
@@ -858,3 +892,14 @@ async def execute_proxy_request(
         environment_id=proxy_req.environment_id,
         combined_pre=combined_pre,
     )
+    resolved_request = {
+        "method": method,
+        "url": url,
+        "headers": headers,
+        "query_params": params,
+        "body": body,
+        "body_type": body_type,
+        "form_data": _resolve_form_data_snapshot(proxy_req.form_data, merged_vars) if proxy_req.form_data else None,
+    }
+    resp.resolved_request = resolved_request
+    return resp

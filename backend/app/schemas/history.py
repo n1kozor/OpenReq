@@ -20,3 +20,4 @@ class HistoryDetailOut(HistoryOut):
     request_body: str | None
     response_headers: dict | None
     response_body: str | None
+    resolved_request: dict | None = None

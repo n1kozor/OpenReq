@@ -143,6 +143,8 @@ export const collectionsApi = {
   deleteItem: (itemId: string) => client.delete(`/collections/items/${itemId}`),
   reorder: (collectionId: string, items: { id: string; sort_order: number; parent_id?: string }[]) =>
     client.put(`/collections/${collectionId}/reorder`, { items }),
+  reorderCollections: (items: { id: string; sort_order: number }[]) =>
+    client.put("/collections/reorder", { items }),
   duplicate: (collectionId: string, name: string) =>
     client.post<Collection>(`/collections/${collectionId}/duplicate`, { name }),
 };
@@ -282,6 +284,15 @@ export interface HistoryDetail extends HistoryEntry {
   request_body: string | null;
   response_headers: Record<string, string> | null;
   response_body: string | null;
+  resolved_request?: {
+    method: string;
+    url: string;
+    headers: Record<string, string>;
+    query_params: Record<string, string>;
+    body?: string | null;
+    body_type?: string | null;
+    form_data?: { key: string; value: string; type: string; enabled: boolean; file_name?: string | null }[] | null;
+  } | null;
 }
 
 // ── AI ──

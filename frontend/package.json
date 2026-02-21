@@ -1,7 +1,7 @@
 {
   "name": "openreq-frontend",
   "private": true,
-  "version": "1.1.12",
+  "version": "1.1.14",
   "type": "module",
   "scripts": {
     "dev": "vite",

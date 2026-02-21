@@ -25,6 +25,7 @@ import {
 import EnvironmentManager from "@/components/environment/EnvironmentManager";
 import AICollectionWizard from "@/components/collection/AICollectionWizard";
 import HistoryPanel from "@/components/history/HistoryPanel";
+import type { HistoryDetail } from "@/api/endpoints";
 import WorkspaceManager from "@/components/workspace/WorkspaceManager";
 import ImportExportDialog from "@/components/import/ImportExportDialog";
 import SDKGeneratorDialog from "@/components/sdk/SDKGeneratorDialog";
@@ -326,7 +327,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const loadCollections = useCallback(async () => {
     try {
       const { data: cols } = await collectionsApi.list(currentWorkspaceId ?? undefined);
-      setCollections(cols);
+      setCollections(cols.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)));
       // Reload trees for already-loaded collections (keeps sidebar open & fresh)
       const openIds = loadedCollectionIdsRef.current;
       await Promise.all(openIds.map((colId) =>
@@ -867,6 +868,21 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       } else {
         // Local proxy: prepare → local execute → complete
         const { data: prepared } = await proxyApi.prepare(proxyPayload);
+        // Update sent request with fully resolved payload from server
+        const resolvedFromPrepare: SentRequestSnapshot = {
+          method: (prepared.method || sentRequest.method) as import("@/types").HttpMethod,
+          url: prepared.url,
+          headers: prepared.headers || {},
+          query_params: prepared.query_params || {},
+          body: prepared.body ?? undefined,
+          body_type: (prepared.body_type as any) ?? sentRequest.body_type,
+          form_data: (prepared.form_data as any) ?? sentRequest.form_data,
+          auth_type: sentRequest.auth_type,
+          auth_config: sentRequest.auth_config,
+          environment_id: sentRequest.environment_id,
+          secret_values: sentRequest.secret_values,
+        };
+        updateTab(activeTabId, { sentRequest: resolvedFromPrepare });
         // Show pre-request results immediately
         if (prepared.pre_request_result) {
           updateTab(activeTabId, { preRequestResult: prepared.pre_request_result });
@@ -895,6 +911,19 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         preRequestResult: response.pre_request_result ?? null,
         scriptResult: response.script_result ?? null,
       });
+
+      if (response.resolved_request) {
+        updateTab(activeTabId, {
+          sentRequest: {
+            ...sentRequest,
+            ...response.resolved_request,
+            auth_type: sentRequest.auth_type,
+            auth_config: sentRequest.auth_config,
+            environment_id: sentRequest.environment_id,
+            secret_values: sentRequest.secret_values,
+          },
+        });
+      }
 
       // Reload cached variable scopes if scripts modified them
       const allResults = [response.pre_request_result, response.script_result];
@@ -1289,6 +1318,60 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     }
   }, [collectionItems, loadCollectionTree, t]);
 
+  const handleReorderItem = useCallback(async (collectionId: string, itemId: string, targetItemId: string) => {
+    const items = collectionItems[collectionId] ?? [];
+    const dragged = items.find((i) => i.id === itemId);
+    const target = items.find((i) => i.id === targetItemId);
+    if (!dragged || !target) return;
+
+    const targetParent = target.parent_id ?? null;
+    const siblings = items
+      .filter((i) => (i.parent_id ?? null) === targetParent)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+    const withoutDragged = siblings.filter((i) => i.id !== dragged.id);
+    const targetIndex = withoutDragged.findIndex((i) => i.id === target.id);
+    if (targetIndex === -1) return;
+    withoutDragged.splice(targetIndex, 0, { ...dragged, parent_id: targetParent });
+
+    const payload = withoutDragged.map((i, idx) => ({
+      id: i.id,
+      sort_order: (idx + 1) * 10,
+      parent_id: targetParent ?? undefined,
+    }));
+
+    try {
+      await collectionsApi.reorder(collectionId, payload);
+      await loadCollectionTree(collectionId);
+    } catch {
+      setSnack({ msg: t("common.error"), severity: "error" });
+    }
+  }, [collectionItems, loadCollectionTree, t]);
+
+  const handleReorderCollection = useCallback(async (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+    const ordered = collections.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    const dragged = ordered.find((c) => c.id === draggedId);
+    const target = ordered.find((c) => c.id === targetId);
+    if (!dragged || !target) return;
+
+    const withoutDragged = ordered.filter((c) => c.id !== draggedId);
+    const targetIndex = withoutDragged.findIndex((c) => c.id === targetId);
+    if (targetIndex === -1) return;
+    withoutDragged.splice(targetIndex, 0, dragged);
+
+    const payload = withoutDragged.map((c, idx) => ({
+      id: c.id,
+      sort_order: (idx + 1) * 10,
+    }));
+    try {
+      await collectionsApi.reorderCollections(payload);
+      await loadCollections();
+    } catch {
+      setSnack({ msg: t("common.error"), severity: "error" });
+    }
+  }, [collections, loadCollections, t]);
+
   const handleRunCollection = useCallback((collectionId: string) => {
     const col = collections.find((c) => c.id === collectionId);
     setShowRunner({ id: collectionId, name: col?.name ?? "Collection" });
@@ -1398,10 +1481,107 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   }, [activeTabId]);
 
   // ── History ──
-  const handleLoadFromHistory = useCallback((method: string, url: string) => {
+  const handleLoadFromHistory = useCallback((entry: HistoryDetail) => {
     const tab = createNewTab();
-    tab.method = method as HttpMethod;
+    const resolved = entry.resolved_request;
+    const method = (resolved?.method || entry.method) as HttpMethod;
+    const url = resolved?.url || entry.url;
+
+    tab.method = method;
     tab.url = url;
+    tab.name = `${method} ${url}`;
+
+    const headers = resolved?.headers ?? entry.request_headers ?? null;
+    if (headers && Object.keys(headers).length > 0) {
+      tab.headers = Object.entries(headers).map(([key, value]) => ({
+        ...newPair(), key, value,
+      }));
+      tab.headers.push(newPair());
+    }
+
+    let queryParams = resolved?.query_params ?? null;
+    if (!queryParams || Object.keys(queryParams).length === 0) {
+      try {
+        const parsed = new URL(url);
+        const qp: Record<string, string> = {};
+        parsed.searchParams.forEach((v, k) => {
+          qp[k] = v;
+        });
+        if (Object.keys(qp).length > 0) queryParams = qp;
+      } catch {
+        // ignore URL parse errors
+      }
+    }
+    if (queryParams && Object.keys(queryParams).length > 0) {
+      tab.queryParams = Object.entries(queryParams).map(([key, value]) => ({
+        ...newPair(), key, value,
+      }));
+      tab.queryParams.push(newPair());
+    }
+
+    const headerContentType = headers
+      ? (Object.entries(headers).find(([k]) => k.toLowerCase() === "content-type")?.[1] || "")
+      : "";
+    if (resolved?.body_type) {
+      tab.bodyType = resolved.body_type as BodyType;
+    } else if (headerContentType.includes("application/json")) {
+      tab.bodyType = "json";
+    } else if (headerContentType.includes("application/xml") || headerContentType.includes("text/xml")) {
+      tab.bodyType = "xml";
+    } else if (resolved?.body || entry.request_body) {
+      tab.bodyType = "text";
+    }
+
+    if (resolved?.body !== undefined && resolved?.body !== null) {
+      tab.body = resolved.body ?? "";
+    } else if (entry.request_body) {
+      tab.body = entry.request_body;
+    }
+
+    if (resolved?.form_data && resolved.form_data.length > 0) {
+      tab.formData = resolved.form_data.map((fd) => ({
+        ...newPair(),
+        key: fd.key,
+        value: fd.value,
+        type: (fd.type as "text" | "file") || "text",
+        enabled: fd.enabled,
+        fileName: fd.file_name || "",
+      }));
+      tab.formData.push(newPair());
+      if (!resolved.body_type) {
+        tab.bodyType = "form-data";
+      }
+    }
+
+    tab.sentRequest = {
+      method,
+      url,
+      headers: headers && Object.keys(headers).length > 0 ? headers : {},
+      query_params: queryParams && Object.keys(queryParams).length > 0 ? queryParams : {},
+      body: resolved?.body ?? entry.request_body ?? undefined,
+      body_type: (resolved?.body_type as BodyType) ?? tab.bodyType,
+      form_data: resolved?.form_data ?? undefined,
+    };
+
+    if (entry.status_code || entry.response_headers || entry.response_body) {
+      const ct = entry.response_headers?.["content-type"] ?? entry.response_headers?.["Content-Type"] ?? "";
+      const isBinary = !entry.response_body && /^(image|audio|video|application\/pdf|application\/octet-stream)/i.test(ct);
+      tab.response = {
+        status_code: entry.status_code ?? 0,
+        headers: entry.response_headers ?? {},
+        body: entry.response_body ?? "",
+        elapsed_ms: entry.elapsed_ms ?? 0,
+        size_bytes: entry.size_bytes ?? 0,
+        is_binary: isBinary,
+        content_type: ct,
+        body_base64: null,
+        pre_request_result: null,
+        script_result: null,
+      };
+      const ts = Date.parse(entry.created_at);
+      tab.responseTimestamp = Number.isNaN(ts) ? Date.now() : ts;
+    }
+
     setTabs((prev) => [...prev, tab]);
     setActiveTabId(tab.id);
     setShowHistory(false);
@@ -1614,6 +1794,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onRequestCollectionTree={loadCollectionTree}
         onRequestAllCollectionItems={loadAllCollectionItems}
         onMoveItem={handleMoveItem}
+        onReorderItem={handleReorderItem}
+        onReorderCollection={handleReorderCollection}
         onOpenFolder={handleOpenFolder}
         onRefreshCollections={loadCollections}
       />}

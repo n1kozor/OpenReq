@@ -84,6 +84,8 @@ interface SidebarProps {
   onRequestCollectionTree: (collectionId: string) => void;
   onRequestAllCollectionItems: () => void;
   onMoveItem: (collectionId: string, itemId: string, parentId: string | null) => void;
+  onReorderItem: (collectionId: string, itemId: string, targetItemId: string) => void;
+  onReorderCollection: (draggedId: string, targetId: string) => void;
   onGenerateDocs: (collectionId: string, collectionName: string, folderId?: string, folderName?: string) => void;
   onShareDocs: (collectionId: string, collectionName: string, folderId?: string | null, folderName?: string | null) => void;
   onRefreshCollections: () => void;
@@ -121,6 +123,8 @@ export default function Sidebar({
   onRequestCollectionTree,
   onRequestAllCollectionItems,
   onMoveItem,
+  onReorderItem,
+  onReorderCollection,
   onGenerateDocs,
   onShareDocs,
   onRefreshCollections,
@@ -146,9 +150,11 @@ export default function Sidebar({
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState(0);
   const dragPayloadRef = useRef<{ itemId: string; collectionId: string } | null>(null);
+  const dragCollectionRef = useRef<string | null>(null);
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
-  const [dragOverTarget, setDragOverTarget] = useState<{ type: "collection" | "folder"; id: string } | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<{ type: "collection" | "folder" | "item"; id: string } | null>(null);
   const dragMime = "application/openreq-item";
+  const dragCollectionMime = "application/openreq-collection";
 
   // Safety cleanup: if a drag ends anywhere (e.g. drop into TestBuilder canvas),
   // onDragEnd on the item might not fire. Listen at document level.
@@ -158,6 +164,7 @@ export default function Sidebar({
       setDraggingItemId(null);
       setDragOverTarget(null);
       dragPayloadRef.current = null;
+      dragCollectionRef.current = null;
     };
     document.addEventListener("dragend", cleanup);
     document.addEventListener("drop", cleanup);
@@ -450,8 +457,13 @@ export default function Sidebar({
                     <ListItemButton
                       draggable
                       onDragStart={(e) => {
-                        e.dataTransfer.setData("application/openreq-collection", JSON.stringify({ collectionId: col.id }));
+                        dragCollectionRef.current = col.id;
+                        e.dataTransfer.setData(dragCollectionMime, JSON.stringify({ collectionId: col.id }));
                         e.dataTransfer.effectAllowed = "copyMove";
+                      }}
+                      onDragEnd={() => {
+                        dragCollectionRef.current = null;
+                        setDragOverTarget(null);
                       }}
                       sx={{
                         py: 0.5,
@@ -469,9 +481,10 @@ export default function Sidebar({
                       }}
                       onDragOver={(e) => {
                         const payload = dragPayloadRef.current;
-                        const hasPayload = payload && payload.collectionId === col.id;
-                        const hasType = Array.from(e.dataTransfer.types || []).includes(dragMime);
-                        if (!hasPayload && !hasType) return;
+                        const hasItemPayload = payload && payload.collectionId === col.id;
+                        const hasItemType = Array.from(e.dataTransfer.types || []).includes(dragMime);
+                        const hasColType = Array.from(e.dataTransfer.types || []).includes(dragCollectionMime);
+                        if (!hasItemPayload && !hasItemType && !hasColType) return;
                         e.preventDefault();
                         e.dataTransfer.dropEffect = "move";
                         setDragOverTarget((prev) =>
@@ -482,22 +495,38 @@ export default function Sidebar({
                         if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
                         setDragOverTarget((prev) => (prev?.type === "collection" && prev.id === col.id ? null : prev));
                       }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const payload = dragPayloadRef.current ?? (() => {
-                          try {
-                            const raw = e.dataTransfer.getData(dragMime);
-                            return raw ? JSON.parse(raw) as { itemId: string; collectionId: string } : null;
-                          } catch {
-                            return null;
-                          }
-                        })();
-                        if (!payload || payload.collectionId !== col.id) return;
-                        onMoveItem(col.id, payload.itemId, null);
-                        dragPayloadRef.current = null;
-                        setDraggingItemId(null);
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const colPayload = dragCollectionRef.current ?? (() => {
+                        try {
+                          const raw = e.dataTransfer.getData(dragCollectionMime);
+                          return raw ? (JSON.parse(raw) as { collectionId: string }).collectionId : null;
+                        } catch {
+                          return null;
+                        }
+                      })();
+                      if (colPayload && colPayload !== col.id) {
+                        onReorderCollection(colPayload, col.id);
+                        dragCollectionRef.current = null;
                         setDragOverTarget(null);
-                      }}
+                        return;
+                      }
+
+                      const payload = dragPayloadRef.current ?? (() => {
+                        try {
+                          const raw = e.dataTransfer.getData(dragMime);
+                          return raw ? JSON.parse(raw) as { itemId: string; collectionId: string } : null;
+                        } catch {
+                          return null;
+                        }
+                      })();
+                      if (!payload || payload.collectionId !== col.id) return;
+                      onMoveItem(col.id, payload.itemId, null);
+                      dragPayloadRef.current = null;
+                      setDraggingItemId(null);
+                      setDragOverTarget(null);
+                    }}
                     >
                       <ListItemIcon
                         sx={{
@@ -581,7 +610,7 @@ export default function Sidebar({
               const item = row.item;
               const depth = row.depth;
               const open = row.forceOpen || folderOpen[item.id] === true;
-              const isDragTarget = dragOverTarget?.type === "folder" && dragOverTarget.id === item.id;
+              const isDragTarget = (dragOverTarget?.type === "folder" || dragOverTarget?.type === "item") && dragOverTarget.id === item.id;
               return (
                 <Box
                   style={style}
@@ -602,24 +631,25 @@ export default function Sidebar({
                     setDragOverTarget(null);
                   }}
                   onDragOver={(e) => {
-                    if (!item.is_folder) return;
                     const payload = dragPayloadRef.current;
                     const hasPayload = payload && payload.collectionId === row.collectionId;
                     const hasType = Array.from(e.dataTransfer.types || []).includes(dragMime);
                     if (!hasPayload && !hasType) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
-                    setDragOverTarget((prev) =>
-                      prev?.type === "folder" && prev.id === item.id ? prev : { type: "folder", id: item.id }
-                    );
+                    setDragOverTarget((prev) => {
+                      const nextType = item.is_folder ? "folder" : "item";
+                      return prev?.type === nextType && prev.id === item.id ? prev : { type: nextType, id: item.id };
+                    });
                   }}
                   onDragLeave={(e) => {
-                    if (!item.is_folder) return;
                     if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-                    setDragOverTarget((prev) => (prev?.type === "folder" && prev.id === item.id ? null : prev));
+                    setDragOverTarget((prev) => {
+                      if ((prev?.type === "folder" || prev?.type === "item") && prev.id === item.id) return null;
+                      return prev;
+                    });
                   }}
                   onDrop={(e) => {
-                    if (!item.is_folder) return;
                     e.preventDefault();
                     const payload = dragPayloadRef.current ?? (() => {
                       try {
@@ -630,7 +660,11 @@ export default function Sidebar({
                       }
                     })();
                     if (!payload || payload.collectionId !== row.collectionId) return;
-                    onMoveItem(row.collectionId, payload.itemId, item.id);
+                    if (item.is_folder) {
+                      onMoveItem(row.collectionId, payload.itemId, item.id);
+                    } else if (payload.itemId !== item.id) {
+                      onReorderItem(row.collectionId, payload.itemId, item.id);
+                    }
                     dragPayloadRef.current = null;
                     setDraggingItemId(null);
                     setDragOverTarget(null);

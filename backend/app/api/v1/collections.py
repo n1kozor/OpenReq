@@ -2,6 +2,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -67,12 +68,20 @@ class CollectionItemReorder(BaseModel):
     items: list[dict]  # [{"id": "...", "sort_order": 0, "parent_id": "..."}]
 
 
+class CollectionReorder(BaseModel):
+    items: list[dict]  # [{"id": "...", "sort_order": 0}]
+
+
 @router.post("/", response_model=CollectionOut, status_code=status.HTTP_201_CREATED)
 def create_collection(
     payload: CollectionCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    max_sort = db.query(func.max(Collection.sort_order)).filter(
+        Collection.owner_id == current_user.id,
+        Collection.workspace_id == payload.workspace_id,
+    ).scalar() or 0
     col = Collection(
         name=payload.name,
         description=payload.description,
@@ -81,6 +90,7 @@ def create_collection(
         workspace_id=payload.workspace_id,
         auth_type=payload.auth_type,
         auth_config=payload.auth_config,
+        sort_order=int(max_sort) + 10,
     )
     db.add(col)
     db.commit()
@@ -108,7 +118,27 @@ def list_collections(
     )
     if workspace_id:
         query = query.filter(Collection.workspace_id == workspace_id)
-    return query.all()
+    return query.order_by(Collection.sort_order.asc(), Collection.created_at.asc()).all()
+
+
+@router.put("/reorder")
+def reorder_collections(
+    payload: CollectionReorder,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    for entry in payload.items:
+        item_id = entry.get("id")
+        if not item_id:
+            continue
+        col = db.query(Collection).filter(
+            Collection.id == item_id,
+            Collection.owner_id == current_user.id,
+        ).first()
+        if col:
+            col.sort_order = entry.get("sort_order", 0)
+    db.commit()
+    return {"status": "ok"}
 
 
 @router.get("/{collection_id}", response_model=CollectionOut)
@@ -375,5 +405,25 @@ def reorder_items(
             item.sort_order = entry.get("sort_order", 0)
             if "parent_id" in entry:
                 item.parent_id = entry["parent_id"]
+    db.commit()
+    return {"status": "ok"}
+
+
+@router.put("/reorder")
+def reorder_collections(
+    payload: CollectionReorder,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    for entry in payload.items:
+        item_id = entry.get("id")
+        if not item_id:
+            continue
+        col = db.query(Collection).filter(
+            Collection.id == item_id,
+            Collection.owner_id == current_user.id,
+        ).first()
+        if col:
+            col.sort_order = entry.get("sort_order", 0)
     db.commit()
     return {"status": "ok"}

@@ -16,6 +16,7 @@ class RequestHistory(Base):
     url: Mapped[str] = mapped_column(Text, nullable=False)
     request_headers: Mapped[dict | None] = mapped_column(JSON)
     request_body: Mapped[str | None] = mapped_column(Text)
+    resolved_request: Mapped[dict | None] = mapped_column(JSON)
     status_code: Mapped[int | None] = mapped_column(Integer)
     response_headers: Mapped[dict | None] = mapped_column(JSON)
     response_body: Mapped[str | None] = mapped_column(Text)

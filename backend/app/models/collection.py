@@ -27,6 +27,7 @@ class Collection(Base):
     variables: Mapped[dict | None] = mapped_column(JSON, default=dict)
     auth_type: Mapped[str | None] = mapped_column(String(20), default=None)
     auth_config: Mapped[dict | None] = mapped_column(JSON, default=None)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
     pre_request_script: Mapped[str | None] = mapped_column(default=None)
     post_response_script: Mapped[str | None] = mapped_column(default=None)
     script_language: Mapped[str | None] = mapped_column(String(20), default="python")

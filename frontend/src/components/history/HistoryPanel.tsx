@@ -16,7 +16,7 @@ import {
 } from "@mui/material";
 import { Close, DeleteSweep, Refresh, ContentCopy, OpenInNew } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
-import { historyApi, type HistoryEntry } from "@/api/endpoints";
+import { historyApi, type HistoryEntry, type HistoryDetail } from "@/api/endpoints";
 
 const METHOD_COLORS: Record<string, string> = {
   GET: "#34d399",
@@ -31,7 +31,7 @@ const METHOD_COLORS: Record<string, string> = {
 interface HistoryPanelProps {
   open: boolean;
   onClose: () => void;
-  onLoadRequest: (method: string, url: string) => void;
+  onLoadRequest: (entry: HistoryDetail) => void;
 }
 
 export default function HistoryPanel({ open, onClose, onLoadRequest }: HistoryPanelProps) {
@@ -72,9 +72,10 @@ export default function HistoryPanel({ open, onClose, onLoadRequest }: HistoryPa
     setContextMenu(null);
   };
 
-  const handleOpenInTab = () => {
+  const handleOpenInTab = async () => {
     if (contextMenu) {
-      onLoadRequest(contextMenu.entry.method, contextMenu.entry.url);
+      const { data } = await historyApi.get(contextMenu.entry.id);
+      onLoadRequest(data);
     }
     setContextMenu(null);
   };
@@ -120,7 +121,10 @@ export default function HistoryPanel({ open, onClose, onLoadRequest }: HistoryPa
         {entries.map((entry) => (
           <ListItemButton
             key={entry.id}
-            onClick={() => onLoadRequest(entry.method, entry.url)}
+            onClick={async () => {
+              const { data } = await historyApi.get(entry.id);
+              onLoadRequest(data);
+            }}
             onContextMenu={(e) => handleContextMenu(e, entry)}
           >
             <ListItemText
@@ -160,6 +164,8 @@ export default function HistoryPanel({ open, onClose, onLoadRequest }: HistoryPa
                   </Typography>
                 </Box>
               }
+              primaryTypographyProps={{ component: "div" }}
+              secondaryTypographyProps={{ component: "div" }}
             />
           </ListItemButton>
         ))}

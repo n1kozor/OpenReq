@@ -46,6 +46,7 @@ def _run_migrations():
         ("collections", "pre_request_script", "TEXT"),
         ("collections", "post_response_script", "TEXT"),
         ("collections", "script_language", "VARCHAR(20) DEFAULT 'python'"),
+        ("collections", "sort_order", "INTEGER DEFAULT 0"),
         ("app_settings", "ai_provider", "VARCHAR(20) DEFAULT 'openai'"),
         ("app_settings", "ollama_base_url", "VARCHAR(500)"),
         ("app_settings", "ollama_model", "VARCHAR(200)"),
@@ -61,6 +62,7 @@ def _run_migrations():
         ("collection_items", "post_response_script", "TEXT"),
         ("collection_items", "script_language", "VARCHAR(20)"),
         ("app_settings", "openai_model", "VARCHAR(200)"),
+        ("request_history", "resolved_request", "JSON"),
     ]
     for table, column, col_type in migrations:
         if table in inspector.get_table_names():
