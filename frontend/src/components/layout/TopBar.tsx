@@ -56,6 +56,8 @@ interface TopBarProps {
   onOpenSDK: () => void;
   onOpenAIAgent: () => void;
   onOpenSettings: () => void;
+  onOpenWorkspaceManager: () => void;
+  onOpenEnvironmentManager: () => void;
   activeNavItem: "settings" | "aiAgent" | null;
 }
 
@@ -90,6 +92,8 @@ export default function TopBar({
   onOpenSDK,
   onOpenAIAgent,
   onOpenSettings,
+  onOpenWorkspaceManager,
+  onOpenEnvironmentManager,
   activeNavItem,
 }: TopBarProps) {
   const { t, i18n } = useTranslation();
@@ -163,6 +167,16 @@ export default function TopBar({
           <Tooltip title={t("nav.collections")}>
             <IconButton size="small" onClick={onToggleCollections} sx={navBtnSx(showCollectionsSidebar)}>
               <FolderOpen sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t("nav.workspace")}>
+            <IconButton size="small" onClick={onOpenWorkspaceManager} sx={navBtnSx(false)}>
+              <Workspaces sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title={t("nav.environments")}>
+            <IconButton size="small" onClick={onOpenEnvironmentManager} sx={navBtnSx(false)}>
+              <Cloud sx={{ fontSize: 16 }} />
             </IconButton>
           </Tooltip>
           <Tooltip title={t("nav.history")}>

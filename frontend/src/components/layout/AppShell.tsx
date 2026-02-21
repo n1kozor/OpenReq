@@ -1538,6 +1538,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       onOpenSDK={() => setShowSDK(true)}
       onOpenAIAgent={() => setShowAIAgent(true)}
       onOpenSettings={() => setView("settings")}
+      onOpenWorkspaceManager={() => setShowWorkspaces(true)}
+      onOpenEnvironmentManager={() => setShowEnvManager(true)}
       activeNavItem={view === "settings" ? "settings" : showAIAgent ? "aiAgent" : null}
     />
     <Box sx={{ display: "flex", height: "100vh", overflow: "hidden" }}>
