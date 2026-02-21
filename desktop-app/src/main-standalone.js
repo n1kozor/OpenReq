@@ -79,6 +79,13 @@ function startBackend() {
   const userDataDir = app.getPath('userData');
   const dataDir = path.join(userDataDir, 'data');
   const dbPath = path.join(dataDir, 'openreq.db');
+  const logsDir = path.join(userDataDir, 'logs');
+  const logFile = path.join(logsDir, 'backend.log');
+  try {
+    fs.mkdirSync(logsDir, { recursive: true });
+  } catch {
+    // ignore
+  }
   const env = {
     ...process.env,
     OPENREQ_STANDALONE: '1',
@@ -86,6 +93,7 @@ function startBackend() {
     OPENREQ_DB_PATH: dbPath,
     OPENREQ_PORT: STANDALONE_PORT,
     OPENREQ_HOST: STANDALONE_HOST,
+    OPENREQ_LOG_FILE: logFile,
   };
 
   const binPath = getBackendBinaryPath();

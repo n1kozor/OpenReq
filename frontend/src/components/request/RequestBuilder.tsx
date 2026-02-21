@@ -415,7 +415,7 @@ export default function RequestBuilder(props: RequestBuilderProps) {
         <Tab label={t("request.settings", "Settings")} />
       </Tabs>
 
-      <Box sx={{ minHeight: 180, animation: "fadeIn 0.2s ease" }}>
+      <Box sx={{ minHeight: 180, height: "100%", display: "flex", flexDirection: "column", animation: "fadeIn 0.2s ease" }}>
         {tab === 0 && (
           <KeyValueEditor
             pairs={props.queryParams}

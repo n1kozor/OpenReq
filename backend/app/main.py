@@ -29,6 +29,18 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
 )
+_log_file = os.getenv("OPENREQ_LOG_FILE")
+if _log_file:
+    try:
+        log_path = Path(_log_file).expanduser().resolve()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(log_path, encoding="utf-8")
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"))
+        logging.getLogger().addHandler(handler)
+        logging.getLogger(__name__).info("Logging to %s", log_path)
+    except Exception as e:
+        logging.getLogger(__name__).warning("Failed to init file logging: %s", e)
 logger = logging.getLogger(__name__)
 
 

@@ -111,7 +111,7 @@ export default function BodyEditor({
   );
 
   return (
-    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5, height: "100%" }}>
       <ToggleButtonGroup
         value={bodyType}
         exclusive
@@ -133,23 +133,25 @@ export default function BodyEditor({
       )}
 
       {(bodyType === "json" || bodyType === "xml" || bodyType === "text") && (
-        <Editor
-          height="220px"
-          language={editorLanguage(bodyType)}
-          theme={getVariableTheme(isDark)}
-          value={body}
-          onChange={(v) => onBodyChange(v ?? "")}
-          beforeMount={handleBeforeMount}
-          options={{
-            minimap: { enabled: false },
-            lineNumbers: "on",
-            scrollBeyondLastLine: false,
-            fontSize: 13,
-            tabSize: 2,
-            formatOnPaste: true,
-            automaticLayout: true,
-          }}
-        />
+        <Box sx={{ flex: 1, minHeight: 220 }}>
+          <Editor
+            height="100%"
+            language={editorLanguage(bodyType)}
+            theme={getVariableTheme(isDark)}
+            value={body}
+            onChange={(v) => onBodyChange(v ?? "")}
+            beforeMount={handleBeforeMount}
+            options={{
+              minimap: { enabled: false },
+              lineNumbers: "on",
+              scrollBeyondLastLine: false,
+              fontSize: 13,
+              tabSize: 2,
+              formatOnPaste: true,
+              automaticLayout: true,
+            }}
+          />
+        </Box>
       )}
 
       {bodyType === "x-www-form-urlencoded" && (
