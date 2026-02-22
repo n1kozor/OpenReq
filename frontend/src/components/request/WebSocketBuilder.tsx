@@ -260,9 +260,10 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
           wsMessagesRef.current = next;
           props.onWsMessagesChange(next);
         } else if (data.type === "message") {
+          const dir = data.direction === "sent" ? "sent" : "received";
           const next = [
             ...wsMessagesRef.current,
-            { data: data.data, timestamp: data.timestamp || Date.now(), direction: data.direction || "received" },
+            { data: data.data, timestamp: data.timestamp || Date.now(), direction: dir },
           ];
           wsMessagesRef.current = next;
           props.onWsMessagesChange(next);
