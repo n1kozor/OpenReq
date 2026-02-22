@@ -21,6 +21,9 @@
       "signAndEditExecutable": false
     }
   },
+  "dependencies": {
+    "electron-updater": "^6.3.0"
+  },
   "devDependencies": {
     "electron": "^33.0.0",
     "electron-builder": "^25.1.0",

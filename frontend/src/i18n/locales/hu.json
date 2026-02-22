@@ -634,6 +634,11 @@
     "consoleLogs": "Konzol kimenet",
     "errorDetails": "Hiba",
     "close": "Bezárás",
+    "closeAnyway": "Bezárás mentés nélkül",
+    "discard": "Elvetés",
+    "unsavedTitle": "Nem mentett módosítások",
+    "unsavedBodySingle": "Ez a fül nincs mentve. Mented bezárás előtt?",
+    "unsavedBodyMulti": "{{count}} fül nincs mentve. Biztosan bezárod őket?",
     "success": "Sikeres",
     "error": "Hiba",
     "runFailed": "Gyűjtemény futtatás sikertelen",
@@ -789,7 +794,12 @@
     "active": "Aktív",
     "passed": "Sikeres",
     "failed": "Sikertelen",
-    "back": "Vissza"
+    "back": "Vissza",
+    "closeAnyway": "Bezárás mentés nélkül",
+    "discard": "Elvetés",
+    "unsavedTitle": "Nem mentett módosítások",
+    "unsavedBodySingle": "Ez a fül nincs mentve. Mented bezárás előtt?",
+    "unsavedBodyMulti": "{{count}} fül nincs mentve. Biztosan bezárod őket?"
   },
   "testFlow": {
     "title": "Teszt Építő",

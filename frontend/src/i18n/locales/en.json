@@ -634,6 +634,11 @@
     "consoleLogs": "Console Output",
     "errorDetails": "Error",
     "close": "Close",
+    "closeAnyway": "Close Anyway",
+    "discard": "Discard",
+    "unsavedTitle": "Unsaved changes",
+    "unsavedBodySingle": "This tab has unsaved changes. Save before closing?",
+    "unsavedBodyMulti": "{{count}} tabs have unsaved changes. Close them anyway?",
     "success": "Success",
     "error": "Error",
     "runFailed": "Collection run failed",
@@ -789,7 +794,12 @@
     "active": "Active",
     "passed": "Passed",
     "failed": "Failed",
-    "back": "Back"
+    "back": "Back",
+    "closeAnyway": "Close Anyway",
+    "discard": "Discard",
+    "unsavedTitle": "Unsaved changes",
+    "unsavedBodySingle": "This tab has unsaved changes. Save before closing?",
+    "unsavedBodyMulti": "{{count}} tabs have unsaved changes. Close them anyway?"
   },
   "testFlow": {
     "title": "Test Builder",

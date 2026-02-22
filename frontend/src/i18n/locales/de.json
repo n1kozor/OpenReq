@@ -634,6 +634,11 @@
     "consoleLogs": "Konsolenausgabe",
     "errorDetails": "Fehler",
     "close": "Schließen",
+    "closeAnyway": "Trotzdem schließen",
+    "discard": "Verwerfen",
+    "unsavedTitle": "Ungespeicherte Änderungen",
+    "unsavedBodySingle": "Dieser Tab hat ungespeicherte Änderungen. Vor dem Schließen speichern?",
+    "unsavedBodyMulti": "{{count}} Tabs haben ungespeicherte Änderungen. Trotzdem schließen?",
     "success": "Erfolg",
     "error": "Fehler",
     "runFailed": "Sammlungsausführung fehlgeschlagen",
@@ -789,7 +794,12 @@
     "active": "Aktiv",
     "passed": "Bestanden",
     "failed": "Fehlgeschlagen",
-    "back": "Zurück"
+    "back": "Zurück",
+    "closeAnyway": "Trotzdem schlie?en",
+    "discard": "Verwerfen",
+    "unsavedTitle": "Ungespeicherte ?nderungen",
+    "unsavedBodySingle": "Dieser Tab hat ungespeicherte ?nderungen. Vor dem Schlie?en speichern?",
+    "unsavedBodyMulti": "{{count}} Tabs haben ungespeicherte ?nderungen. Trotzdem schlie?en?"
   },
   "testFlow": {
     "title": "Test-Builder",

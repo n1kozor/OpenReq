@@ -36,6 +36,10 @@ linux:
   icon: assets/icon.png
   category: Development
 
+publish:
+  provider: generic
+  url: ${env.OPENREQ_UPDATE_URL}
+
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

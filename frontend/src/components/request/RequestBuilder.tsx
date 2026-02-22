@@ -57,6 +57,8 @@ interface RequestBuilderProps {
   queryParams: KeyValuePair[];
   body: string;
   bodyType: BodyType;
+  graphqlQuery: string;
+  graphqlVariables: string;
   formData: KeyValuePair[];
   authType: AuthType;
   bearerToken: string;
@@ -77,6 +79,8 @@ interface RequestBuilderProps {
   onQueryParamsChange: (p: KeyValuePair[]) => void;
   onBodyChange: (b: string) => void;
   onBodyTypeChange: (t: BodyType) => void;
+  onGraphqlQueryChange: (q: string) => void;
+  onGraphqlVariablesChange: (v: string) => void;
   onFormDataChange: (pairs: KeyValuePair[]) => void;
   onAuthTypeChange: (a: AuthType) => void;
   onBearerTokenChange: (v: string) => void;
@@ -166,6 +170,19 @@ export default function RequestBuilder(props: RequestBuilderProps) {
   };
 
   const methodColor = METHOD_COLORS[props.method] ?? "#888";
+
+  const handleBodyTypeChange = (t: BodyType) => {
+    if (t === "graphql") {
+      if (!props.graphqlQuery) {
+        props.onGraphqlQueryChange("query {\n  \n}");
+      }
+      if (!props.graphqlVariables) {
+        props.onGraphqlVariablesChange("{}");
+      }
+      if (props.method !== "POST") props.onMethodChange("POST");
+    }
+    props.onBodyTypeChange(t);
+  };
 
   useEffect(() => {
     const target = sendButtonRef.current;
@@ -443,9 +460,23 @@ export default function RequestBuilder(props: RequestBuilderProps) {
           <BodyEditor
             bodyType={props.bodyType}
             body={props.body}
+            graphqlQuery={props.graphqlQuery}
+            graphqlVariables={props.graphqlVariables}
+            graphqlUrl={props.url}
+            headers={props.headers}
+            authType={props.authType}
+            bearerToken={props.bearerToken}
+            basicUsername={props.basicUsername}
+            basicPassword={props.basicPassword}
+            apiKeyName={props.apiKeyName}
+            apiKeyValue={props.apiKeyValue}
+            apiKeyPlacement={props.apiKeyPlacement}
+            oauthConfig={props.oauthConfig}
             formData={props.formData}
-            onBodyTypeChange={props.onBodyTypeChange}
+            onBodyTypeChange={handleBodyTypeChange}
             onBodyChange={props.onBodyChange}
+            onGraphqlQueryChange={props.onGraphqlQueryChange}
+            onGraphqlVariablesChange={props.onGraphqlVariablesChange}
             onFormDataChange={props.onFormDataChange}
             variableGroups={variableGroups}
             resolvedVariables={resolvedVariables}
@@ -526,11 +557,13 @@ export default function RequestBuilder(props: RequestBuilderProps) {
       <CodeGenDialog
         open={showCodeGen}
         onClose={() => setShowCodeGen(false)}
-        method={props.method}
+        method={props.bodyType === "graphql" ? "POST" : props.method}
         url={props.url}
         headers={codeGenData.headers}
-        body={props.body || undefined}
-        bodyType={props.bodyType}
+        body={props.bodyType === "graphql"
+          ? JSON.stringify({ query: props.graphqlQuery, variables: props.graphqlVariables || undefined })
+          : (props.body || undefined)}
+        bodyType={props.bodyType === "graphql" ? "json" : props.bodyType}
         queryParams={codeGenData.queryParams}
         authType={props.authType}
         authConfig={codeGenData.authConfig}

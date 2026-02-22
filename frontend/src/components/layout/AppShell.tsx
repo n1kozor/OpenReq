@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { Box, Toolbar, Snackbar, Alert, Typography } from "@mui/material";
+import { Box, Toolbar, Snackbar, Alert, Typography, Dialog, DialogTitle, DialogContent, DialogActions, Button } from "@mui/material";
+import { WarningAmber } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import TopBar from "./TopBar";
 // StatusBar removed — all selectors moved to TopBar
@@ -267,6 +268,12 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     folderId?: string | null;
     folderName?: string | null;
   } | null>(null);
+  const [closeConfirm, setCloseConfirm] = useState<{
+    mode: "single" | "others" | "all";
+    targetId?: string;
+    dirtyCount: number;
+  } | null>(null);
+  const [pendingCloseId, setPendingCloseId] = useState<string | null>(null);
   const didInitCollections = useRef(false);
   const didInitWorkspaces = useRef(false);
   const lastEnvWorkspaceId = useRef<string | null>(null);
@@ -713,13 +720,17 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     );
 
     // GraphQL: build JSON body from query + variables
-    if (tab.protocol === "graphql") {
+    const isGraphQL = tab.protocol === "graphql" || tab.bodyType === "graphql";
+    if (isGraphQL) {
       let variables: Record<string, unknown> = {};
       try {
         if (tab.graphqlVariables?.trim()) {
           variables = JSON.parse(tab.graphqlVariables);
         }
-      } catch { /* ignore parse errors */ }
+      } catch {
+        setSnack({ msg: t("response.invalidJson"), severity: "error" });
+        return;
+      }
       bodyToSend = JSON.stringify({ query: tab.graphqlQuery || "", variables });
       if (!hasUserContentType) {
         headers["Content-Type"] = "application/json";
@@ -814,7 +825,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     });
 
     const sentRequest: SentRequestSnapshot = {
-      method: tab.protocol === "graphql" ? "POST" : tab.method,
+      method: isGraphQL ? "POST" : tab.method,
       url: resolveTemplate(resolvedUrl, displayVars),
       headers: Object.keys(headers).length > 0
         ? Object.fromEntries(Object.entries(headers).map(([k, v]) => [k, resolveTemplate(v, displayVars)]))
@@ -823,7 +834,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         ? Object.fromEntries(Object.entries(queryParams).map(([k, v]) => [k, resolveTemplate(v, displayVars)]))
         : {},
       body: bodyToSend ? resolveTemplate(bodyToSend, displayVars) : bodyToSend,
-      body_type: tab.protocol === "graphql" ? "json" : tab.bodyType,
+      body_type: isGraphQL ? "json" : tab.bodyType,
       form_data: formDataToSend?.map(({ file_content_base64, ...rest }) => ({
         ...rest,
         value: resolveTemplate(rest.value, displayVars),
@@ -841,11 +852,11 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     setLoading(true);
     try {
       const proxyPayload = {
-        method: (tab.protocol === "graphql" ? "POST" : tab.method) as import("@/types").HttpMethod,
+        method: (isGraphQL ? "POST" : tab.method) as import("@/types").HttpMethod,
         url: resolvedUrl,
         headers: Object.keys(headers).length > 0 ? headers : undefined,
         body: bodyToSend,
-        body_type: tab.protocol === "graphql" ? "json" : tab.bodyType,
+        body_type: isGraphQL ? "json" : tab.bodyType,
         form_data: formDataToSend,
         query_params: Object.keys(queryParams).length > 0 ? queryParams : undefined,
         auth_type: (authType === "oauth2" ? "bearer" : authType) as import("@/types").AuthType,
@@ -1007,7 +1018,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       disabled_tls_protocols: rs.disabledTlsProtocols,
     };
     // GraphQL-specific settings
-    const graphqlSettings = tab.protocol === "graphql" ? {
+    const graphqlSettings = (tab.protocol === "graphql" || tab.bodyType === "graphql") ? {
       graphql_variables: tab.graphqlVariables || "{}",
     } : {};
 
@@ -1020,17 +1031,15 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     };
   }, []);
 
-  // Quick save: update existing request (no dialog)
-  const handleQuickSave = useCallback(async () => {
-    const tab = tabs.find((t) => t.id === activeTabId);
-    if (!tab?.savedRequestId) return;
-
+  const saveExistingTab = useCallback(async (tab: RequestTab) => {
+    if (!tab.savedRequestId) return false;
     const { headers, queryParams, auth_config, form_data, settings, protocol } = buildTabPayload(tab);
+    const isGraphQL = tab.protocol === "graphql" || tab.bodyType === "graphql";
     try {
       await requestsApi.update(tab.savedRequestId, {
-        name: tab.name, method: tab.protocol === "graphql" ? "POST" : tab.method, url: tab.url,
-        headers, body: tab.protocol === "graphql" ? (tab.graphqlQuery || "") : tab.body,
-        body_type: tab.protocol === "graphql" ? "graphql" : tab.bodyType,
+        name: tab.name, method: isGraphQL ? "POST" : tab.method, url: tab.url,
+        headers, body: isGraphQL ? (tab.graphqlQuery || "") : tab.body,
+        body_type: isGraphQL ? "graphql" : tab.bodyType,
         auth_type: tab.authType, auth_config: auth_config as Record<string, string>,
         query_params: queryParams,
         pre_request_script: tab.preRequestScript || null,
@@ -1039,13 +1048,85 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         settings: settings as any,
         protocol,
       });
-      updateTab(activeTabId, { isDirty: false });
+      updateTab(tab.id, { isDirty: false });
       setSnack({ msg: t("request.saved"), severity: "success" });
       loadCollections();
+      return true;
     } catch {
       setSnack({ msg: t("request.saveFailed"), severity: "error" });
+      return false;
     }
-  }, [tabs, activeTabId, buildTabPayload, updateTab, loadCollections]);
+  }, [buildTabPayload, updateTab, loadCollections, t]);
+
+  const requestCloseTab = useCallback((id: string) => {
+    const tab = tabs.find((t) => t.id === id);
+    if (!tab) return;
+    if (tab.isDirty) {
+      setCloseConfirm({ mode: "single", targetId: id, dirtyCount: 1 });
+    } else {
+      handleCloseTab(id);
+    }
+  }, [tabs, handleCloseTab]);
+
+  const requestCloseOtherTabs = useCallback((id: string) => {
+    const closeIds = tabs.filter((t) => t.id !== id);
+    const dirtyCount = closeIds.filter((t) => t.isDirty).length;
+    if (dirtyCount > 0) {
+      setCloseConfirm({ mode: "others", targetId: id, dirtyCount });
+    } else {
+      handleCloseOtherTabs(id);
+    }
+  }, [tabs, handleCloseOtherTabs]);
+
+  const requestCloseAllTabs = useCallback(() => {
+    const dirtyCount = tabs.filter((t) => t.isDirty).length;
+    if (dirtyCount > 0) {
+      setCloseConfirm({ mode: "all", dirtyCount });
+    } else {
+      handleCloseAllTabs();
+    }
+  }, [tabs, handleCloseAllTabs]);
+
+  const handleDiscardCloseConfirm = useCallback(() => {
+    if (!closeConfirm) return;
+    if (closeConfirm.mode === "single" && closeConfirm.targetId) {
+      handleCloseTab(closeConfirm.targetId);
+    } else if (closeConfirm.mode === "others" && closeConfirm.targetId) {
+      handleCloseOtherTabs(closeConfirm.targetId);
+    } else if (closeConfirm.mode === "all") {
+      handleCloseAllTabs();
+    }
+    setCloseConfirm(null);
+  }, [closeConfirm, handleCloseTab, handleCloseOtherTabs, handleCloseAllTabs]);
+
+  const handleSaveCloseConfirm = useCallback(async () => {
+    if (!closeConfirm || closeConfirm.mode !== "single" || !closeConfirm.targetId) return;
+    const tab = tabs.find((t) => t.id === closeConfirm.targetId);
+    if (!tab) {
+      setCloseConfirm(null);
+      return;
+    }
+    if (tab.savedRequestId) {
+      const ok = await saveExistingTab(tab);
+      if (ok) handleCloseTab(tab.id);
+      setCloseConfirm(null);
+      return;
+    }
+    // Unsaved new tab -> open Save dialog then close after save
+    setPendingCloseId(tab.id);
+    setActiveTabId(tab.id);
+    setView("request");
+    setSaveTarget({ collectionId: tab.collectionId, folderId: undefined });
+    setShowSaveRequest(true);
+    setCloseConfirm(null);
+  }, [closeConfirm, tabs, saveExistingTab, handleCloseTab]);
+
+  // Quick save: update existing request (no dialog)
+  const handleQuickSave = useCallback(async () => {
+    const tab = tabs.find((t) => t.id === activeTabId);
+    if (!tab?.savedRequestId) return;
+    await saveExistingTab(tab);
+  }, [tabs, activeTabId, saveExistingTab]);
 
   // Save as new: create new request + collection item (via dialog)
   const handleSaveRequest = useCallback(async (name: string, collectionId: string, folderId?: string) => {
@@ -1054,10 +1135,11 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
     const { headers, queryParams, auth_config, form_data, settings, protocol } = buildTabPayload(tab);
     try {
+      const isGraphQL = tab.protocol === "graphql" || tab.bodyType === "graphql";
       const { data: req } = await requestsApi.create({
-        name, method: tab.protocol === "graphql" ? "POST" : tab.method, url: tab.url,
-        headers, body: tab.protocol === "graphql" ? (tab.graphqlQuery || "") : tab.body,
-        body_type: tab.protocol === "graphql" ? "graphql" : tab.bodyType,
+        name, method: isGraphQL ? "POST" : tab.method, url: tab.url,
+        headers, body: isGraphQL ? (tab.graphqlQuery || "") : tab.body,
+        body_type: isGraphQL ? "graphql" : tab.bodyType,
         auth_type: tab.authType, auth_config: auth_config as Record<string, string>,
         query_params: queryParams,
         pre_request_script: tab.preRequestScript || null,
@@ -1070,10 +1152,14 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       updateTab(activeTabId, { name, savedRequestId: req.id, collectionId, isDirty: false });
       setSnack({ msg: t("request.saved"), severity: "success" });
       loadCollections();
+      if (pendingCloseId && pendingCloseId === activeTabId) {
+        setPendingCloseId(null);
+        handleCloseTab(activeTabId);
+      }
     } catch {
       setSnack({ msg: t("request.saveFailed"), severity: "error" });
     }
-  }, [tabs, activeTabId, buildTabPayload, updateTab, loadCollections]);
+  }, [tabs, activeTabId, buildTabPayload, updateTab, loadCollections, pendingCloseId, handleCloseTab]);
 
   // ── Load request from collection ──
   const handleSelectRequest = useCallback(async (requestId: string, collectionId?: string, collectionItemId?: string) => {
@@ -1170,14 +1256,17 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           disabledTlsProtocols: s.disabled_tls_protocols ?? s.disabledTlsProtocols ?? [],
         };
         // Restore GraphQL variables from settings
-        if (protocol === "graphql") {
+        if (protocol === "graphql" || req.body_type === "graphql") {
           tab.graphqlVariables = s.graphql_variables || "{}";
         }
       }
 
       // Restore GraphQL query from body
-      if (protocol === "graphql" && req.body) {
+      if ((protocol === "graphql" || req.body_type === "graphql") && req.body) {
         tab.graphqlQuery = req.body;
+      }
+      if (req.body_type === "graphql" && !tab.graphqlVariables) {
+        tab.graphqlVariables = "{}";
       }
 
       setTabs((prev) => [...prev, tab]);
@@ -1816,11 +1905,11 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
               tabs={tabs}
               activeTabId={activeTabId}
               onSelectTab={(id) => { setActiveTabId(id); setView("request"); }}
-              onCloseTab={handleCloseTab}
+              onCloseTab={requestCloseTab}
               onNewTab={handleNewTab}
               onDuplicateTab={handleDuplicateTab}
-              onCloseOtherTabs={handleCloseOtherTabs}
-              onCloseAllTabs={handleCloseAllTabs}
+              onCloseOtherTabs={requestCloseOtherTabs}
+              onCloseAllTabs={requestCloseAllTabs}
               onRenameTab={handleRenameTab}
               onCloneRequest={handleCloneRequest}
             />
@@ -2050,6 +2139,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                       queryParams={activeTab.queryParams}
                       body={activeTab.body}
                       bodyType={activeTab.bodyType}
+                      graphqlQuery={activeTab.graphqlQuery ?? ""}
+                      graphqlVariables={activeTab.graphqlVariables ?? "{}"}
                       formData={activeTab.formData}
                       authType={activeTab.authType}
                       bearerToken={activeTab.bearerToken}
@@ -2072,6 +2163,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                       onQueryParamsChange={(p) => updateTab(activeTabId, { queryParams: p })}
                       onBodyChange={(b) => updateTab(activeTabId, { body: b })}
                       onBodyTypeChange={(t) => updateTab(activeTabId, { bodyType: t })}
+                      onGraphqlQueryChange={(q) => updateTab(activeTabId, { graphqlQuery: q })}
+                      onGraphqlVariablesChange={(v) => updateTab(activeTabId, { graphqlVariables: v })}
                       onFormDataChange={(f) => updateTab(activeTabId, { formData: f })}
                       onAuthTypeChange={(a) => updateTab(activeTabId, { authType: a })}
                       onBearerTokenChange={(v) => updateTab(activeTabId, { bearerToken: v })}
@@ -2125,6 +2218,51 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       </Box>
 
       {/* ── Dialogs ── */}
+      <Dialog
+        open={!!closeConfirm}
+        onClose={() => setCloseConfirm(null)}
+        maxWidth="xs"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            border: "1px solid",
+            borderColor: "divider",
+            bgcolor: "background.paper",
+            boxShadow: "0 24px 48px rgba(0,0,0,0.18)",
+          },
+        }}
+      >
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1, pb: 1.5 }}>
+          <WarningAmber sx={{ color: "warning.main" }} />
+          {t("common.unsavedTitle")}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            {closeConfirm?.mode === "single"
+              ? t("common.unsavedBodySingle")
+              : t("common.unsavedBodyMulti", { count: closeConfirm?.dirtyCount ?? 0 })}
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, pt: 1.5, gap: 1 }}>
+          <Button onClick={() => setCloseConfirm(null)}>
+            {t("common.cancel")}
+          </Button>
+          {closeConfirm?.mode === "single" && (
+            <Button variant="contained" onClick={handleSaveCloseConfirm}>
+              {t("common.save")}
+            </Button>
+          )}
+          <Button
+            variant="outlined"
+            color="warning"
+            onClick={handleDiscardCloseConfirm}
+          >
+            {closeConfirm?.mode === "single" ? t("common.discard") : t("common.closeAnyway")}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <CreateCollectionDialog
         open={showCreateCol}
         onClose={() => setShowCreateCol(false)}
@@ -2173,7 +2311,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
       <SaveRequestDialog
         open={showSaveRequest}
-        onClose={() => { setShowSaveRequest(false); setSaveTarget(null); setCloneSource(null); }}
+        onClose={() => { setShowSaveRequest(false); setSaveTarget(null); setCloneSource(null); setPendingCloseId(null); }}
         collections={collections.map((c) => ({ id: c.id, name: c.name }))}
         onSave={cloneSource ? handleCloneSave : handleSaveRequest}
         defaultName={cloneSource ? cloneSource.name : (activeTab?.name ?? "")}

@@ -33,3 +33,5 @@ Thumbs.db
 docker-compose.override.yaml
   /tests/
 /desktop-app/resources/
+/release_build.py
+/nul

@@ -74,6 +74,7 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
   const [connecting, setConnecting] = useState(false);
   const [messageInput, setMessageInput] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
+  const wsMessagesRef = useRef<WebSocketMessage[]>(props.wsMessages);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const connectButtonRef = useRef<HTMLButtonElement | null>(null);
   const [showFloatingConnect, setShowFloatingConnect] = useState(false);
@@ -113,6 +114,10 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
     scrollToBottom();
   }, [props.wsMessages]);
 
+  useEffect(() => {
+    wsMessagesRef.current = props.wsMessages;
+  }, [props.wsMessages]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -148,6 +153,67 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
     return `${proto}//${window.location.host}/api/v1/ws-proxy`;
   };
 
+  const buildVariableMap = () => {
+    const vars = new Map<string, string>();
+    if (props.workspaceGlobals) {
+      for (const [key, value] of Object.entries(props.workspaceGlobals)) {
+        vars.set(key, value);
+      }
+    }
+    if (props.collectionVariables) {
+      for (const [key, value] of Object.entries(props.collectionVariables)) {
+        vars.set(key, value);
+      }
+    }
+    for (const v of envVariables) {
+      if (v.key) vars.set(v.key, v.value);
+    }
+    return vars;
+  };
+
+  const resolveTemplate = (input: string, vars: Map<string, string>) => (
+    input.replace(/{{\s*([^}]+)\s*}}/g, (match, key) => {
+      const k = String(key).trim();
+      const v = vars.get(k);
+      return v !== undefined ? v : match;
+    })
+  );
+
+  const applyApiKeyToUrl = (url: string, key: string, value: string) => {
+    if (!key) return url;
+    const encodedKey = encodeURIComponent(key);
+    const encodedValue = encodeURIComponent(value);
+    try {
+      const u = new URL(url);
+      u.searchParams.set(encodedKey, encodedValue);
+      return u.toString();
+    } catch {
+      const separator = url.includes("?") ? "&" : "?";
+      return `${url}${separator}${encodedKey}=${encodedValue}`;
+    }
+  };
+
+  const buildWsAuth = (headers: Record<string, string>, vars: Map<string, string>) => {
+    let authType = props.authType;
+    let bearer = props.bearerToken;
+    if (props.authType === "oauth2" && props.oauthConfig.accessToken) {
+      authType = "bearer";
+      bearer = props.oauthConfig.accessToken;
+    }
+    if (authType === "bearer" && bearer) {
+      headers.Authorization = `Bearer ${resolveTemplate(bearer, vars)}`;
+    } else if (authType === "basic" && props.basicUsername) {
+      const raw = `${resolveTemplate(props.basicUsername, vars)}:${resolveTemplate(props.basicPassword, vars)}`;
+      const encoded = btoa(unescape(encodeURIComponent(raw)));
+      headers.Authorization = `Basic ${encoded}`;
+    } else if (authType === "api_key" && props.apiKeyName) {
+      if (props.apiKeyPlacement === "header") {
+        headers[props.apiKeyName] = resolveTemplate(props.apiKeyValue, vars);
+      }
+    }
+    return authType;
+  };
+
   const handleConnect = useCallback(() => {
     if (props.wsConnected || connecting) return;
     setConnecting(true);
@@ -158,7 +224,18 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
 
     ws.onopen = () => {
       wsRef.current = ws;
-      ws.send(JSON.stringify({ action: "connect", url: props.url }));
+      const vars = buildVariableMap();
+      const resolvedUrl = resolveTemplate(props.url, vars);
+      const headers: Record<string, string> = {};
+      for (const h of props.headers) {
+        if (h.enabled && h.key) headers[h.key] = resolveTemplate(h.value, vars);
+      }
+      buildWsAuth(headers, vars);
+      let finalUrl = resolvedUrl;
+      if (props.authType === "api_key" && props.apiKeyPlacement === "query" && props.apiKeyName) {
+        finalUrl = applyApiKeyToUrl(finalUrl, props.apiKeyName, resolveTemplate(props.apiKeyValue, vars));
+      }
+      ws.send(JSON.stringify({ action: "connect", url: finalUrl, headers }));
     };
 
     ws.onmessage = (event) => {
@@ -167,34 +244,44 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
         if (data.type === "connected") {
           props.onWsConnectedChange(true);
           setConnecting(false);
-          props.onWsMessagesChange([
-            ...props.wsMessages,
+          const next = [
+            ...wsMessagesRef.current,
             { data: t("websocket.connected", { url: data.url }), timestamp: data.timestamp || Date.now(), direction: "received" },
-          ]);
+          ];
+          wsMessagesRef.current = next;
+          props.onWsMessagesChange(next);
         } else if (data.type === "disconnected") {
           props.onWsConnectedChange(false);
           setConnecting(false);
-          props.onWsMessagesChange([
-            ...props.wsMessages,
+          const next = [
+            ...wsMessagesRef.current,
             { data: t("websocket.disconnectedMsg"), timestamp: data.timestamp || Date.now(), direction: "received" },
-          ]);
+          ];
+          wsMessagesRef.current = next;
+          props.onWsMessagesChange(next);
         } else if (data.type === "message") {
-          props.onWsMessagesChange([
-            ...props.wsMessages,
+          const next = [
+            ...wsMessagesRef.current,
             { data: data.data, timestamp: data.timestamp || Date.now(), direction: data.direction || "received" },
-          ]);
+          ];
+          wsMessagesRef.current = next;
+          props.onWsMessagesChange(next);
         } else if (data.type === "error") {
           setConnecting(false);
-          props.onWsMessagesChange([
-            ...props.wsMessages,
+          const next = [
+            ...wsMessagesRef.current,
             { data: `Error: ${data.message}`, timestamp: data.timestamp || Date.now(), direction: "received" },
-          ]);
+          ];
+          wsMessagesRef.current = next;
+          props.onWsMessagesChange(next);
         }
       } catch {
-        props.onWsMessagesChange([
-          ...props.wsMessages,
+        const next = [
+          ...wsMessagesRef.current,
           { data: event.data, timestamp: Date.now(), direction: "received" },
-        ]);
+        ];
+        wsMessagesRef.current = next;
+        props.onWsMessagesChange(next);
       }
     };
 
@@ -218,11 +305,14 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
 
   const handleSendMessage = useCallback(() => {
     if (!wsRef.current || !messageInput.trim()) return;
-    wsRef.current.send(JSON.stringify({ action: "send", data: messageInput }));
+    const vars = buildVariableMap();
+    const resolved = resolveTemplate(messageInput, vars);
+    wsRef.current.send(JSON.stringify({ action: "send", data: resolved }));
     setMessageInput("");
-  }, [messageInput]);
+  }, [messageInput, props.workspaceGlobals, props.collectionVariables, envVariables]);
 
   const handleClearMessages = () => {
+    wsMessagesRef.current = [];
     props.onWsMessagesChange([]);
   };
 

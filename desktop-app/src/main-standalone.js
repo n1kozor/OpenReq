@@ -1,8 +1,9 @@
-const { app, BrowserWindow, ipcMain, net, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, net, Tray, Menu, nativeImage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const http = require('http');
+const { autoUpdater } = require('electron-updater');
 
 const STANDALONE_PORT = String(process.env.OPENREQ_PORT || '4010');
 const STANDALONE_HOST = String(process.env.OPENREQ_HOST || '127.0.0.1');
@@ -62,6 +63,38 @@ function ensureTray() {
 
   tray.setContextMenu(contextMenu);
   tray.on('click', () => toggleWindowVisibility());
+}
+
+function setupAutoUpdater() {
+  if (!app.isPackaged) return;
+  if (process.env.OPENREQ_DISABLE_UPDATES === '1') return;
+
+  const updateUrl = process.env.OPENREQ_UPDATE_URL || 'https://openreq.app';
+  if (updateUrl) {
+    autoUpdater.setFeedURL({ provider: 'generic', url: updateUrl });
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-downloaded', () => {
+    if (!mainWindow) return;
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Update Ready',
+      message: 'An update has been downloaded.',
+      detail: 'Restart OpenReq Standalone to apply the update.',
+      buttons: ['Restart now', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    }).then(({ response }) => {
+      if (response === 0) {
+        autoUpdater.quitAndInstall();
+      }
+    });
+  });
+
+  autoUpdater.checkForUpdates().catch(() => {});
 }
 
 function getBackendBinaryPath() {
@@ -178,6 +211,7 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     ensureTray();
     mainWindow.show();
+    setupAutoUpdater();
   });
 
   const url = `http://${STANDALONE_HOST}:${STANDALONE_PORT}`;
