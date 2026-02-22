@@ -246,7 +246,7 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
           setConnecting(false);
           const next = [
             ...wsMessagesRef.current,
-            { data: t("websocket.connected", { url: data.url }), timestamp: data.timestamp || Date.now(), direction: "received" },
+            { data: t("websocket.connected", { url: data.url }), timestamp: data.timestamp || Date.now(), direction: "received" as const },
           ];
           wsMessagesRef.current = next;
           props.onWsMessagesChange(next);
@@ -255,12 +255,12 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
           setConnecting(false);
           const next = [
             ...wsMessagesRef.current,
-            { data: t("websocket.disconnectedMsg"), timestamp: data.timestamp || Date.now(), direction: "received" },
+            { data: t("websocket.disconnectedMsg"), timestamp: data.timestamp || Date.now(), direction: "received" as const },
           ];
           wsMessagesRef.current = next;
           props.onWsMessagesChange(next);
         } else if (data.type === "message") {
-          const dir = data.direction === "sent" ? "sent" : "received";
+          const dir: "sent" | "received" = data.direction === "sent" ? "sent" : "received";
           const next = [
             ...wsMessagesRef.current,
             { data: data.data, timestamp: data.timestamp || Date.now(), direction: dir },
@@ -271,7 +271,7 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
           setConnecting(false);
           const next = [
             ...wsMessagesRef.current,
-            { data: `Error: ${data.message}`, timestamp: data.timestamp || Date.now(), direction: "received" },
+            { data: `Error: ${data.message}`, timestamp: data.timestamp || Date.now(), direction: "received" as const },
           ];
           wsMessagesRef.current = next;
           props.onWsMessagesChange(next);
@@ -279,7 +279,7 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
       } catch {
         const next = [
           ...wsMessagesRef.current,
-          { data: event.data, timestamp: Date.now(), direction: "received" },
+          { data: event.data, timestamp: Date.now(), direction: "received" as const },
         ];
         wsMessagesRef.current = next;
         props.onWsMessagesChange(next);
