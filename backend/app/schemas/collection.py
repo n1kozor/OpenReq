@@ -13,6 +13,7 @@ class CollectionCreate(BaseModel):
     pre_request_script: str | None = None
     post_response_script: str | None = None
     script_language: str | None = "python"
+    openapi_spec: str | None = None
 
 
 class CollectionOut(BaseModel):
@@ -29,6 +30,7 @@ class CollectionOut(BaseModel):
     pre_request_script: str | None = None
     post_response_script: str | None = None
     script_language: str | None = "python"
+    openapi_spec: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -46,6 +48,7 @@ class CollectionItemCreate(BaseModel):
     pre_request_script: str | None = None
     post_response_script: str | None = None
     script_language: str | None = None
+    openapi_spec: str | None = None
 
 
 class CollectionItemOut(BaseModel):
@@ -64,5 +67,6 @@ class CollectionItemOut(BaseModel):
     pre_request_script: str | None = None
     post_response_script: str | None = None
     script_language: str | None = None
+    openapi_spec: str | None = None
 
     model_config = {"from_attributes": True}

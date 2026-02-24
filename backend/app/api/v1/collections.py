@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -49,6 +50,7 @@ class CollectionUpdate(BaseModel):
     pre_request_script: str | None = None
     post_response_script: str | None = None
     script_language: str | None = None
+    openapi_spec: str | None = None
 
 
 class CollectionItemUpdate(BaseModel):
@@ -62,6 +64,7 @@ class CollectionItemUpdate(BaseModel):
     pre_request_script: str | None = None
     post_response_script: str | None = None
     script_language: str | None = None
+    openapi_spec: str | None = None
 
 
 class CollectionItemReorder(BaseModel):
@@ -166,6 +169,175 @@ def update_collection(
     db.commit()
     db.refresh(col)
     return col
+
+
+def _authenticate_by_token(token: str | None, db: Session) -> User:
+    """Authenticate user from a query-string JWT token (for browser tab endpoints)."""
+    from app.core.security import decode_access_token
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    user = db.query(User).filter(User.id == payload["sub"]).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
+
+
+def _normalize_yaml(raw: str) -> str:
+    """Strip consistent leading whitespace so copy-pasted specs parse correctly."""
+    lines = raw.splitlines()
+    # Collect indents of all non-empty lines
+    indents = []
+    for line in lines:
+        stripped = line.lstrip(" ")
+        if stripped:
+            indents.append(len(line) - len(stripped))
+    if not indents:
+        return raw
+
+    min_indent = min(indents)
+    if min_indent > 0:
+        # All lines share a common indent — strip it
+        return "\n".join(
+            line[min_indent:] if len(line) >= min_indent else line for line in lines
+        )
+
+    # Special case: first non-empty line at indent 0 but subsequent lines have
+    # extra indent (e.g. pasted from a code block).  Strip the minimum indent
+    # of the *remaining* non-empty lines from those lines only.
+    if len(indents) > 1:
+        rest_indents = [i for i in indents[1:] if i > 0]
+        if rest_indents:
+            strip = min(rest_indents)
+            first_done = False
+            result = []
+            for line in lines:
+                stripped = line.lstrip(" ")
+                if not first_done and stripped:
+                    result.append(line)
+                    first_done = True
+                elif stripped:
+                    indent = len(line) - len(stripped)
+                    result.append(line[strip:] if indent >= strip else line)
+                else:
+                    result.append(line)
+            return "\n".join(result)
+
+    return raw
+
+
+def _parse_spec(spec_raw: str) -> dict:
+    """Parse YAML/JSON spec with auto-dedent fallback."""
+    import yaml as _yaml
+
+    # Try as-is first
+    try:
+        obj = _yaml.safe_load(spec_raw)
+        if isinstance(obj, dict):
+            return obj
+    except Exception:
+        pass
+
+    # Try after normalizing indentation
+    try:
+        obj = _yaml.safe_load(_normalize_yaml(spec_raw))
+        if isinstance(obj, dict):
+            return obj
+    except Exception:
+        pass
+
+    raise HTTPException(status_code=422, detail="Invalid YAML/JSON spec. Check indentation.")
+
+
+def _render_spec_html(title: str, spec_raw: str) -> HTMLResponse:
+    """Build a standalone HTML page for OpenAPI (SwaggerUI) or AsyncAPI specs."""
+    import json as _json
+
+    spec_obj = _parse_spec(spec_raw)
+    spec_json = _json.dumps(spec_obj)
+    # Escape for embedding inside a JS template literal
+    spec_escaped = spec_json.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${").replace("</", "<\\/")
+
+    is_asyncapi = "asyncapi" in spec_obj
+
+    if is_asyncapi:
+        html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{title} — AsyncAPI Docs</title>
+<link rel="stylesheet" href="https://unpkg.com/@asyncapi/react-component@latest/styles/default.min.css"/>
+<style>
+  body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
+  #asyncapi {{ padding: 0; }}
+</style>
+</head><body>
+<div id="asyncapi"></div>
+<script src="https://unpkg.com/@asyncapi/react-component@latest/browser/standalone/index.js"></script>
+<script>
+try {{
+  const spec = JSON.parse(`{spec_escaped}`);
+  AsyncApiStandalone.render({{ schema: spec, config: {{ show: {{ sidebar: true }} }} }}, document.getElementById('asyncapi'));
+}} catch(e) {{
+  document.getElementById('asyncapi').innerHTML = '<div style="padding:2rem;color:red;font-family:monospace">Error: ' + e.message + '</div>';
+}}
+</script>
+</body></html>"""
+    else:
+        html = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{title} — API Docs</title>
+<link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"/>
+<style>body{{margin:0}} .swagger-ui .topbar{{display:none}}</style>
+</head><body>
+<div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+<script>
+try {{
+  const spec = JSON.parse(`{spec_escaped}`);
+  SwaggerUIBundle({{ spec, dom_id: '#swagger-ui', deepLinking: true, presets: [SwaggerUIBundle.presets.apis, SwaggerUIBundle.SwaggerUIStandalonePreset], layout: 'BaseLayout' }});
+}} catch(e) {{
+  document.getElementById('swagger-ui').innerHTML = '<div style="padding:2rem;color:red;font-family:monospace">Error parsing spec: ' + e.message + '</div>';
+}}
+</script>
+</body></html>"""
+
+    return HTMLResponse(content=html, status_code=200)
+
+
+@router.get("/{collection_id}/openapi-preview", response_class=HTMLResponse)
+def get_openapi_preview(
+    collection_id: str,
+    token: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Standalone SwaggerUI page for a collection's OpenAPI spec."""
+    user = _authenticate_by_token(token, db)
+    col = _get_accessible_collection(collection_id, db, user)
+    if not col.openapi_spec or not col.openapi_spec.strip():
+        raise HTTPException(status_code=404, detail="No OpenAPI spec defined")
+    return _render_spec_html(col.name, col.openapi_spec)
+
+
+@router.get("/items/{item_id}/openapi-preview", response_class=HTMLResponse)
+def get_item_openapi_preview(
+    item_id: str,
+    token: str | None = None,
+    db: Session = Depends(get_db),
+):
+    """Standalone SwaggerUI page for a folder's OpenAPI spec."""
+    _authenticate_by_token(token, db)
+    item = db.query(CollectionItem).filter(CollectionItem.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    if not item.openapi_spec or not item.openapi_spec.strip():
+        raise HTTPException(status_code=404, detail="No OpenAPI spec defined")
+    return _render_spec_html(item.name, item.openapi_spec)
 
 
 @router.delete("/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)

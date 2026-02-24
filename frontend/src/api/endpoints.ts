@@ -127,7 +127,7 @@ export const collectionsApi = {
   get: (id: string) => client.get<Collection>(`/collections/${id}`),
   create: (data: { name: string; description?: string; visibility?: string; workspace_id?: string; auth_type?: string | null; auth_config?: Record<string, string> | null; pre_request_script?: string | null; post_response_script?: string | null; script_language?: string | null }) =>
     client.post<Collection>("/collections/", data),
-  update: (id: string, data: { name?: string; description?: string; visibility?: string; variables?: Record<string, string>; auth_type?: string | null; auth_config?: Record<string, string> | null; pre_request_script?: string | null; post_response_script?: string | null; script_language?: string | null }) =>
+  update: (id: string, data: { name?: string; description?: string; visibility?: string; variables?: Record<string, string>; auth_type?: string | null; auth_config?: Record<string, string> | null; pre_request_script?: string | null; post_response_script?: string | null; script_language?: string | null; openapi_spec?: string | null }) =>
     client.patch<Collection>(`/collections/${id}`, data),
   delete: (id: string) => client.delete(`/collections/${id}`),
   listItems: (collectionId: string) =>
@@ -138,7 +138,7 @@ export const collectionsApi = {
     name: string; is_folder?: boolean; parent_id?: string; request_id?: string; sort_order?: number;
   }) =>
     client.post<CollectionItem>(`/collections/${collectionId}/items`, data),
-  updateItem: (itemId: string, data: { name?: string; sort_order?: number; parent_id?: string; auth_type?: string | null; auth_config?: Record<string, string> | null }) =>
+  updateItem: (itemId: string, data: { name?: string; sort_order?: number; parent_id?: string; auth_type?: string | null; auth_config?: Record<string, string> | null; description?: string | null; variables?: Record<string, string> | null; pre_request_script?: string | null; post_response_script?: string | null; script_language?: string | null; openapi_spec?: string | null }) =>
     client.patch<CollectionItem>(`/collections/items/${itemId}`, data),
   deleteItem: (itemId: string) => client.delete(`/collections/items/${itemId}`),
   reorder: (collectionId: string, items: { id: string; sort_order: number; parent_id?: string }[]) =>

@@ -28,8 +28,17 @@ export function useAuth() {
     try {
       const { data } = await usersApi.me();
       setUser(data);
-    } catch {
-      localStorage.removeItem("openreq-token");
+    } catch (err: unknown) {
+      // Only clear token on explicit 401 (invalid/expired token)
+      // Do NOT clear on network errors, timeouts, 500s, etc.
+      if (
+        err &&
+        typeof err === "object" &&
+        "response" in err &&
+        (err as { response?: { status?: number } }).response?.status === 401
+      ) {
+        localStorage.removeItem("openreq-token");
+      }
     } finally {
       setLoading(false);
     }

@@ -405,7 +405,10 @@
     "globals": "Globals",
     "unresolved": "Unaufgelöste Variable",
     "source": "Quelle",
-    "value": "Wert"
+    "value": "Wert",
+    "search": "Variablen suchen…",
+    "current": "aktuell",
+    "noResults": "Keine passenden Variablen"
   },
   "oauth": {
     "grantType": "Berechtigungstyp",
@@ -1046,5 +1049,10 @@
     "requestBody": "Anfragekörper",
     "authentication": "Authentifizierung",
     "folderShareNote": "Unterordner teilen"
+  },
+  "openapi": {
+    "editorTitle": "API-Spezifikation (OpenAPI / AsyncAPI)",
+    "description": "Schreiben Sie Ihre OpenAPI- oder AsyncAPI-Spezifikation in YAML oder JSON. Speichern Sie, um Änderungen zu übernehmen, und verwenden Sie dann die Vorschau für die interaktive Dokumentation (SwaggerUI für OpenAPI, AsyncAPI-Viewer für AsyncAPI).",
+    "preview": "Dokumentation Vorschau"
   }
 }

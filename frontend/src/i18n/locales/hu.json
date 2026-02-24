@@ -405,7 +405,10 @@
     "globals": "Globális",
     "unresolved": "Feloldatlan változó",
     "source": "Forrás",
-    "value": "Érték"
+    "value": "Érték",
+    "search": "Változók keresése…",
+    "current": "jelenlegi",
+    "noResults": "Nincs találat"
   },
   "oauth": {
     "grantType": "Engedélyezés típusa",
@@ -1046,5 +1049,10 @@
     "requestBody": "Kérés törzse",
     "authentication": "Hitelesítés",
     "folderShareNote": "Almappa megosztása"
+  },
+  "openapi": {
+    "editorTitle": "API Specifikáció (OpenAPI / AsyncAPI)",
+    "description": "Írd meg az OpenAPI vagy AsyncAPI specifikációdat YAML vagy JSON formátumban. Mentsd el a változások megőrzéséhez, majd használd az Előnézet gombot az interaktív dokumentáció megtekintéséhez (SwaggerUI OpenAPI-hoz, AsyncAPI megjelenítő AsyncAPI-hoz).",
+    "preview": "Dokumentáció előnézet"
   }
 }

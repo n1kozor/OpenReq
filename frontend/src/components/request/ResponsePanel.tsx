@@ -42,15 +42,18 @@ function statusColor(code: number): "success" | "warning" | "error" | "info" {
   return "error";
 }
 
-function statusText(code: number): string {
-  const map: Record<number, string> = {
-    200: "OK", 201: "Created", 204: "No Content",
-    301: "Moved Permanently", 302: "Found", 304: "Not Modified",
-    400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
-    405: "Method Not Allowed", 409: "Conflict", 422: "Unprocessable Entity", 429: "Too Many Requests",
-    500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable",
-  };
-  return map[code] ?? "";
+const STATUS_TEXT_FALLBACK: Record<number, string> = {
+  200: "OK", 201: "Created", 202: "Accepted", 204: "No Content",
+  301: "Moved Permanently", 302: "Found", 304: "Not Modified",
+  400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
+  405: "Method Not Allowed", 408: "Request Timeout", 409: "Conflict",
+  422: "Unprocessable Entity", 429: "Too Many Requests",
+  500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable", 504: "Gateway Timeout",
+};
+
+function statusText(code: number, reasonPhrase?: string): string {
+  if (reasonPhrase) return reasonPhrase;
+  return STATUS_TEXT_FALLBACK[code] ?? "";
 }
 
 function formatBytes(bytes: number): string {
@@ -407,7 +410,7 @@ function ResponsePanel({ response, sentRequest, responseTimestamp, onClearRespon
         }}
       >
         <Chip
-          label={`${response.status_code} ${statusText(response.status_code)}`}
+          label={`${response.status_code} ${statusText(response.status_code, response.reason_phrase)}`}
           color={statusChipColor}
           size="small"
           sx={{

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import {
   Box,
   Select,
@@ -23,6 +23,7 @@ import KeyValueEditor from "@/components/common/KeyValueEditor";
 import VariableInsertButton from "@/components/common/VariableInsertButton";
 import { useVariableGroups } from "@/hooks/useVariableGroups";
 import UrlInput from "./UrlInput";
+import type { UrlInputHandle } from "./UrlInput";
 import AuthEditor from "./AuthEditor";
 import BodyEditor from "./BodyEditor";
 import RequestSettingsEditor from "./RequestSettingsEditor";
@@ -106,6 +107,7 @@ export default function RequestBuilder(props: RequestBuilderProps) {
   const [tab, setTab] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sendButtonRef = useRef<HTMLButtonElement | null>(null);
+  const urlInputRef = useRef<UrlInputHandle>(null);
   const [showFloatingSend, setShowFloatingSend] = useState(false);
 
   const activeParamsCount = props.queryParams.filter((p) => p.enabled && p.key).length;
@@ -165,9 +167,9 @@ export default function RequestBuilder(props: RequestBuilderProps) {
     }
   }, [props.url, resolvedVariables, props.pathParams]);
 
-  const handleInsertVariable = (varKey: string) => {
-    props.onUrlChange(props.url + `{{${varKey}}}`);
-  };
+  const handleInsertVariable = useCallback((varKey: string) => {
+    urlInputRef.current?.insertVariable(varKey);
+  }, []);
 
   const methodColor = METHOD_COLORS[props.method] ?? "#888";
 
@@ -237,6 +239,7 @@ export default function RequestBuilder(props: RequestBuilderProps) {
 
         <Box sx={{ flex: "1 1 320px", minWidth: 220 }}>
           <UrlInput
+            ref={urlInputRef}
             url={props.url}
             pathParams={props.pathParams}
             onUrlChange={props.onUrlChange}

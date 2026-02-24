@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { Box, Toolbar, Snackbar, Alert, Typography, Dialog, DialogTitle, DialogContent, DialogActions, Button } from "@mui/material";
+import { Box, Toolbar, Snackbar, Alert, Typography, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from "@mui/material";
 import { WarningAmber } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import TopBar from "./TopBar";
@@ -469,7 +469,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
   // ── Tab operations ──
   const updateTab = useCallback((id: string, patch: Partial<RequestTab>) => {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch, isDirty: true } : t)));
+    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch, ...("isDirty" in patch ? {} : { isDirty: true }) } : t)));
   }, []);
 
   const handleNewTab = useCallback((protocol: Protocol = "http") => {
@@ -1326,6 +1326,30 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     loadCollections();
   }, [showRename, loadCollections, collectionItems]);
 
+  const handleDirectRenameItem = useCallback(async (itemId: string, newName: string) => {
+    try {
+      await collectionsApi.updateItem(itemId, { name: newName });
+      // Find matching request to also update its name
+      let requestId: string | null = null;
+      for (const items of Object.values(collectionItems)) {
+        const flat = items.flatMap(function flatten(it: CollectionItem): CollectionItem[] {
+          return [it, ...(it.children ?? []).flatMap(flatten)];
+        });
+        const found = flat.find((i) => i.id === itemId);
+        if (found?.request_id) { requestId = found.request_id; break; }
+      }
+      if (requestId) {
+        await requestsApi.update(requestId, { name: newName });
+        setTabs((prev) => prev.map((t) =>
+          t.savedRequestId === requestId ? { ...t, name: newName } : t
+        ));
+      }
+      loadCollections();
+    } catch {
+      setSnack({ msg: t("request.saveFailed"), severity: "error" });
+    }
+  }, [collectionItems, loadCollections, t]);
+
   const handleEditCollection = useCallback(async (name: string, description: string, visibility: "private" | "shared", variables: Record<string, string>) => {
     if (!showEditCol) return;
     await collectionsApi.update(showEditCol.id, { name, description, visibility, variables });
@@ -1764,7 +1788,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   }, [loadCollections, loadCollectionTree, t]);
 
   // ── Save collection from detail view ──
-  const handleSaveCollectionDetail = useCallback(async (collectionId: string, data: { name: string; description: string; visibility: "private" | "shared"; variables: Record<string, string>; auth_type?: string | null; auth_config?: Record<string, string> | null; pre_request_script?: string | null; post_response_script?: string | null; script_language?: string | null }) => {
+  const handleSaveCollectionDetail = useCallback(async (collectionId: string, data: { name: string; description: string; visibility: "private" | "shared"; variables: Record<string, string>; auth_type?: string | null; auth_config?: Record<string, string> | null; pre_request_script?: string | null; post_response_script?: string | null; script_language?: string | null; openapi_spec?: string | null }) => {
     try {
       await collectionsApi.update(collectionId, data);
       await loadCollections();
@@ -1829,6 +1853,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onDuplicateCollection={(id, name) => setShowDuplicateCol({ id, name })}
         onRenameItem={(id, name) => setShowRename({ id, name, type: "item" })}
         onDeleteItem={(id, name) => setShowDelete({ id, name, type: "item" })}
+        onDirectRenameItem={handleDirectRenameItem}
         onRunCollection={handleRunCollection}
         onGenerateDocs={handleGenerateDocs}
         onShareDocs={handleShareDocs}
@@ -1914,30 +1939,46 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
               onCloneRequest={handleCloneRequest}
             />
 
-            {/* Request name bar — shown for request tabs (http/ws/gql) */}
-            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.tabType !== "folder" && activeTab.name && (
+            {/* Inline editable request name — shown for all request-type tabs */}
+            {activeTab && activeTab.tabType !== "collection" && activeTab.tabType !== "testflow" && activeTab.tabType !== "folder" && (
               <Box sx={{
                 px: 2, py: 0.5,
                 display: "flex", alignItems: "center", gap: 1,
                 borderBottom: "1px solid", borderColor: "divider",
                 bgcolor: "background.default",
-                minHeight: 28,
+                minHeight: 32,
               }}>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontWeight: 600,
-                    fontSize: "0.82rem",
-                    color: "text.primary",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                <TextField
+                  value={activeTab.name}
+                  onChange={(e) => updateTab(activeTabId, { name: e.target.value })}
+                  onBlur={() => {
+                    if (activeTab.name.trim() && activeTab.savedRequestId) {
+                      handleRenameTab(activeTab.id, activeTab.name.trim());
+                    }
                   }}
-                >
-                  {activeTab.name}
-                </Typography>
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      (e.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  variant="standard"
+                  fullWidth
+                  placeholder={t("request.newRequest")}
+                  InputProps={{
+                    disableUnderline: true,
+                    sx: {
+                      fontSize: "0.92rem",
+                      fontWeight: 600,
+                      "&:hover": { bgcolor: "action.hover" },
+                      "&.Mui-focused": { bgcolor: "action.selected" },
+                      borderRadius: 1,
+                      px: 0.75,
+                      py: 0.15,
+                    },
+                  }}
+                />
                 {activeTab.savedRequestId && (
-                  <Typography variant="caption" sx={{ color: "text.disabled", fontSize: "0.7rem" }}>
+                  <Typography variant="caption" sx={{ color: "text.disabled", fontSize: "0.7rem", flexShrink: 0 }}>
                     {activeTab.protocol === "websocket" ? "WebSocket" : activeTab.protocol === "graphql" ? "GraphQL" : activeTab.method}
                   </Typography>
                 )}

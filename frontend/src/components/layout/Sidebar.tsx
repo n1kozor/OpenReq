@@ -89,6 +89,7 @@ interface SidebarProps {
   onGenerateDocs: (collectionId: string, collectionName: string, folderId?: string, folderName?: string) => void;
   onShareDocs: (collectionId: string, collectionName: string, folderId?: string | null, folderName?: string | null) => void;
   onRefreshCollections: () => void;
+  onDirectRenameItem?: (itemId: string, newName: string) => void;
 }
 
 type SidebarRow =
@@ -128,6 +129,7 @@ export default function Sidebar({
   onGenerateDocs,
   onShareDocs,
   onRefreshCollections,
+  onDirectRenameItem,
 }: SidebarProps) {
   const { t } = useTranslation();
   const theme = useTheme();
@@ -155,6 +157,8 @@ export default function Sidebar({
   const [dragOverTarget, setDragOverTarget] = useState<{ type: "collection" | "folder" | "item"; id: string } | null>(null);
   const dragMime = "application/openreq-item";
   const dragCollectionMime = "application/openreq-collection";
+  const [inlineEditId, setInlineEditId] = useState<string | null>(null);
+  const [inlineEditValue, setInlineEditValue] = useState("");
 
   // Safety cleanup: if a drag ends anywhere (e.g. drop into TestBuilder canvas),
   // onDragEnd on the item might not fire. Listen at document level.
@@ -192,6 +196,14 @@ export default function Sidebar({
     e.preventDefault();
     e.stopPropagation();
     setItemMenuPos({ top: e.clientY, left: e.clientX });
+    setItemMenuTarget(item);
+    setItemMenuCollectionId(collectionId);
+  };
+
+  const handleItemMenuFromButton = (e: React.MouseEvent, item: CollectionItem, collectionId: string) => {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setItemMenuPos({ top: rect.bottom, left: rect.left });
     setItemMenuTarget(item);
     setItemMenuCollectionId(collectionId);
   };
@@ -732,19 +744,75 @@ export default function Sidebar({
                         </Box>
                       )}
                     </ListItemIcon>
-                    <ListItemText
-                      primary={item.name}
-                      primaryTypographyProps={{
-                        variant: "body2",
-                        fontSize: 12.5,
-                        fontWeight: item.is_folder ? 500 : 400,
-                        noWrap: true,
-                        color: item.is_folder ? "text.primary" : "text.secondary",
-                      }}
-                    />
+                    {inlineEditId === item.id ? (
+                      <TextField
+                        size="small"
+                        variant="standard"
+                        autoFocus
+                        value={inlineEditValue}
+                        onChange={(e) => setInlineEditValue(e.target.value)}
+                        onBlur={() => {
+                          const trimmed = inlineEditValue.trim();
+                          if (trimmed && trimmed !== item.name) {
+                            if (onDirectRenameItem) onDirectRenameItem(item.id, trimmed);
+                            else onRenameItem(item.id, trimmed);
+                          }
+                          setInlineEditId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            (e.target as HTMLInputElement).blur();
+                          } else if (e.key === "Escape") {
+                            setInlineEditId(null);
+                          }
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                        sx={{
+                          flex: 1,
+                          "& .MuiInput-input": {
+                            fontSize: 12.5,
+                            py: 0,
+                            fontFamily: "inherit",
+                          },
+                        }}
+                        inputProps={{ style: { padding: 0 } }}
+                      />
+                    ) : (
+                      <ListItemText
+                        primary={item.name}
+                        primaryTypographyProps={{
+                          variant: "body2",
+                          fontSize: 12.5,
+                          fontWeight: item.is_folder ? 500 : 400,
+                          noWrap: true,
+                          color: item.is_folder ? "text.primary" : "text.secondary",
+                        }}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          setInlineEditId(item.id);
+                          setInlineEditValue(item.name);
+                        }}
+                      />
+                    )}
                     {item.is_folder && item.auth_type && item.auth_type !== "none" && item.auth_type !== "inherit" && (
                       <Lock sx={{ fontSize: 12, color: "warning.main", ml: 0.5, flexShrink: 0 }} />
                     )}
+                    <ListItemSecondaryAction>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleItemMenuFromButton(e, item, row.collectionId)}
+                        sx={{
+                          width: 22,
+                          height: 22,
+                          opacity: 0,
+                          transition: "opacity 0.15s",
+                          ".MuiListItemButton-root:hover &": { opacity: 1 },
+                        }}
+                      >
+                        <MoreVert sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    </ListItemSecondaryAction>
                   </ListItemButton>
                 </Box>
               );

@@ -405,7 +405,10 @@
     "globals": "Globals",
     "unresolved": "Unresolved variable",
     "source": "Source",
-    "value": "Value"
+    "value": "Value",
+    "search": "Search variables…",
+    "current": "current",
+    "noResults": "No matching variables"
   },
   "oauth": {
     "grantType": "Grant Type",
@@ -1046,5 +1049,10 @@
     "requestBody": "Request Body",
     "authentication": "Authentication",
     "folderShareNote": "Sharing sub-folder"
+  },
+  "openapi": {
+    "editorTitle": "API Specification (OpenAPI / AsyncAPI)",
+    "description": "Write your OpenAPI or AsyncAPI specification in YAML or JSON. Save to persist changes, then use Preview to view as interactive documentation (SwaggerUI for OpenAPI, AsyncAPI viewer for AsyncAPI).",
+    "preview": "Preview Docs"
   }
 }

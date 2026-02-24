@@ -63,6 +63,8 @@ def _run_migrations():
         ("collection_items", "script_language", "VARCHAR(20)"),
         ("app_settings", "openai_model", "VARCHAR(200)"),
         ("request_history", "resolved_request", "JSON"),
+        ("collections", "openapi_spec", "TEXT"),
+        ("collection_items", "openapi_spec", "TEXT"),
     ]
     for table, column, col_type in migrations:
         if table in inspector.get_table_names():
