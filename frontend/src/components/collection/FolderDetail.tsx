@@ -34,6 +34,7 @@ import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import AuthEditor from "@/components/request/AuthEditor";
 import { VariableValueCell } from "@/components/common/KeyValueEditor";
+import { API_URL } from "@/api/client";
 import type { CollectionItem, AuthType, OAuthConfig, ScriptLanguage } from "@/types";
 import type { VariableInfo, VariableGroup } from "@/hooks/useVariableGroups";
 
@@ -54,6 +55,7 @@ interface FolderDetailProps {
     pre_request_script: string | null;
     post_response_script: string | null;
     script_language: string | null;
+    openapi_spec: string | null;
   }) => Promise<void>;
   onDirtyChange: (isDirty: boolean) => void;
   onShareDocs?: (collectionId: string, collectionName: string, folderId: string, folderName: string) => void;
@@ -112,6 +114,7 @@ export default function FolderDetail({
     usePkce: false,
     accessToken: folder.auth_config?.access_token || folder.auth_config?.token || "",
   });
+  const [openapiSpec, setOpenapiSpec] = useState(folder.openapi_spec || "");
   const [saving, setSaving] = useState(false);
   const [descriptionMode, setDescriptionMode] = useState<"write" | "preview">("preview");
   const [preRequestScript, setPreRequestScript] = useState(folder.pre_request_script || "");
@@ -155,6 +158,7 @@ export default function FolderDetail({
     setPreRequestScript(folder.pre_request_script || "");
     setPostResponseScript(folder.post_response_script || "");
     setScriptLanguage((folder.script_language as ScriptLanguage) || "python");
+    setOpenapiSpec(folder.openapi_spec || "");
   }, [folder.id]);
 
   const buildAuthConfig = (): Record<string, string> | null => {
@@ -194,8 +198,9 @@ export default function FolderDetail({
     if (preRequestScript !== (folder.pre_request_script || "")) return true;
     if (postResponseScript !== (folder.post_response_script || "")) return true;
     if (scriptLanguage !== ((folder.script_language as ScriptLanguage) || "python")) return true;
+    if (openapiSpec !== (folder.openapi_spec || "")) return true;
     return false;
-  }, [name, description, vars, folder, authType, bearerToken, basicUsername, basicPassword, apiKeyName, apiKeyValue, apiKeyPlacement, oauthConfig, preRequestScript, postResponseScript, scriptLanguage]);
+  }, [name, description, vars, folder, authType, bearerToken, basicUsername, basicPassword, apiKeyName, apiKeyValue, apiKeyPlacement, oauthConfig, preRequestScript, postResponseScript, scriptLanguage, openapiSpec]);
 
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
@@ -221,6 +226,7 @@ export default function FolderDetail({
         pre_request_script: preRequestScript.trim() || null,
         post_response_script: postResponseScript.trim() || null,
         script_language: scriptLanguage,
+        openapi_spec: openapiSpec.trim() || null,
       });
     } finally {
       setSaving(false);
@@ -314,6 +320,7 @@ export default function FolderDetail({
         <Tab label={t("collectionDetail.authorization")} />
         <Tab label={t("folder.preRequest")} />
         <Tab label={t("folder.tests")} />
+        <Tab label="OpenAPI" />
       </Tabs>
 
       {/* Overview Tab */}
@@ -570,6 +577,53 @@ export default function FolderDetail({
                 scrollBeyondLastLine: false,
                 lineNumbers: "on",
                 wordWrap: "on",
+                tabSize: 2,
+              }}
+            />
+          </Box>
+        </Paper>
+      )}
+
+      {/* OpenAPI Tab */}
+      {activeTab === 5 && (
+        <Paper variant="outlined" sx={sectionPaper}>
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              {t("openapi.editorTitle")}
+            </Typography>
+            <Box sx={{ display: "flex", gap: 1 }}>
+              {openapiSpec.trim() && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    const token = localStorage.getItem("openreq-token") || "";
+                    window.open(`${API_URL}/api/v1/collections/items/${folder.id}/openapi-preview?token=${encodeURIComponent(token)}`, "_blank");
+                  }}
+                  sx={{ textTransform: "none", fontSize: "0.75rem" }}
+                >
+                  {t("openapi.preview")}
+                </Button>
+              )}
+            </Box>
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+            {t("openapi.description")}
+          </Typography>
+          <Box sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.2)}`, borderRadius: 1, overflow: "hidden" }}>
+            <Editor
+              height="500px"
+              language="yaml"
+              theme={isDark ? "vs-dark" : "light"}
+              value={openapiSpec}
+              onChange={(v) => setOpenapiSpec(v || "")}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 13,
+                lineNumbers: "on",
+                wordWrap: "on",
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
                 tabSize: 2,
               }}
             />

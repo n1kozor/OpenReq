@@ -55,6 +55,7 @@ import RunReportView from "./RunReportView";
 import { runsApi } from "@/api/endpoints";
 import { formatMs } from "./runnerUtils";
 import ShareManageDialog from "@/components/share/ShareManageDialog";
+import { API_URL } from "@/api/client";
 import type { Collection, CollectionItem, AuthType, OAuthConfig, ScriptLanguage, CollectionRunSummary } from "@/types";
 import type { VariableInfo, VariableGroup } from "@/hooks/useVariableGroups";
 
@@ -76,6 +77,7 @@ interface CollectionDetailProps {
     pre_request_script: string | null;
     post_response_script: string | null;
     script_language: string | null;
+    openapi_spec: string | null;
   }) => Promise<void>;
   onDirtyChange: (isDirty: boolean) => void;
   onRunCollection: (collectionId: string) => void;
@@ -164,6 +166,7 @@ export default function CollectionDetail({
   const [scriptLanguage, setScriptLanguage] = useState<ScriptLanguage>(
     (collection.script_language as ScriptLanguage) || "python"
   );
+  const [openapiSpec, setOpenapiSpec] = useState(collection.openapi_spec || "");
 
   // Sync with collection prop
   useEffect(() => {
@@ -203,6 +206,7 @@ export default function CollectionDetail({
     setPreRequestScript(collection.pre_request_script || "");
     setPostResponseScript(collection.post_response_script || "");
     setScriptLanguage((collection.script_language as ScriptLanguage) || "python");
+    setOpenapiSpec(collection.openapi_spec || "");
   }, [collection.id]);
 
   // Build current auth config from state
@@ -246,8 +250,9 @@ export default function CollectionDetail({
     if (preRequestScript !== (collection.pre_request_script || "")) return true;
     if (postResponseScript !== (collection.post_response_script || "")) return true;
     if (scriptLanguage !== ((collection.script_language as ScriptLanguage) || "python")) return true;
+    if (openapiSpec !== (collection.openapi_spec || "")) return true;
     return false;
-  }, [name, description, visibility, vars, collection, authType, bearerToken, basicUsername, basicPassword, apiKeyName, apiKeyValue, apiKeyPlacement, oauthConfig.accessToken, preRequestScript, postResponseScript, scriptLanguage]);
+  }, [name, description, visibility, vars, collection, authType, bearerToken, basicUsername, basicPassword, apiKeyName, apiKeyValue, apiKeyPlacement, oauthConfig.accessToken, preRequestScript, postResponseScript, scriptLanguage, openapiSpec]);
 
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
@@ -296,6 +301,7 @@ export default function CollectionDetail({
         pre_request_script: preRequestScript.trim() || null,
         post_response_script: postResponseScript.trim() || null,
         script_language: scriptLanguage,
+        openapi_spec: openapiSpec.trim() || null,
       });
     } finally {
       setSaving(false);
@@ -436,6 +442,7 @@ export default function CollectionDetail({
         <Tab label={t("collectionDetail.preRequestScript")} />
         <Tab label={t("collectionDetail.tests")} />
         <Tab label={t("runner.runs")} />
+        <Tab label="OpenAPI" />
       </Tabs>
 
       {/* Overview Tab */}
@@ -921,6 +928,53 @@ export default function CollectionDetail({
           </Dialog>
         </Paper>
       )}
+      {/* OpenAPI Tab */}
+      {activeTab === 6 && (
+        <Paper variant="outlined" sx={sectionPaper}>
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              {t("openapi.editorTitle")}
+            </Typography>
+            <Box sx={{ display: "flex", gap: 1 }}>
+              {openapiSpec.trim() && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    const token = localStorage.getItem("openreq-token") || "";
+                    window.open(`${API_URL}/api/v1/collections/${collection.id}/openapi-preview?token=${encodeURIComponent(token)}`, "_blank");
+                  }}
+                  sx={{ textTransform: "none", fontSize: "0.75rem" }}
+                >
+                  {t("openapi.preview")}
+                </Button>
+              )}
+            </Box>
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+            {t("openapi.description")}
+          </Typography>
+          <Box sx={{ border: `1px solid ${alpha(theme.palette.divider, 0.2)}`, borderRadius: 1, overflow: "hidden" }}>
+            <Editor
+              height="500px"
+              language="yaml"
+              theme={isDark ? "vs-dark" : "light"}
+              value={openapiSpec}
+              onChange={(v) => setOpenapiSpec(v || "")}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 13,
+                lineNumbers: "on",
+                wordWrap: "on",
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                tabSize: 2,
+              }}
+            />
+          </Box>
+        </Paper>
+      )}
+
       {/* Share Dialog */}
       <ShareManageDialog
         open={showShareDialog}

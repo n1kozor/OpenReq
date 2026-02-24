@@ -98,6 +98,7 @@ export interface Collection {
   post_response_script: string | null;
   script_language: string | null;
   sort_order?: number;
+  openapi_spec?: string | null;
 }
 
 export interface CollectionItem {
@@ -117,6 +118,7 @@ export interface CollectionItem {
   pre_request_script?: string | null;
   post_response_script?: string | null;
   script_language?: string | null;
+  openapi_spec?: string | null;
 }
 
 export interface ApiRequest {
@@ -219,6 +221,7 @@ export interface PostmanImportResult {
 
 export interface ProxyResponse {
   status_code: number;
+  reason_phrase?: string;
   headers: Record<string, string>;
   body: string;
   elapsed_ms: number;

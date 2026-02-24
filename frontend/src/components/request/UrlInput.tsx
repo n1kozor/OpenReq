@@ -1,9 +1,16 @@
-import { useRef, useState, useMemo, useEffect, useCallback } from "react";
+import {
+  useRef,
+  useState,
+  useMemo,
+  useEffect,
+  useCallback,
+  useImperativeHandle,
+  forwardRef,
+} from "react";
 import {
   Box,
   TextField,
   Typography,
-  Tooltip,
   Popper,
   Paper,
   List,
@@ -11,10 +18,15 @@ import {
   ListItemText,
   ListSubheader,
   ClickAwayListener,
+  InputAdornment,
 } from "@mui/material";
-import { alpha, useTheme } from "@mui/material/styles";
+import { alpha, useTheme, type Theme } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
 import type { VariableGroup, VariableInfo } from "@/hooks/useVariableGroups";
+
+export interface UrlInputHandle {
+  insertVariable: (varKey: string) => void;
+}
 
 interface UrlInputProps {
   url: string;
@@ -35,38 +47,38 @@ interface Segment {
   type: SegmentType;
   paramName?: string;
   variableName?: string;
+  offset: number;
 }
 
-/**
- * Parse URL into segments of text, {param}, and {{variable}}.
- * Processes {{variable}} first, then {param} in remaining text.
- */
 function parseUrlSegments(url: string): Segment[] {
   const parts: Segment[] = [];
-
-  // First pass: split on {{variable}}
   const varRegex = /\{\{([^{}]+)\}\}/g;
   let lastIndex = 0;
   let match;
 
   while ((match = varRegex.exec(url)) !== null) {
     if (match.index > lastIndex) {
-      // Parse remaining text for {params}
-      parts.push(...parseParamSegments(url.slice(lastIndex, match.index)));
+      parts.push(
+        ...parseParamSegments(url.slice(lastIndex, match.index), lastIndex),
+      );
     }
-    parts.push({ text: match[0], type: "variable", variableName: match[1] });
+    parts.push({
+      text: match[0],
+      type: "variable",
+      variableName: match[1],
+      offset: match.index,
+    });
     lastIndex = match.index + match[0].length;
   }
 
   if (lastIndex < url.length) {
-    parts.push(...parseParamSegments(url.slice(lastIndex)));
+    parts.push(...parseParamSegments(url.slice(lastIndex), lastIndex));
   }
 
   return parts;
 }
 
-/** Parse text for single-brace {param} segments (not {{variable}}) */
-function parseParamSegments(text: string): Segment[] {
+function parseParamSegments(text: string, baseOffset = 0): Segment[] {
   const parts: Segment[] = [];
   const regex = /(?<!\{)\{([^{}]+)\}(?!\})/g;
   let lastIndex = 0;
@@ -74,33 +86,50 @@ function parseParamSegments(text: string): Segment[] {
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push({ text: text.slice(lastIndex, match.index), type: "text" });
+      parts.push({
+        text: text.slice(lastIndex, match.index),
+        type: "text",
+        offset: baseOffset + lastIndex,
+      });
     }
-    parts.push({ text: match[0], type: "param", paramName: match[1] });
+    parts.push({
+      text: match[0],
+      type: "param",
+      paramName: match[1],
+      offset: baseOffset + match.index,
+    });
     lastIndex = match.index + match[0].length;
   }
 
   if (lastIndex < text.length) {
-    parts.push({ text: text.slice(lastIndex), type: "text" });
+    parts.push({
+      text: text.slice(lastIndex),
+      type: "text",
+      offset: baseOffset + lastIndex,
+    });
   }
 
   return parts;
 }
 
-export default function UrlInput({
-  url,
-  pathParams,
-  onUrlChange,
-  onSend,
-  placeholder,
-  endAdornment,
-  variableGroups = [],
-  resolvedVariables,
-}: UrlInputProps) {
+const UrlInput = forwardRef<UrlInputHandle, UrlInputProps>(function UrlInput(
+  {
+    url,
+    pathParams,
+    onUrlChange,
+    onSend,
+    placeholder,
+    endAdornment,
+    variableGroups = [],
+    resolvedVariables,
+  },
+  ref,
+) {
   const theme = useTheme();
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const [scrollLeft, setScrollLeft] = useState(0);
   const [inlineEdit, setInlineEdit] = useState<{
     paramName: string;
@@ -108,16 +137,57 @@ export default function UrlInput({
     removedUrl: string;
   } | null>(null);
 
-  // Autocomplete state
+  const lastCursorPos = useRef<number | null>(null);
+
+  // Autocomplete state (typing {{ trigger)
   const [acOpen, setAcOpen] = useState(false);
   const [acFilter, setAcFilter] = useState("");
   const [acCursorPos, setAcCursorPos] = useState(0);
   const [acSelectedIndex, setAcSelectedIndex] = useState(0);
 
+  // Hover-swap popover state
+  const [hoverAnchor, setHoverAnchor] = useState<HTMLElement | null>(null);
+  const [hoverSegment, setHoverSegment] = useState<Segment | null>(null);
+  const [hoverFilter, setHoverFilter] = useState("");
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const popperInsideRef = useRef(false);
+
   const segments = useMemo(() => parseUrlSegments(url), [url]);
   const hasHighlights = segments.some((s) => s.type !== "text");
 
-  // Sync scroll position between input and mirror
+  // Track cursor on keyup/mouseup
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const track = () => {
+      lastCursorPos.current = el.selectionStart;
+    };
+    el.addEventListener("keyup", track);
+    el.addEventListener("mouseup", track);
+    return () => {
+      el.removeEventListener("keyup", track);
+      el.removeEventListener("mouseup", track);
+    };
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertVariable(varKey: string) {
+        const pos = lastCursorPos.current ?? url.length;
+        const token = `{{${varKey}}}`;
+        const newUrl = url.slice(0, pos) + token + url.slice(pos);
+        onUrlChange(newUrl);
+        const newCursorPos = pos + token.length;
+        requestAnimationFrame(() => {
+          inputRef.current?.focus();
+          inputRef.current?.setSelectionRange(newCursorPos, newCursorPos);
+        });
+      },
+    }),
+    [url, onUrlChange],
+  );
+
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
@@ -126,7 +196,6 @@ export default function UrlInput({
     return () => el.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Build resolved URL preview
   const resolvedUrl = useMemo(() => {
     const hasParams = segments.some((s) => s.type === "param");
     const hasVars = segments.some((s) => s.type === "variable");
@@ -135,7 +204,6 @@ export default function UrlInput({
     let resolved = url;
     let anyReplaced = false;
 
-    // Replace path params
     for (const [key, value] of Object.entries(pathParams)) {
       if (value) {
         const before = resolved;
@@ -144,7 +212,6 @@ export default function UrlInput({
       }
     }
 
-    // Replace variables
     if (resolvedVariables) {
       for (const [key, info] of resolvedVariables) {
         const before = resolved;
@@ -160,16 +227,21 @@ export default function UrlInput({
     (_e: React.MouseEvent<HTMLDivElement>) => {
       const hasParams = segments.some((s) => s.type === "param");
       if (!hasParams) return;
-      // Delay to let browser update selectionStart
       setTimeout(() => {
         const pos = inputRef.current?.selectionStart ?? 0;
+        lastCursorPos.current = pos;
         let offset = 0;
         for (const seg of segments) {
           const end = offset + seg.text.length;
           if (seg.type === "param" && pos >= offset && pos <= end) {
             const beforeUrl = url;
-            const removedUrl = beforeUrl.slice(0, offset) + beforeUrl.slice(end);
-            setInlineEdit({ paramName: seg.paramName!, beforeUrl, removedUrl });
+            const removedUrl =
+              beforeUrl.slice(0, offset) + beforeUrl.slice(end);
+            setInlineEdit({
+              paramName: seg.paramName!,
+              beforeUrl,
+              removedUrl,
+            });
             onUrlChange(removedUrl);
             requestAnimationFrame(() => {
               inputRef.current?.focus();
@@ -198,10 +270,11 @@ export default function UrlInput({
   const filteredVariables = useMemo(() => {
     if (!acFilter) return flatVariables;
     const lower = acFilter.toLowerCase();
-    return flatVariables.filter((v) => v.item.key.toLowerCase().includes(lower));
+    return flatVariables.filter((v) =>
+      v.item.key.toLowerCase().includes(lower),
+    );
   }, [flatVariables, acFilter]);
 
-  // Grouped filtered for display
   const groupedFiltered = useMemo(() => {
     const map = new Map<string, { label: string; items: VariableInfo[] }>();
     for (const { item, groupLabel } of filteredVariables) {
@@ -215,13 +288,39 @@ export default function UrlInput({
     return [...map.values()];
   }, [filteredVariables]);
 
+  // ── Hover-swap filtered variables ──
+  const hoverFiltered = useMemo(() => {
+    const items: { item: VariableInfo; groupLabel: string }[] = [];
+    for (const g of variableGroups) {
+      for (const item of g.items) {
+        items.push({ item, groupLabel: t(g.label) });
+      }
+    }
+    if (!hoverFilter) return items;
+    const lower = hoverFilter.toLowerCase();
+    return items.filter((v) => v.item.key.toLowerCase().includes(lower));
+  }, [variableGroups, t, hoverFilter]);
+
+  const hoverGrouped = useMemo(() => {
+    const map = new Map<string, { label: string; items: VariableInfo[] }>();
+    for (const { item, groupLabel } of hoverFiltered) {
+      let group = map.get(groupLabel);
+      if (!group) {
+        group = { label: groupLabel, items: [] };
+        map.set(groupLabel, group);
+      }
+      group.items.push(item);
+    }
+    return [...map.values()];
+  }, [hoverFiltered]);
+
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const newUrl = e.target.value;
       onUrlChange(newUrl);
 
-      // Check for {{ trigger
       const cursorPos = e.target.selectionStart ?? newUrl.length;
+      lastCursorPos.current = cursorPos;
       const textBefore = newUrl.slice(0, cursorPos);
       const match = textBefore.match(/\{\{([^{}]*)$/);
 
@@ -239,18 +338,17 @@ export default function UrlInput({
 
   const handleSelectVariable = useCallback(
     (varKey: string) => {
-      // Find the {{ prefix and replace with {{varKey}}
       const textBefore = url.slice(0, acCursorPos);
       const match = textBefore.match(/\{\{([^{}]*)$/);
       if (!match) return;
 
       const insertStart = textBefore.length - match[0].length;
-      const newUrl = url.slice(0, insertStart) + `{{${varKey}}}` + url.slice(acCursorPos);
+      const newUrl =
+        url.slice(0, insertStart) + `{{${varKey}}}` + url.slice(acCursorPos);
       onUrlChange(newUrl);
       setAcOpen(false);
 
-      // Set cursor after the inserted variable
-      const newCursorPos = insertStart + varKey.length + 4; // {{varKey}}
+      const newCursorPos = insertStart + varKey.length + 4;
       requestAnimationFrame(() => {
         inputRef.current?.focus();
         inputRef.current?.setSelectionRange(newCursorPos, newCursorPos);
@@ -259,18 +357,41 @@ export default function UrlInput({
     [url, acCursorPos, onUrlChange],
   );
 
+  // ── Hover-swap: replace existing variable ──
+  const handleSwapVariable = useCallback(
+    (newVarKey: string) => {
+      if (!hoverSegment) return;
+      const start = hoverSegment.offset;
+      const end = start + hoverSegment.text.length;
+      const newUrl =
+        url.slice(0, start) + `{{${newVarKey}}}` + url.slice(end);
+      onUrlChange(newUrl);
+      popperInsideRef.current = false;
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+        hoverTimeoutRef.current = null;
+      }
+      setHoverAnchor(null);
+      setHoverSegment(null);
+      setHoverFilter("");
+      requestAnimationFrame(() => inputRef.current?.focus());
+    },
+    [hoverSegment, url, onUrlChange],
+  );
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter" && !acOpen) {
         onSend();
         return;
       }
-
       if (!acOpen) return;
 
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setAcSelectedIndex((prev) => Math.min(prev + 1, filteredVariables.length - 1));
+        setAcSelectedIndex((prev) =>
+          Math.min(prev + 1, filteredVariables.length - 1),
+        );
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setAcSelectedIndex((prev) => Math.max(prev - 1, 0));
@@ -287,42 +408,108 @@ export default function UrlInput({
     [acOpen, acSelectedIndex, filteredVariables, handleSelectVariable, onSend],
   );
 
+  // ── Hover detection via mousemove + hit-testing overlay spans ──
+  const handleContainerMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      // Don't interfere if popup is already open and user moved to it
+      if (popperInsideRef.current) return;
+      if (!overlayRef.current) return;
+
+      const { clientX, clientY } = e;
+      const varSpans = overlayRef.current.querySelectorAll<HTMLElement>(
+        "[data-var-seg]",
+      );
+
+      let found: HTMLElement | null = null;
+      for (const span of varSpans) {
+        const rect = span.getBoundingClientRect();
+        if (
+          clientX >= rect.left &&
+          clientX <= rect.right &&
+          clientY >= rect.top &&
+          clientY <= rect.bottom
+        ) {
+          found = span;
+          break;
+        }
+      }
+
+      if (found) {
+        const segIdx = Number(found.dataset.varSeg);
+        const seg = segments[segIdx];
+        if (seg && seg.type === "variable") {
+          if (hoverTimeoutRef.current) {
+            clearTimeout(hoverTimeoutRef.current);
+            hoverTimeoutRef.current = null;
+          }
+          // Only update if different segment
+          if (!hoverSegment || hoverSegment.offset !== seg.offset) {
+            setHoverAnchor(found);
+            setHoverSegment(seg);
+            setHoverFilter("");
+          }
+        }
+      } else if (hoverAnchor && !popperInsideRef.current) {
+        // Mouse left variable area — start delayed close
+        if (!hoverTimeoutRef.current) {
+          hoverTimeoutRef.current = setTimeout(() => {
+            if (!popperInsideRef.current) {
+              setHoverAnchor(null);
+              setHoverSegment(null);
+              setHoverFilter("");
+            }
+            hoverTimeoutRef.current = null;
+          }, 300);
+        }
+      }
+    },
+    [segments, hoverAnchor, hoverSegment],
+  );
+
+  const handleContainerMouseLeave = useCallback(() => {
+    if (popperInsideRef.current) return;
+    hoverTimeoutRef.current = setTimeout(() => {
+      if (!popperInsideRef.current) {
+        setHoverAnchor(null);
+        setHoverSegment(null);
+        setHoverFilter("");
+      }
+      hoverTimeoutRef.current = null;
+    }, 300);
+  }, []);
+
+  const handlePopperEnter = useCallback(() => {
+    popperInsideRef.current = true;
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handlePopperLeave = useCallback(() => {
+    popperInsideRef.current = false;
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoverAnchor(null);
+      setHoverSegment(null);
+      setHoverFilter("");
+      hoverTimeoutRef.current = null;
+    }, 200);
+  }, []);
+
   const paramColor = theme.palette.warning.main;
   const varColor = theme.palette.info.main;
   const unresolvedColor = theme.palette.error.main;
 
-  const buildTooltipContent = (varName: string) => {
-    const info = resolvedVariables?.get(varName);
-    if (info) {
-      return (
-        <Box sx={{ p: 0.5 }}>
-          <Typography variant="caption" fontFamily="monospace" fontWeight={700} display="block">
-            {`{{${varName}}}`}
-          </Typography>
-          <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
-            {t("variable.value")}: <strong>{info.value.length > 60 ? info.value.slice(0, 60) + "..." : info.value}</strong>
-          </Typography>
-          <Typography variant="caption" display="block" color="text.secondary">
-            {t("variable.source")}: {t(info.source === "environment" ? "variable.environment" : "variable.collection")}
-          </Typography>
-        </Box>
-      );
-    }
-    return (
-      <Box sx={{ p: 0.5 }}>
-        <Typography variant="caption" fontFamily="monospace" fontWeight={700} display="block">
-          {`{{${varName}}}`}
-        </Typography>
-        <Typography variant="caption" display="block" color="error.main" sx={{ mt: 0.5 }}>
-          {t("variable.unresolved")}
-        </Typography>
-      </Box>
-    );
-  };
-
   return (
-    <Box sx={{ flexGrow: 1, minWidth: 0, overflow: "hidden" }} ref={containerRef}>
-      <Box sx={{ position: "relative" }}>
+    <Box
+      sx={{ flexGrow: 1, minWidth: 0, overflow: "hidden" }}
+      ref={containerRef}
+    >
+      <Box
+        sx={{ position: "relative" }}
+        onMouseMove={hasHighlights ? handleContainerMouseMove : undefined}
+        onMouseLeave={hasHighlights ? handleContainerMouseLeave : undefined}
+      >
         <TextField
           fullWidth
           size="small"
@@ -343,6 +530,13 @@ export default function UrlInput({
               fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
               fontSize: 13,
               borderRadius: 2,
+              ...(hasHighlights
+                ? {
+                    position: "relative",
+                    zIndex: 2,
+                    backgroundColor: "transparent",
+                  }
+                : {}),
             },
             "& .MuiOutlinedInput-input": {
               ...(hasHighlights
@@ -352,6 +546,9 @@ export default function UrlInput({
                   }
                 : {}),
             },
+            "& .MuiOutlinedInput-notchedOutline": hasHighlights
+              ? { backgroundColor: "transparent" }
+              : {},
           }}
           InputProps={{
             endAdornment: endAdornment,
@@ -361,6 +558,7 @@ export default function UrlInput({
         {/* Mirror overlay for colored segments */}
         {hasHighlights && (
           <Box
+            ref={overlayRef}
             aria-hidden="true"
             sx={{
               position: "absolute",
@@ -396,12 +594,12 @@ export default function UrlInput({
                         color: pathParams[seg.paramName!]
                           ? theme.palette.success.main
                           : paramColor,
-                        fontWeight: 600,
                         backgroundColor: pathParams[seg.paramName!]
                           ? alpha(theme.palette.success.main, 0.1)
                           : alpha(paramColor, 0.12),
                         borderRadius: "3px",
-                        px: "2px",
+                        mx: "-1px",
+                        borderBottom: `2px solid ${pathParams[seg.paramName!] ? theme.palette.success.main : paramColor}`,
                       }}
                     >
                       {seg.text}
@@ -412,35 +610,27 @@ export default function UrlInput({
                 if (seg.type === "variable") {
                   const isResolved = resolvedVariables?.has(seg.variableName!);
                   const color = isResolved ? varColor : unresolvedColor;
+                  const isHovered =
+                    hoverSegment?.offset === seg.offset;
 
                   return (
-                    <Tooltip
+                    <Box
+                      component="span"
                       key={i}
-                      title={buildTooltipContent(seg.variableName!)}
-                      arrow
-                      placement="top"
-                      enterDelay={200}
+                      data-var-seg={i}
+                      sx={{
+                        color,
+                        backgroundColor: isHovered
+                          ? alpha(color, 0.3)
+                          : alpha(color, 0.12),
+                        borderRadius: "3px",
+                        mx: "-1px",
+                        borderBottom: `2px solid ${color}`,
+                        transition: "background-color 0.15s",
+                      }}
                     >
-                      <Box
-                        component="span"
-                        sx={{
-                          color,
-                          fontWeight: 600,
-                          backgroundColor: alpha(color, 0.12),
-                          borderRadius: "3px",
-                          px: "2px",
-                          pointerEvents: "auto",
-                          cursor: "default",
-                        }}
-                        onClick={(e) => {
-                          // Pass click through to the input
-                          e.stopPropagation();
-                          inputRef.current?.focus();
-                        }}
-                      >
-                        {seg.text}
-                      </Box>
-                    </Tooltip>
+                      {seg.text}
+                    </Box>
                   );
                 }
 
@@ -458,15 +648,20 @@ export default function UrlInput({
           </Box>
         )}
 
-        {/* Variable autocomplete dropdown */}
+        {/* Variable autocomplete dropdown ({{ typing trigger) */}
         {acOpen && filteredVariables.length > 0 && (
           <ClickAwayListener onClickAway={() => setAcOpen(false)}>
             <Popper
               open
               anchorEl={containerRef.current}
               placement="bottom-start"
-              sx={{ zIndex: 1400, width: containerRef.current?.offsetWidth ?? 400 }}
-              modifiers={[{ name: "offset", options: { offset: [0, 4] } }]}
+              sx={{
+                zIndex: 1400,
+                width: containerRef.current?.offsetWidth ?? 400,
+              }}
+              modifiers={[
+                { name: "offset", options: { offset: [0, 4] } },
+              ]}
             >
               <Paper
                 elevation={8}
@@ -477,14 +672,128 @@ export default function UrlInput({
                   borderRadius: 2,
                 }}
               >
+                <VariableList
+                  groups={groupedFiltered}
+                  flatItems={filteredVariables}
+                  selectedIndex={acSelectedIndex}
+                  onSelect={(key) => handleSelectVariable(key)}
+                  theme={theme}
+                />
+              </Paper>
+            </Popper>
+          </ClickAwayListener>
+        )}
+
+        {/* Hover-swap popper for existing variables */}
+        {hoverAnchor && hoverSegment && flatVariables.length > 0 && (
+          <Popper
+            open
+            anchorEl={hoverAnchor}
+            placement="bottom-start"
+            sx={{ zIndex: 1500 }}
+            modifiers={[
+              { name: "offset", options: { offset: [0, 6] } },
+            ]}
+          >
+            <Paper
+              elevation={12}
+              onMouseEnter={handlePopperEnter}
+              onMouseLeave={handlePopperLeave}
+              sx={{
+                width: 320,
+                border: `1px solid ${alpha(theme.palette.divider, 0.15)}`,
+                borderRadius: 2,
+                overflow: "hidden",
+              }}
+            >
+              {/* Current variable header */}
+              <Box
+                sx={{
+                  px: 1.5,
+                  py: 1,
+                  bgcolor: alpha(theme.palette.info.main, 0.06),
+                  borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  fontFamily="monospace"
+                  fontWeight={600}
+                  sx={{ color: theme.palette.info.main }}
+                >
+                  {hoverSegment.text}
+                </Typography>
+                {resolvedVariables?.has(hoverSegment.variableName!) && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    noWrap
+                    sx={{ flex: 1, minWidth: 0 }}
+                  >
+                    ={" "}
+                    {(() => {
+                      const val = resolvedVariables.get(
+                        hoverSegment.variableName!,
+                      )!.value;
+                      return val.length > 40
+                        ? val.slice(0, 40) + "..."
+                        : val;
+                    })()}
+                  </Typography>
+                )}
+              </Box>
+
+              {/* Search input */}
+              <Box sx={{ px: 1.5, py: 1 }}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder={t("variable.search")}
+                  value={hoverFilter}
+                  onChange={(e) => setHoverFilter(e.target.value)}
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setHoverAnchor(null);
+                      setHoverSegment(null);
+                      setHoverFilter("");
+                    }
+                  }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      fontSize: 12,
+                      borderRadius: 1,
+                    },
+                  }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <Typography
+                          variant="caption"
+                          color="text.disabled"
+                          fontSize={10}
+                        >
+                          {hoverFiltered.length}
+                        </Typography>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Box>
+
+              {/* Variable list */}
+              <Box sx={{ maxHeight: 240, overflow: "auto" }}>
                 <List dense disablePadding>
-                  {groupedFiltered.map((group) => [
+                  {hoverGrouped.map((group) => [
                     <ListSubheader
-                      key={`header-${group.label}`}
+                      key={`hdr-${group.label}`}
                       sx={{
                         bgcolor: alpha(theme.palette.primary.main, 0.06),
-                        lineHeight: "28px",
-                        fontSize: 11,
+                        lineHeight: "24px",
+                        fontSize: 10,
                         fontWeight: 700,
                         textTransform: "uppercase",
                         letterSpacing: 0.5,
@@ -493,29 +802,80 @@ export default function UrlInput({
                       {group.label}
                     </ListSubheader>,
                     ...group.items.map((item) => {
-                      const flatIdx = filteredVariables.findIndex((v) => v.item === item);
+                      const isCurrent =
+                        item.key === hoverSegment.variableName;
                       return (
                         <ListItem
                           key={item.key}
                           component="div"
-                          onClick={() => handleSelectVariable(item.key)}
+                          onClick={() => handleSwapVariable(item.key)}
                           sx={{
                             cursor: "pointer",
-                            bgcolor: flatIdx === acSelectedIndex ? alpha(theme.palette.primary.main, 0.12) : "transparent",
-                            "&:hover": { bgcolor: alpha(theme.palette.primary.main, 0.08) },
-                            py: 0.5,
+                            bgcolor: isCurrent
+                              ? alpha(theme.palette.info.main, 0.1)
+                              : "transparent",
+                            "&:hover": {
+                              bgcolor: alpha(
+                                theme.palette.primary.main,
+                                0.08,
+                              ),
+                            },
+                            py: 0.25,
                             px: 2,
                           }}
                         >
                           <ListItemText
                             primary={
-                              <Typography variant="body2" fontFamily="monospace" fontSize={13}>
-                                {`{{${item.key}}}`}
-                              </Typography>
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 1,
+                                }}
+                              >
+                                <Typography
+                                  variant="body2"
+                                  fontFamily="monospace"
+                                  fontSize={12}
+                                  fontWeight={isCurrent ? 700 : 400}
+                                  sx={{
+                                    color: isCurrent
+                                      ? theme.palette.info.main
+                                      : theme.palette.text.primary,
+                                  }}
+                                >
+                                  {`{{${item.key}}}`}
+                                </Typography>
+                                {isCurrent && (
+                                  <Typography
+                                    variant="caption"
+                                    fontSize={9}
+                                    sx={{
+                                      bgcolor: alpha(
+                                        theme.palette.info.main,
+                                        0.15,
+                                      ),
+                                      color: theme.palette.info.main,
+                                      px: 0.5,
+                                      borderRadius: 0.5,
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {t("variable.current")}
+                                  </Typography>
+                                )}
+                              </Box>
                             }
                             secondary={
-                              <Typography variant="caption" color="text.secondary" noWrap>
-                                {item.value.length > 50 ? item.value.slice(0, 50) + "..." : item.value}
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                noWrap
+                                fontSize={11}
+                              >
+                                {item.value.length > 50
+                                  ? item.value.slice(0, 50) + "..."
+                                  : item.value}
                               </Typography>
                             }
                           />
@@ -523,10 +883,21 @@ export default function UrlInput({
                       );
                     }),
                   ])}
+                  {hoverFiltered.length === 0 && (
+                    <ListItem>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ py: 1, textAlign: "center", width: "100%" }}
+                      >
+                        {t("variable.noResults")}
+                      </Typography>
+                    </ListItem>
+                  )}
                 </List>
-              </Paper>
-            </Popper>
-          </ClickAwayListener>
+              </Box>
+            </Paper>
+          </Popper>
         )}
       </Box>
 
@@ -551,5 +922,87 @@ export default function UrlInput({
         </Typography>
       )}
     </Box>
+  );
+});
+
+export default UrlInput;
+
+/** Shared variable list for autocomplete dropdown */
+function VariableList({
+  groups,
+  flatItems,
+  selectedIndex,
+  onSelect,
+  theme,
+}: {
+  groups: { label: string; items: VariableInfo[] }[];
+  flatItems: { item: VariableInfo; groupLabel: string }[];
+  selectedIndex: number;
+  onSelect: (key: string) => void;
+  theme: Theme;
+}) {
+  return (
+    <List dense disablePadding>
+      {groups.map((group) => [
+        <ListSubheader
+          key={`header-${group.label}`}
+          sx={{
+            bgcolor: alpha(theme.palette.primary.main, 0.06),
+            lineHeight: "28px",
+            fontSize: 11,
+            fontWeight: 700,
+            textTransform: "uppercase",
+            letterSpacing: 0.5,
+          }}
+        >
+          {group.label}
+        </ListSubheader>,
+        ...group.items.map((item) => {
+          const flatIdx = flatItems.findIndex((v) => v.item === item);
+          return (
+            <ListItem
+              key={item.key}
+              component="div"
+              onClick={() => onSelect(item.key)}
+              sx={{
+                cursor: "pointer",
+                bgcolor:
+                  flatIdx === selectedIndex
+                    ? alpha(theme.palette.primary.main, 0.12)
+                    : "transparent",
+                "&:hover": {
+                  bgcolor: alpha(theme.palette.primary.main, 0.08),
+                },
+                py: 0.5,
+                px: 2,
+              }}
+            >
+              <ListItemText
+                primary={
+                  <Typography
+                    variant="body2"
+                    fontFamily="monospace"
+                    fontSize={13}
+                  >
+                    {`{{${item.key}}}`}
+                  </Typography>
+                }
+                secondary={
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    noWrap
+                  >
+                    {item.value.length > 50
+                      ? item.value.slice(0, 50) + "..."
+                      : item.value}
+                  </Typography>
+                }
+              />
+            </ListItem>
+          );
+        }),
+      ])}
+    </List>
   );
 }

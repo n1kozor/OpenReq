@@ -71,6 +71,7 @@ class ProxyRequest(BaseModel):
 
 class ProxyResponse(BaseModel):
     status_code: int
+    reason_phrase: str = ""
     headers: dict[str, str]
     body: str
     elapsed_ms: float

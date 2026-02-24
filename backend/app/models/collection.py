@@ -31,6 +31,7 @@ class Collection(Base):
     pre_request_script: Mapped[str | None] = mapped_column(default=None)
     post_response_script: Mapped[str | None] = mapped_column(default=None)
     script_language: Mapped[str | None] = mapped_column(String(20), default="python")
+    openapi_spec: Mapped[str | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -56,6 +57,7 @@ class CollectionItem(Base):
     pre_request_script: Mapped[str | None] = mapped_column(default=None)
     post_response_script: Mapped[str | None] = mapped_column(default=None)
     script_language: Mapped[str | None] = mapped_column(String(20), default=None)
+    openapi_spec: Mapped[str | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     collection: Mapped["Collection"] = relationship(back_populates="items")

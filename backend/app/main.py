@@ -80,6 +80,24 @@ def health_check():
 
 
 # ── Serve frontend static files (production) ──
+
+# Map file extensions to media types with charset for text-based formats
+_CHARSET_MEDIA_TYPES: dict[str, str] = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".mjs": "application/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml; charset=utf-8",
+    ".xml": "application/xml; charset=utf-8",
+    ".txt": "text/plain; charset=utf-8",
+}
+
+
+def _media_type_for(file_path: Path) -> str | None:
+    return _CHARSET_MEDIA_TYPES.get(file_path.suffix.lower())
+
+
 if FRONTEND_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="static-assets")
 
@@ -88,5 +106,8 @@ if FRONTEND_DIR.is_dir():
         """Serve frontend SPA — any non-API route returns index.html."""
         file_path = FRONTEND_DIR / full_path
         if file_path.is_file():
-            return FileResponse(file_path)
-        return FileResponse(FRONTEND_DIR / "index.html")
+            return FileResponse(file_path, media_type=_media_type_for(file_path))
+        return FileResponse(
+            FRONTEND_DIR / "index.html",
+            media_type="text/html; charset=utf-8",
+        )

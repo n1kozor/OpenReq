@@ -40,8 +40,6 @@ def create_share(
     collection = db.query(Collection).filter(Collection.id == data.collection_id).first()
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
-    if collection.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only collection owner can create shares")
 
     share = CollectionShare(
         collection_id=data.collection_id,
@@ -67,8 +65,6 @@ def list_shares(
     collection = db.query(Collection).filter(Collection.id == collection_id).first()
     if not collection:
         raise HTTPException(status_code=404, detail="Collection not found")
-    if collection.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     shares = (
         db.query(CollectionShare)
@@ -89,8 +85,6 @@ def update_share(
     share = db.query(CollectionShare).filter(CollectionShare.id == share_id).first()
     if not share:
         raise HTTPException(status_code=404, detail="Share not found")
-    if share.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     if data.title is not None:
         share.title = data.title
@@ -119,8 +113,6 @@ def delete_share(
     share = db.query(CollectionShare).filter(CollectionShare.id == share_id).first()
     if not share:
         raise HTTPException(status_code=404, detail="Share not found")
-    if share.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     db.delete(share)
     db.commit()

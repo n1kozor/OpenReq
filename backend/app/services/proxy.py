@@ -562,6 +562,7 @@ async def _run_prepare_phase(
 async def _run_complete_phase(
     db: Session,
     status_code: int,
+    reason_phrase: str,
     response_body: str,
     response_headers: dict[str, str],
     elapsed_ms: float,
@@ -636,6 +637,7 @@ async def _run_complete_phase(
 
     return ProxyResponse(
         status_code=status_code,
+        reason_phrase=reason_phrase,
         headers=response_headers,
         body=response_body,
         elapsed_ms=round(elapsed_ms, 2),
@@ -729,6 +731,7 @@ async def complete_proxy_request(
     response = await _run_complete_phase(
         db=db,
         status_code=local_resp.status_code,
+        reason_phrase="",
         response_body=response_body,
         response_headers=response_headers,
         elapsed_ms=local_resp.elapsed_ms,
@@ -872,10 +875,12 @@ async def execute_proxy_request(
         body_b64 = None
 
     response_headers = dict(response.headers)
+    reason_phrase = response.reason_phrase or ""
 
     resp = await _run_complete_phase(
         db=db,
         status_code=response.status_code,
+        reason_phrase=reason_phrase,
         response_body=response_body,
         response_headers=response_headers,
         elapsed_ms=elapsed_ms,
