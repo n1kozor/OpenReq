@@ -8,6 +8,10 @@ class CollectionCreate(BaseModel):
     description: str | None = None
     visibility: CollectionVisibility = CollectionVisibility.PRIVATE
     workspace_id: str | None = None
+    default_headers: dict | None = None
+    default_query_params: dict | None = None
+    default_body: str | None = None
+    default_body_type: str | None = None
     auth_type: str | None = None
     auth_config: dict | None = None
     pre_request_script: str | None = None
@@ -24,6 +28,10 @@ class CollectionOut(BaseModel):
     owner_id: str
     workspace_id: str | None
     variables: dict[str, str] | None = None
+    default_headers: dict | None = None
+    default_query_params: dict | None = None
+    default_body: str | None = None
+    default_body_type: str | None = None
     auth_type: str | None = None
     auth_config: dict | None = None
     sort_order: int | None = 0
@@ -45,6 +53,10 @@ class CollectionItemCreate(BaseModel):
     auth_config: dict | None = None
     description: str | None = None
     variables: dict | None = None
+    default_headers: dict | None = None
+    default_query_params: dict | None = None
+    default_body: str | None = None
+    default_body_type: str | None = None
     pre_request_script: str | None = None
     post_response_script: str | None = None
     script_language: str | None = None
@@ -64,6 +76,10 @@ class CollectionItemOut(BaseModel):
     auth_config: dict | None = None
     description: str | None = None
     variables: dict | None = None
+    default_headers: dict | None = None
+    default_query_params: dict | None = None
+    default_body: str | None = None
+    default_body_type: str | None = None
     pre_request_script: str | None = None
     post_response_script: str | None = None
     script_language: str | None = None

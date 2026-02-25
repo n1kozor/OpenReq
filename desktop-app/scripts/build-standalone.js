@@ -53,7 +53,6 @@ function ensureDir(dir) {
 }
 
 console.log('==> Building frontend (standalone mode)...');
-run('node', [path.join('scripts', 'gen-installer-assets.js')], { cwd: desktopDir });
 run('npm', ['run', 'build'], {
   cwd: frontendDir,
   env: {
@@ -99,7 +98,7 @@ console.log('==> Copying backend into desktop resources...');
 ensureDir(resourcesBackend);
 copyDir(backendExeDir, resourcesBackend);
 
-console.log('==> Building Electron standalone installer...');
+console.log('==> Building Electron standalone portable...');
 run('npx', ['electron-builder', '--config', 'electron-builder.standalone.yml', '--win'], {
   cwd: desktopDir,
 });

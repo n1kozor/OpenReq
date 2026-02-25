@@ -4,6 +4,7 @@ import {
   Toolbar,
   Typography,
   IconButton,
+  Button,
   Select,
   MenuItem,
   Box,
@@ -33,8 +34,11 @@ import {
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { useProxyMode } from "@/hooks/useProxyMode";
 import type { Environment, Workspace } from "@/types";
+
+declare const __APP_VERSION__: string;
 
 interface TopBarProps {
   mode: "dark" | "light";
@@ -60,12 +64,6 @@ interface TopBarProps {
   onOpenEnvironmentManager: () => void;
   activeNavItem: "settings" | "aiAgent" | null;
 }
-
-const LANGUAGES = [
-  { code: "en", label: "English", flag: "gb" },
-  { code: "hu", label: "Magyar", flag: "hu" },
-  { code: "de", label: "Deutsch", flag: "de" },
-];
 
 const ENV_COLORS: Record<string, string> = {
   LIVE: "#cf5b56",
@@ -96,8 +94,9 @@ export default function TopBar({
   onOpenEnvironmentManager,
   activeNavItem,
 }: TopBarProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const theme = useTheme();
+  const showNavLabels = useMediaQuery("(min-width: 1400px)");
   const isDark = mode === "dark";
   const { proxyMode, setProxyMode, localAvailable } = useProxyMode();
   const [wsSearch, setWsSearch] = useState("");
@@ -105,20 +104,27 @@ export default function TopBar({
   const currentWs = workspaces.find((w) => w.id === currentWorkspaceId);
   const currentEnv = environments.find((e) => e.id === selectedEnvironmentId);
 
-  const handleLanguageChange = (lang: string) => {
-    i18n.changeLanguage(lang);
-    localStorage.setItem("openreq-lang", lang);
-  };
-
   const navBtnSx = (active: boolean) => ({
-    width: 28,
+    minWidth: showNavLabels ? 0 : 28,
     height: 28,
+    px: showNavLabels ? 0.2 : 0,
     borderRadius: 1,
     color: active ? theme.palette.primary.main : theme.palette.text.secondary,
     backgroundColor: active ? (isDark ? "#2d4a6e" : "#cce0f5") : "transparent",
+    textTransform: "none",
+    fontSize: "0.72rem",
+    gap: 0.15,
     "&:hover": {
       color: theme.palette.primary.main,
       backgroundColor: isDark ? "#4e5157" : "#e0e0e0",
+    },
+    "& .nav-label": {
+      display: showNavLabels ? "inline" : "none",
+      whiteSpace: "nowrap",
+    },
+    "& .MuiButton-startIcon": {
+      marginRight: showNavLabels ? 1 : 0,
+      marginLeft: 0,
     },
   });
 
@@ -139,6 +145,8 @@ export default function TopBar({
           minHeight: "40px !important",
           maxHeight: 40,
           px: "8px !important",
+          flexWrap: "nowrap",
+          overflow: "hidden",
         }}
       >
         {/* Brand */}
@@ -163,58 +171,58 @@ export default function TopBar({
         <VerticalDivider />
 
         {/* Nav items */}
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.25 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, minWidth: 0, flexShrink: 1, overflow: "hidden" }}>
           <Tooltip title={t("nav.collections")}>
-            <IconButton size="small" onClick={onToggleCollections} sx={navBtnSx(showCollectionsSidebar)}>
-              <FolderOpen sx={{ fontSize: 16 }} />
-            </IconButton>
+            <Button size="small" onClick={onToggleCollections} sx={navBtnSx(showCollectionsSidebar)} startIcon={<FolderOpen sx={{ fontSize: 16 }} />}>
+              <span className="nav-label">{t("nav.collections")}</span>
+            </Button>
           </Tooltip>
           <Tooltip title={t("nav.workspace")}>
-            <IconButton size="small" onClick={onOpenWorkspaceManager} sx={navBtnSx(false)}>
-              <Workspaces sx={{ fontSize: 16 }} />
-            </IconButton>
+            <Button size="small" onClick={onOpenWorkspaceManager} sx={navBtnSx(false)} startIcon={<Workspaces sx={{ fontSize: 16 }} />}>
+              <span className="nav-label">{t("nav.workspace")}</span>
+            </Button>
           </Tooltip>
           <Tooltip title={t("nav.environments")}>
-            <IconButton size="small" onClick={onOpenEnvironmentManager} sx={navBtnSx(false)}>
-              <Cloud sx={{ fontSize: 16 }} />
-            </IconButton>
+            <Button size="small" onClick={onOpenEnvironmentManager} sx={navBtnSx(false)} startIcon={<Cloud sx={{ fontSize: 16 }} />}>
+              <span className="nav-label">{t("nav.environments")}</span>
+            </Button>
           </Tooltip>
           <Tooltip title={t("nav.history")}>
-            <IconButton size="small" onClick={onOpenHistory} sx={navBtnSx(false)}>
-              <History sx={{ fontSize: 16 }} />
-            </IconButton>
+            <Button size="small" onClick={onOpenHistory} sx={navBtnSx(false)} startIcon={<History sx={{ fontSize: 16 }} />}>
+              <span className="nav-label">{t("nav.history")}</span>
+            </Button>
           </Tooltip>
           <Tooltip title={t("nav.testBuilder")}>
-            <IconButton size="small" onClick={onOpenTestBuilder} sx={navBtnSx(false)}>
-              <AccountTree sx={{ fontSize: 16 }} />
-            </IconButton>
+            <Button size="small" onClick={onOpenTestBuilder} sx={navBtnSx(false)} startIcon={<AccountTree sx={{ fontSize: 16 }} />}>
+              <span className="nav-label">{t("nav.testBuilder")}</span>
+            </Button>
           </Tooltip>
           <Tooltip title={t("importExport.title")}>
-            <IconButton size="small" onClick={onOpenImport} sx={navBtnSx(false)}>
-              <SwapHoriz sx={{ fontSize: 16 }} />
-            </IconButton>
+            <Button size="small" onClick={onOpenImport} sx={navBtnSx(false)} startIcon={<SwapHoriz sx={{ fontSize: 16 }} />}>
+              <span className="nav-label">{t("importExport.title")}</span>
+            </Button>
           </Tooltip>
           <Tooltip title={t("sdk.title")}>
-            <IconButton size="small" onClick={onOpenSDK} sx={navBtnSx(false)}>
-              <FileDownload sx={{ fontSize: 16 }} />
-            </IconButton>
+            <Button size="small" onClick={onOpenSDK} sx={navBtnSx(false)} startIcon={<FileDownload sx={{ fontSize: 16 }} />}>
+              <span className="nav-label">{t("sdk.title")}</span>
+            </Button>
           </Tooltip>
           <Tooltip title={t("nav.aiAgent")}>
-            <IconButton size="small" onClick={onOpenAIAgent} sx={navBtnSx(activeNavItem === "aiAgent")}>
-              <SmartToy sx={{ fontSize: 16 }} />
-            </IconButton>
+            <Button size="small" onClick={onOpenAIAgent} sx={navBtnSx(activeNavItem === "aiAgent")} startIcon={<SmartToy sx={{ fontSize: 16 }} />}>
+              <span className="nav-label">{t("nav.aiAgent")}</span>
+            </Button>
           </Tooltip>
           <Tooltip title={t("nav.settings")}>
-            <IconButton size="small" onClick={onOpenSettings} sx={navBtnSx(activeNavItem === "settings")}>
-              <Settings sx={{ fontSize: 16 }} />
-            </IconButton>
+            <Button size="small" onClick={onOpenSettings} sx={navBtnSx(activeNavItem === "settings")} startIcon={<Settings sx={{ fontSize: 16 }} />}>
+              <span className="nav-label">{t("nav.settings")}</span>
+            </Button>
           </Tooltip>
         </Box>
 
         <VerticalDivider />
 
         {/* Workspace selector */}
-        <FormControl size="small" sx={{ minWidth: 0 }}>
+        <FormControl size="small" sx={{ minWidth: 140, flexShrink: 0 }}>
           <Select
             value={currentWorkspaceId ?? ""}
             onChange={(e) => onSelectWorkspace(e.target.value)}
@@ -270,7 +278,7 @@ export default function TopBar({
         <VerticalDivider />
 
         {/* Environment selector */}
-        <FormControl size="small" sx={{ minWidth: 0 }}>
+        <FormControl size="small" sx={{ minWidth: 120, flexShrink: 0 }}>
           <Select
             value={selectedEnvironmentId ?? "__none__"}
             onChange={(e) => onSelectEnvironment(e.target.value === "__none__" ? null : e.target.value)}
@@ -347,10 +355,20 @@ export default function TopBar({
           </Box>
         </Tooltip>
 
-        <Box sx={{ flexGrow: 1 }} />
+        <Box sx={{ flexGrow: 1, minWidth: 8 }} />
 
         {/* Right actions */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, flexShrink: 0 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              fontSize: "0.75rem",
+              color: theme.palette.text.secondary,
+              mr: 0.5,
+            }}
+          >
+            v{__APP_VERSION__}
+          </Typography>
           {username && (
             <Typography
               variant="body2"
@@ -363,58 +381,6 @@ export default function TopBar({
               {username}
             </Typography>
           )}
-
-          {/* Language */}
-          <FormControl size="small">
-            <Select
-              value={i18n.language}
-              onChange={(e) => handleLanguageChange(e.target.value)}
-              variant="standard"
-              disableUnderline
-              renderValue={(value) => {
-                const lang = LANGUAGES.find((l) => l.code === value);
-                return lang ? (
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                    <img
-                      src={`https://flagcdn.com/w40/${lang.flag}.png`}
-                      alt={lang.label}
-                      style={{ width: 16, height: 11, objectFit: "cover", borderRadius: 1 }}
-                    />
-                    <Typography variant="caption" sx={{ fontWeight: 500, fontSize: "0.7rem" }}>
-                      {lang.code.toUpperCase()}
-                    </Typography>
-                  </Box>
-                ) : value;
-              }}
-              sx={{
-                minWidth: 50,
-                cursor: "pointer",
-                "& .MuiSelect-select": {
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 0.5,
-                  py: "2px !important",
-                  pl: "4px !important",
-                  pr: "20px !important",
-                },
-              }}
-            >
-              {LANGUAGES.map((lang) => (
-                <MenuItem key={lang.code} value={lang.code}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <img
-                      src={`https://flagcdn.com/w40/${lang.flag}.png`}
-                      alt={lang.label}
-                      style={{ width: 18, height: 12, objectFit: "cover", borderRadius: 1 }}
-                    />
-                    <Typography variant="body2" sx={{ fontWeight: 400 }}>
-                      {lang.label}
-                    </Typography>
-                  </Box>
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
 
           {/* Theme toggle */}
           <Tooltip title={mode === "dark" ? t("common.lightMode") : t("common.darkMode")}>

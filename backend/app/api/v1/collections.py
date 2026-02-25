@@ -45,6 +45,10 @@ class CollectionUpdate(BaseModel):
     description: str | None = None
     visibility: CollectionVisibility | None = None
     variables: dict[str, str] | None = None
+    default_headers: dict | None = None
+    default_query_params: dict | None = None
+    default_body: str | None = None
+    default_body_type: str | None = None
     auth_type: str | None = None
     auth_config: dict | None = None
     pre_request_script: str | None = None
@@ -61,6 +65,10 @@ class CollectionItemUpdate(BaseModel):
     auth_config: dict | None = None
     description: str | None = None
     variables: dict | None = None
+    default_headers: dict | None = None
+    default_query_params: dict | None = None
+    default_body: str | None = None
+    default_body_type: str | None = None
     pre_request_script: str | None = None
     post_response_script: str | None = None
     script_language: str | None = None
@@ -91,6 +99,10 @@ def create_collection(
         visibility=payload.visibility,
         owner_id=current_user.id,
         workspace_id=payload.workspace_id,
+        default_headers=payload.default_headers,
+        default_query_params=payload.default_query_params,
+        default_body=payload.default_body,
+        default_body_type=payload.default_body_type,
         auth_type=payload.auth_type,
         auth_config=payload.auth_config,
         sort_order=int(max_sort) + 10,
@@ -380,11 +392,16 @@ def duplicate_collection(
         owner_id=current_user.id,
         workspace_id=original.workspace_id,
         variables=dict(original.variables) if original.variables else None,
+        default_headers=dict(original.default_headers) if original.default_headers else None,
+        default_query_params=dict(original.default_query_params) if original.default_query_params else None,
+        default_body=original.default_body,
+        default_body_type=original.default_body_type,
         auth_type=original.auth_type,
         auth_config=dict(original.auth_config) if original.auth_config else None,
         pre_request_script=original.pre_request_script,
         post_response_script=original.post_response_script,
         script_language=original.script_language,
+        openapi_spec=original.openapi_spec,
     )
     db.add(new_col)
     db.flush()
@@ -437,6 +454,18 @@ def duplicate_collection(
             name=item.name,
             sort_order=item.sort_order,
             request_id=new_request_id,
+            auth_type=item.auth_type,
+            auth_config=dict(item.auth_config) if item.auth_config else None,
+            description=item.description,
+            variables=dict(item.variables) if item.variables else None,
+            default_headers=dict(item.default_headers) if item.default_headers else None,
+            default_query_params=dict(item.default_query_params) if item.default_query_params else None,
+            default_body=item.default_body,
+            default_body_type=item.default_body_type,
+            pre_request_script=item.pre_request_script,
+            post_response_script=item.post_response_script,
+            script_language=item.script_language,
+            openapi_spec=item.openapi_spec,
         )
         db.add(new_item)
 
@@ -461,6 +490,16 @@ def create_item(
         sort_order=payload.sort_order,
         auth_type=payload.auth_type,
         auth_config=payload.auth_config,
+        description=payload.description,
+        variables=payload.variables,
+        default_headers=payload.default_headers,
+        default_query_params=payload.default_query_params,
+        default_body=payload.default_body,
+        default_body_type=payload.default_body_type,
+        pre_request_script=payload.pre_request_script,
+        post_response_script=payload.post_response_script,
+        script_language=payload.script_language,
+        openapi_spec=payload.openapi_spec,
     )
     db.add(item)
     db.commit()

@@ -6,24 +6,13 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder",
-    "build:client": "node scripts/gen-installer-assets.js && electron-builder --config electron-builder.yml --win",
+    "build:client": "electron-builder --config electron-builder.yml --win",
     "build:standalone": "node scripts/build-standalone.js",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:linux": "electron-builder --linux"
   },
-  "build": {
-    "asarUnpack": [
-      "src/webview-preload.js"
-    ],
-    "win": {
-      "target": "nsis",
-      "signAndEditExecutable": false
-    }
-  },
-  "dependencies": {
-    "electron-updater": "^6.3.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "electron": "^33.0.0",
     "electron-builder": "^25.1.0",

@@ -50,13 +50,13 @@ import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import AuthEditor from "@/components/request/AuthEditor";
-import { VariableValueCell } from "@/components/common/KeyValueEditor";
+import KeyValueEditor, { VariableValueCell, newPair } from "@/components/common/KeyValueEditor";
 import RunReportView from "./RunReportView";
 import { runsApi } from "@/api/endpoints";
 import { formatMs } from "./runnerUtils";
 import ShareManageDialog from "@/components/share/ShareManageDialog";
 import { API_URL } from "@/api/client";
-import type { Collection, CollectionItem, AuthType, OAuthConfig, ScriptLanguage, CollectionRunSummary } from "@/types";
+import type { Collection, CollectionItem, AuthType, OAuthConfig, ScriptLanguage, CollectionRunSummary, KeyValuePair } from "@/types";
 import type { VariableInfo, VariableGroup } from "@/hooks/useVariableGroups";
 
 interface VarRow {
@@ -72,6 +72,10 @@ interface CollectionDetailProps {
     description: string;
     visibility: "private" | "shared";
     variables: Record<string, string>;
+    default_headers: Record<string, string> | null;
+    default_query_params: Record<string, string> | null;
+    default_body: string | null;
+    default_body_type: string | null;
     auth_type: AuthType | null;
     auth_config: Record<string, string> | null;
     pre_request_script: string | null;
@@ -83,6 +87,25 @@ interface CollectionDetailProps {
   onRunCollection: (collectionId: string) => void;
   resolvedVariables?: Map<string, VariableInfo>;
   variableGroups?: VariableGroup[];
+}
+
+function pairsFromRecord(record?: Record<string, string> | null): KeyValuePair[] {
+  if (!record) return [];
+  return Object.entries(record).map(([key, value]) => {
+    const p = newPair();
+    p.key = key;
+    p.value = value;
+    p.enabled = true;
+    return p;
+  });
+}
+
+function recordFromPairs(pairs: KeyValuePair[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const p of pairs) {
+    if (p.enabled && p.key.trim()) result[p.key.trim()] = p.value;
+  }
+  return result;
 }
 
 function countItems(tree: CollectionItem[]): { requests: number; folders: number } {
@@ -120,6 +143,10 @@ export default function CollectionDetail({
   const [description, setDescription] = useState(collection.description || "");
   const [visibility, setVisibility] = useState<"private" | "shared">(collection.visibility);
   const [vars, setVars] = useState<VarRow[]>([{ key: "", value: "" }]);
+  const [defaultHeaders, setDefaultHeaders] = useState<KeyValuePair[]>([]);
+  const [defaultQueryParams, setDefaultQueryParams] = useState<KeyValuePair[]>([]);
+  const [defaultBody, setDefaultBody] = useState(collection.default_body || "");
+  const [defaultBodyType, setDefaultBodyType] = useState<string>(collection.default_body_type || "json");
   const [authType, setAuthType] = useState<AuthType>(
     (collection.auth_type as AuthType) || "none"
   );
@@ -179,6 +206,10 @@ export default function CollectionDetail({
         ? [...entries.map(([key, value]) => ({ key, value })), { key: "", value: "" }]
         : [{ key: "", value: "" }]
     );
+    setDefaultHeaders(pairsFromRecord(collection.default_headers));
+    setDefaultQueryParams(pairsFromRecord(collection.default_query_params));
+    setDefaultBody(collection.default_body || "");
+    setDefaultBodyType(collection.default_body_type || "json");
     // Sync auth
     const at = (collection.auth_type as AuthType) || "none";
     setAuthType(at);
@@ -243,6 +274,18 @@ export default function CollectionDetail({
     }
     const origVars = collection.variables || {};
     if (JSON.stringify(currentVars) !== JSON.stringify(origVars)) return true;
+    const currentDefaultHeaders = recordFromPairs(defaultHeaders);
+    const currentDefaultQueryParams = recordFromPairs(defaultQueryParams);
+    const currentDefaultBody = defaultBody.trim() || null;
+    const currentDefaultBodyType = currentDefaultBody ? (defaultBodyType || null) : null;
+    const origDefaultHeaders = collection.default_headers || {};
+    const origDefaultQueryParams = collection.default_query_params || {};
+    const origDefaultBody = collection.default_body || null;
+    const origDefaultBodyType = origDefaultBody ? (collection.default_body_type || null) : null;
+    if (JSON.stringify(currentDefaultHeaders) !== JSON.stringify(origDefaultHeaders)) return true;
+    if (JSON.stringify(currentDefaultQueryParams) !== JSON.stringify(origDefaultQueryParams)) return true;
+    if ((currentDefaultBody || null) !== (origDefaultBody || null)) return true;
+    if ((currentDefaultBodyType || null) !== (origDefaultBodyType || null)) return true;
     // Auth dirty check
     const origAuthType = collection.auth_type || "none";
     if (authType !== origAuthType) return true;
@@ -265,7 +308,7 @@ export default function CollectionDetail({
 
   // Fetch runs when Runs tab is activated
   useEffect(() => {
-    if (activeTab === 5) {
+    if (activeTab === 6) {
       setLoadingRuns(true);
       runsApi
         .list(collection.id)
@@ -291,11 +334,19 @@ export default function CollectionDetail({
       for (const v of vars) {
         if (v.key.trim()) variables[v.key.trim()] = v.value;
       }
+      const defaultHeadersRecord = recordFromPairs(defaultHeaders);
+      const defaultQueryRecord = recordFromPairs(defaultQueryParams);
+      const defaultBodyValue = defaultBody.trim() || null;
+      const defaultBodyTypeValue = defaultBodyValue ? (defaultBodyType || null) : null;
       await onSave({
         name: name.trim(),
         description: description.trim(),
         visibility,
         variables,
+        default_headers: Object.keys(defaultHeadersRecord).length > 0 ? defaultHeadersRecord : null,
+        default_query_params: Object.keys(defaultQueryRecord).length > 0 ? defaultQueryRecord : null,
+        default_body: defaultBodyValue,
+        default_body_type: defaultBodyTypeValue,
         auth_type: authType === "none" ? null : authType,
         auth_config: buildAuthConfig(),
         pre_request_script: preRequestScript.trim() || null,
@@ -438,6 +489,7 @@ export default function CollectionDetail({
       >
         <Tab label={t("collectionDetail.overview")} />
         <Tab label={t("collection.variables")} />
+        <Tab label={t("collection.defaults")} />
         <Tab label={t("collectionDetail.authorization")} />
         <Tab label={t("collectionDetail.preRequestScript")} />
         <Tab label={t("collectionDetail.tests")} />
@@ -671,8 +723,85 @@ export default function CollectionDetail({
         </Paper>
       )}
 
-      {/* Authorization Tab */}
+      {/* Defaults Tab */}
       {activeTab === 2 && (
+        <Paper variant="outlined" sx={sectionPaper}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+            {t("collection.defaultsHint")}
+          </Typography>
+
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
+            <Box>
+              <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+                {t("collection.defaultHeaders")}
+              </Typography>
+              <KeyValueEditor
+                pairs={defaultHeaders}
+                onChange={setDefaultHeaders}
+                keyLabel={t("common.key")}
+                valueLabel={t("common.value")}
+                resolvedVariables={resolvedVariables}
+                variableGroups={variableGroups}
+              />
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+                {t("collection.defaultQuery")}
+              </Typography>
+              <KeyValueEditor
+                pairs={defaultQueryParams}
+                onChange={setDefaultQueryParams}
+                keyLabel={t("common.key")}
+                valueLabel={t("common.value")}
+                resolvedVariables={resolvedVariables}
+                variableGroups={variableGroups}
+              />
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+                {t("collection.defaultBody")}
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1, mb: 1 }}>
+                <FormControl size="small" sx={{ minWidth: 160 }}>
+                  <InputLabel>{t("request.bodyType")}</InputLabel>
+                  <Select
+                    value={defaultBodyType}
+                    label={t("request.bodyType")}
+                    onChange={(e) => setDefaultBodyType(e.target.value)}
+                  >
+                    <MenuItem value="json">JSON</MenuItem>
+                    <MenuItem value="xml">XML</MenuItem>
+                    <MenuItem value="text">Text</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+              <TextField
+                value={defaultBody}
+                onChange={(e) => setDefaultBody(e.target.value)}
+                multiline
+                minRows={6}
+                maxRows={16}
+                fullWidth
+                placeholder={t("collection.defaultBodyPlaceholder")}
+                variant="outlined"
+                size="small"
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    fontSize: "0.85rem",
+                    fontFamily: "monospace",
+                    backgroundColor: alpha(theme.palette.background.default, 0.5),
+                  },
+                }}
+              />
+            </Box>
+          </Box>
+        </Paper>
+      )}
+
+      {/* Authorization Tab */}
+      {activeTab === 3 && (
         <Paper variant="outlined" sx={sectionPaper}>
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
             {t("collectionDetail.authDescription")}
@@ -701,7 +830,7 @@ export default function CollectionDetail({
       )}
 
       {/* Pre-request Script Tab */}
-      {activeTab === 3 && (
+      {activeTab === 4 && (
         <Paper variant="outlined" sx={sectionPaper}>
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
             <Typography variant="caption" color="text.secondary">
@@ -740,7 +869,7 @@ export default function CollectionDetail({
       )}
 
       {/* Post-response Script (Tests) Tab */}
-      {activeTab === 4 && (
+      {activeTab === 5 && (
         <Paper variant="outlined" sx={sectionPaper}>
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
             <Typography variant="caption" color="text.secondary">
@@ -779,7 +908,7 @@ export default function CollectionDetail({
       )}
 
       {/* Runs Tab */}
-      {activeTab === 5 && (
+      {activeTab === 6 && (
         <Paper variant="outlined" sx={sectionPaper}>
           {loadingRuns ? (
             <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
@@ -929,7 +1058,7 @@ export default function CollectionDetail({
         </Paper>
       )}
       {/* OpenAPI Tab */}
-      {activeTab === 6 && (
+      {activeTab === 7 && (
         <Paper variant="outlined" sx={sectionPaper}>
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>

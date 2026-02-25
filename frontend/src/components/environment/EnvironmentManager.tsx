@@ -51,6 +51,7 @@ interface EnvironmentManagerProps {
   onDeleteEnv: (id: string) => void;
   onSetVariables: (id: string, variables: Variable[]) => void;
   workspaceId?: string | null;
+  onGlobalsSaved?: () => void;
 }
 
 /** Wizard dialog for creating a variable across all environments at once */
@@ -167,6 +168,7 @@ export default function EnvironmentManager({
   onDeleteEnv,
   onSetVariables,
   workspaceId,
+  onGlobalsSaved,
 }: EnvironmentManagerProps) {
   const { t } = useTranslation();
   const [selectedEnvId, setSelectedEnvId] = useState<string | null>(null);
@@ -230,6 +232,7 @@ export default function EnvironmentManager({
       if (g.key.trim()) globalsObj[g.key.trim()] = g.value;
     }
     await workspacesApi.updateGlobals(workspaceId, globalsObj);
+    onGlobalsSaved?.();
   };
 
   const handleWizardSave = async (key: string, values: Record<string, { value: string; is_secret: boolean }>) => {

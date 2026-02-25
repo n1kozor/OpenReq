@@ -13,8 +13,11 @@ files:
   - assets/**/*
   - node_modules/**/*
 
+asarUnpack:
+  - src/webview-preload.js
+
 win:
-  target: nsis
+  target: portable
   icon: assets/icon.ico
   sign: false
   signAndEditExecutable: false
@@ -28,16 +31,3 @@ linux:
   target: AppImage
   icon: assets/icon.png
   category: Development
-
-publish:
-  provider: generic
-  url: ${env.OPENREQ_UPDATE_URL}
-
-nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
-  shortcutName: OpenReq
-  installerHeader: assets/nsis/installerHeader.png
-  installerSidebar: assets/nsis/installerSidebar.png

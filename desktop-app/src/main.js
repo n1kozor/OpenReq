@@ -1,7 +1,6 @@
-const { app, BrowserWindow, ipcMain, net, Tray, Menu, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, net, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { autoUpdater } = require('electron-updater');
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'openreq-config.json');
 
@@ -77,37 +76,6 @@ function ensureTray() {
   tray.on('click', () => toggleWindowVisibility());
 }
 
-function setupAutoUpdater() {
-  if (!app.isPackaged) return;
-  if (process.env.OPENREQ_DISABLE_UPDATES === '1') return;
-
-  const updateUrl = process.env.OPENREQ_UPDATE_URL || 'https://openreq.app';
-  if (updateUrl) {
-    autoUpdater.setFeedURL({ provider: 'generic', url: updateUrl });
-  }
-
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-
-  autoUpdater.on('update-downloaded', () => {
-    if (!mainWindow) return;
-    dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: 'Update Ready',
-      message: 'An update has been downloaded.',
-      detail: 'Restart OpenReq to apply the update.',
-      buttons: ['Restart now', 'Later'],
-      defaultId: 0,
-      cancelId: 1,
-    }).then(({ response }) => {
-      if (response === 0) {
-        autoUpdater.quitAndInstall();
-      }
-    });
-  });
-
-  autoUpdater.checkForUpdates().catch(() => {});
-}
 
 function createWindow() {
   const config = loadConfig();
@@ -139,7 +107,6 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     ensureTray();
     mainWindow.show();
-    setupAutoUpdater();
   });
 
   // Save window bounds on resize/move

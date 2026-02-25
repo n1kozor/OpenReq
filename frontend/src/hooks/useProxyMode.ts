@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import type { ProxyMode } from "@/types";
 
 const STORAGE_KEY = "openreq-proxy-mode";
+const IS_STANDALONE = import.meta.env.VITE_STANDALONE === "true";
 
 export type LocalChannel = "extension" | "desktop" | null;
 
@@ -81,6 +82,9 @@ export function useProxyModeProvider(): ProxyModeContextValue {
   }, [extensionAvailable, desktopAvailable]);
 
   const [proxyMode, setProxyModeState] = useState<ProxyMode>(() => {
+    // Standalone always defaults to local — it runs its own backend,
+    // so requests should go directly from the desktop app
+    if (IS_STANDALONE) return "local";
     const saved = localStorage.getItem(STORAGE_KEY) as ProxyMode | null;
     if (saved && ["server", "local"].includes(saved)) return saved;
     // Auto-detect: if any local channel available, default to local
@@ -88,16 +92,26 @@ export function useProxyModeProvider(): ProxyModeContextValue {
     return "server";
   });
 
-  // Fall back to server ONLY after detection is done and local is truly unavailable
+  // Standalone: force local mode whenever desktop channel becomes available
   useEffect(() => {
+    if (IS_STANDALONE && desktopAvailable && proxyMode !== "local") {
+      setProxyModeState("local");
+    }
+  }, [desktopAvailable, proxyMode]);
+
+  // Non-standalone: fall back to server ONLY after detection is done and local is truly unavailable
+  useEffect(() => {
+    if (IS_STANDALONE) return;
     if (!detectionDone) return;
     if (proxyMode === "local" && !localAvailable) setProxyModeState("server");
   }, [proxyMode, localAvailable, detectionDone]);
 
   const setProxyMode = useCallback((mode: ProxyMode) => {
+    // Standalone: don't allow switching away from local when desktop is available
+    if (IS_STANDALONE && desktopAvailable && mode !== "local") return;
     setProxyModeState(mode);
     localStorage.setItem(STORAGE_KEY, mode);
-  }, []);
+  }, [desktopAvailable]);
 
   return { proxyMode, setProxyMode, localAvailable, localChannel, extensionAvailable, desktopAvailable };
 }
