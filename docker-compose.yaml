@@ -11,7 +11,7 @@ services:
       - ALLOW_REGISTRATION=true
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-change-me-in-production}
       - JWT_ALGORITHM=HS256
-      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
+      - JWT_ACCESS_TOKEN_EXPIRE_MINUTES=0
       - ENVIRONMENT=production
     restart: unless-stopped
     healthcheck:

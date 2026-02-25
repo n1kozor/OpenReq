@@ -71,7 +71,11 @@ async def close_proxy_client() -> None:
 def _resolve_variables(text: str, variables: dict[str, str]) -> str:
     def replacer(match: re.Match) -> str:
         key = match.group(1)
-        return variables.get(key, match.group(0))
+        val = variables.get(key, match.group(0))
+        # JSON columns may store ints/bools/nulls — always coerce to str
+        if val is None:
+            return ""
+        return str(val)
     return VAR_PATTERN.sub(replacer, text)
 
 
@@ -152,7 +156,7 @@ def _load_collection_variables(db: Session, collection_id: str) -> dict[str, str
     col = db.query(Collection).filter(Collection.id == collection_id).first()
     if not col or not col.variables:
         return {}
-    return dict(col.variables)
+    return {k: str(v) if v is not None else "" for k, v in col.variables.items()}
 
 
 def _load_workspace_globals(db: Session, collection_id: str | None) -> dict[str, str]:
@@ -165,7 +169,7 @@ def _load_workspace_globals(db: Session, collection_id: str | None) -> dict[str,
     ws = db.query(Workspace).filter(Workspace.id == col.workspace_id).first()
     if not ws or not ws.globals:
         return {}
-    return dict(ws.globals)
+    return {k: str(v) if v is not None else "" for k, v in ws.globals.items()}
 
 
 def _apply_auth(headers: dict[str, str], auth_type: AuthType, auth_config: dict | None) -> dict[str, str]:
@@ -435,12 +439,12 @@ async def _run_prepare_phase(
     if proxy_req.collection_id:
         collection = db.query(Collection).filter(Collection.id == proxy_req.collection_id).first()
         if collection and collection.variables:
-            col_vars = dict(collection.variables)
+            col_vars = {k: str(v) if v is not None else "" for k, v in collection.variables.items()}
             merged_vars.update(col_vars)
     folder_chain = _resolve_folder_chain(db, proxy_req.collection_item_id)
     for folder in folder_chain:
         if folder.variables:
-            merged_vars.update(folder.variables)
+            merged_vars.update({k: str(v) if v is not None else "" for k, v in folder.variables.items()})
     if proxy_req.environment_id:
         env_vars = _load_environment_variables(db, proxy_req.environment_id)
         merged_vars.update(env_vars)
@@ -461,6 +465,54 @@ async def _run_prepare_phase(
     req_headers = dict(proxy_req.headers or {})
     req_body = proxy_req.body
     req_params = dict(proxy_req.query_params or {})
+
+    # ── Apply collection/folder defaults (headers, query params, body) ──
+    default_headers: dict[str, str] = {}
+    default_params: dict[str, str] = {}
+    default_body: str | None = None
+    default_body_type: str | None = None
+
+    if collection:
+        if collection.default_headers:
+            default_headers.update({k: "" if v is None else str(v) for k, v in collection.default_headers.items()})
+        if collection.default_query_params:
+            default_params.update({k: "" if v is None else str(v) for k, v in collection.default_query_params.items()})
+        if collection.default_body:
+            default_body = collection.default_body
+        if collection.default_body_type:
+            default_body_type = collection.default_body_type
+
+    for folder in folder_chain:
+        if folder.default_headers:
+            default_headers.update({k: "" if v is None else str(v) for k, v in folder.default_headers.items()})
+        if folder.default_query_params:
+            default_params.update({k: "" if v is None else str(v) for k, v in folder.default_query_params.items()})
+        if folder.default_body:
+            default_body = folder.default_body
+        if folder.default_body_type:
+            default_body_type = folder.default_body_type
+
+    if default_headers:
+        default_headers.update(req_headers)
+        req_headers = default_headers
+    if default_params:
+        default_params.update(req_params)
+        req_params = default_params
+
+    if (req_body is None or str(req_body).strip() == "") and not proxy_req.form_data and default_body:
+        req_body = default_body
+        if not proxy_req.body_type and default_body_type:
+            proxy_req.body_type = default_body_type
+
+        if default_body_type:
+            has_ct = any(k.lower() == "content-type" for k in req_headers.keys())
+            if not has_ct:
+                if default_body_type == "json":
+                    req_headers["Content-Type"] = "application/json"
+                elif default_body_type == "xml":
+                    req_headers["Content-Type"] = "application/xml"
+                elif default_body_type == "text":
+                    req_headers["Content-Type"] = "text/plain"
 
     # ── 2a. Collection-level pre-request script ──
     col_pre_result: ScriptResultSchema | None = None

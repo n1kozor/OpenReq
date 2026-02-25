@@ -8,6 +8,10 @@ import {
   Tabs,
   Tab,
   Paper,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   ToggleButtonGroup,
   ToggleButton,
   Table,
@@ -33,9 +37,9 @@ import remarkGfm from "remark-gfm";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import AuthEditor from "@/components/request/AuthEditor";
-import { VariableValueCell } from "@/components/common/KeyValueEditor";
+import KeyValueEditor, { VariableValueCell, newPair } from "@/components/common/KeyValueEditor";
 import { API_URL } from "@/api/client";
-import type { CollectionItem, AuthType, OAuthConfig, ScriptLanguage } from "@/types";
+import type { CollectionItem, AuthType, OAuthConfig, ScriptLanguage, KeyValuePair } from "@/types";
 import type { VariableInfo, VariableGroup } from "@/hooks/useVariableGroups";
 
 interface VarRow {
@@ -50,6 +54,10 @@ interface FolderDetailProps {
     name: string;
     description: string | null;
     variables: Record<string, string> | null;
+    default_headers: Record<string, string> | null;
+    default_query_params: Record<string, string> | null;
+    default_body: string | null;
+    default_body_type: string | null;
     auth_type: AuthType | null;
     auth_config: Record<string, string> | null;
     pre_request_script: string | null;
@@ -61,6 +69,25 @@ interface FolderDetailProps {
   onShareDocs?: (collectionId: string, collectionName: string, folderId: string, folderName: string) => void;
   resolvedVariables?: Map<string, VariableInfo>;
   variableGroups?: VariableGroup[];
+}
+
+function pairsFromRecord(record?: Record<string, string> | null): KeyValuePair[] {
+  if (!record) return [];
+  return Object.entries(record).map(([key, value]) => {
+    const p = newPair();
+    p.key = key;
+    p.value = value;
+    p.enabled = true;
+    return p;
+  });
+}
+
+function recordFromPairs(pairs: KeyValuePair[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const p of pairs) {
+    if (p.enabled && p.key.trim()) result[p.key.trim()] = p.value;
+  }
+  return result;
 }
 
 export default function FolderDetail({
@@ -80,6 +107,10 @@ export default function FolderDetail({
   const [name, setName] = useState(folder.name);
   const [description, setDescription] = useState(folder.description || "");
   const [vars, setVars] = useState<VarRow[]>([{ key: "", value: "" }]);
+  const [defaultHeaders, setDefaultHeaders] = useState<KeyValuePair[]>([]);
+  const [defaultQueryParams, setDefaultQueryParams] = useState<KeyValuePair[]>([]);
+  const [defaultBody, setDefaultBody] = useState(folder.default_body || "");
+  const [defaultBodyType, setDefaultBodyType] = useState<string>(folder.default_body_type || "json");
   const [authType, setAuthType] = useState<AuthType>(
     (folder.auth_type as AuthType) || "inherit"
   );
@@ -133,6 +164,10 @@ export default function FolderDetail({
         ? [...entries.map(([key, value]) => ({ key, value })), { key: "", value: "" }]
         : [{ key: "", value: "" }]
     );
+    setDefaultHeaders(pairsFromRecord(folder.default_headers));
+    setDefaultQueryParams(pairsFromRecord(folder.default_query_params));
+    setDefaultBody(folder.default_body || "");
+    setDefaultBodyType(folder.default_body_type || "json");
     const at = (folder.auth_type as AuthType) || "inherit";
     setAuthType(at);
     const cfg = folder.auth_config || {};
@@ -192,6 +227,18 @@ export default function FolderDetail({
     }
     const origVars = folder.variables || {};
     if (JSON.stringify(currentVars) !== JSON.stringify(origVars)) return true;
+    const currentDefaultHeaders = recordFromPairs(defaultHeaders);
+    const currentDefaultQueryParams = recordFromPairs(defaultQueryParams);
+    const currentDefaultBody = defaultBody.trim() || null;
+    const currentDefaultBodyType = currentDefaultBody ? (defaultBodyType || null) : null;
+    const origDefaultHeaders = folder.default_headers || {};
+    const origDefaultQueryParams = folder.default_query_params || {};
+    const origDefaultBody = folder.default_body || null;
+    const origDefaultBodyType = origDefaultBody ? (folder.default_body_type || null) : null;
+    if (JSON.stringify(currentDefaultHeaders) !== JSON.stringify(origDefaultHeaders)) return true;
+    if (JSON.stringify(currentDefaultQueryParams) !== JSON.stringify(origDefaultQueryParams)) return true;
+    if ((currentDefaultBody || null) !== (origDefaultBody || null)) return true;
+    if ((currentDefaultBodyType || null) !== (origDefaultBodyType || null)) return true;
     const origAuthType = folder.auth_type || "inherit";
     if (authType !== origAuthType) return true;
     if (JSON.stringify(buildAuthConfig()) !== JSON.stringify(folder.auth_config || null)) return true;
@@ -217,10 +264,18 @@ export default function FolderDetail({
       for (const v of vars) {
         if (v.key.trim()) variables[v.key.trim()] = v.value;
       }
+      const defaultHeadersRecord = recordFromPairs(defaultHeaders);
+      const defaultQueryRecord = recordFromPairs(defaultQueryParams);
+      const defaultBodyValue = defaultBody.trim() || null;
+      const defaultBodyTypeValue = defaultBodyValue ? (defaultBodyType || null) : null;
       await onSave({
         name: name.trim(),
         description: description.trim() || null,
         variables: Object.keys(variables).length > 0 ? variables : null,
+        default_headers: Object.keys(defaultHeadersRecord).length > 0 ? defaultHeadersRecord : null,
+        default_query_params: Object.keys(defaultQueryRecord).length > 0 ? defaultQueryRecord : null,
+        default_body: defaultBodyValue,
+        default_body_type: defaultBodyTypeValue,
         auth_type: authType === "inherit" ? "inherit" : authType === "none" ? null : authType,
         auth_config: buildAuthConfig(),
         pre_request_script: preRequestScript.trim() || null,
@@ -317,6 +372,7 @@ export default function FolderDetail({
       >
         <Tab label={t("folder.overview")} />
         <Tab label={t("folder.variables")} />
+        <Tab label={t("collection.defaults")} />
         <Tab label={t("collectionDetail.authorization")} />
         <Tab label={t("folder.preRequest")} />
         <Tab label={t("folder.tests")} />
@@ -482,8 +538,85 @@ export default function FolderDetail({
         </Paper>
       )}
 
-      {/* Authorization Tab */}
+      {/* Defaults Tab */}
       {activeTab === 2 && (
+        <Paper variant="outlined" sx={sectionPaper}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+            {t("collection.defaultsHint")}
+          </Typography>
+
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
+            <Box>
+              <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+                {t("collection.defaultHeaders")}
+              </Typography>
+              <KeyValueEditor
+                pairs={defaultHeaders}
+                onChange={setDefaultHeaders}
+                keyLabel={t("common.key")}
+                valueLabel={t("common.value")}
+                resolvedVariables={resolvedVariables}
+                variableGroups={variableGroups}
+              />
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+                {t("collection.defaultQuery")}
+              </Typography>
+              <KeyValueEditor
+                pairs={defaultQueryParams}
+                onChange={setDefaultQueryParams}
+                keyLabel={t("common.key")}
+                valueLabel={t("common.value")}
+                resolvedVariables={resolvedVariables}
+                variableGroups={variableGroups}
+              />
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+                {t("collection.defaultBody")}
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1, mb: 1 }}>
+                <FormControl size="small" sx={{ minWidth: 160 }}>
+                  <InputLabel>{t("request.bodyType")}</InputLabel>
+                  <Select
+                    value={defaultBodyType}
+                    label={t("request.bodyType")}
+                    onChange={(e) => setDefaultBodyType(e.target.value)}
+                  >
+                    <MenuItem value="json">JSON</MenuItem>
+                    <MenuItem value="xml">XML</MenuItem>
+                    <MenuItem value="text">Text</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+              <TextField
+                value={defaultBody}
+                onChange={(e) => setDefaultBody(e.target.value)}
+                multiline
+                minRows={6}
+                maxRows={16}
+                fullWidth
+                placeholder={t("collection.defaultBodyPlaceholder")}
+                variant="outlined"
+                size="small"
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    fontSize: "0.85rem",
+                    fontFamily: "monospace",
+                    backgroundColor: alpha(theme.palette.background.default, 0.5),
+                  },
+                }}
+              />
+            </Box>
+          </Box>
+        </Paper>
+      )}
+
+      {/* Authorization Tab */}
+      {activeTab === 3 && (
         <Paper variant="outlined" sx={sectionPaper}>
           <AuthEditor
             authType={authType}
@@ -509,7 +642,7 @@ export default function FolderDetail({
       )}
 
       {/* Pre-request Script Tab */}
-      {activeTab === 3 && (
+      {activeTab === 4 && (
         <Paper variant="outlined" sx={sectionPaper}>
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
             <Typography variant="subtitle2" fontWeight={600}>
@@ -547,7 +680,7 @@ export default function FolderDetail({
       )}
 
       {/* Tests (Post-response) Tab */}
-      {activeTab === 4 && (
+      {activeTab === 5 && (
         <Paper variant="outlined" sx={sectionPaper}>
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.5 }}>
             <Typography variant="subtitle2" fontWeight={600}>
@@ -585,7 +718,7 @@ export default function FolderDetail({
       )}
 
       {/* OpenAPI Tab */}
-      {activeTab === 5 && (
+      {activeTab === 6 && (
         <Paper variant="outlined" sx={sectionPaper}>
           <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>

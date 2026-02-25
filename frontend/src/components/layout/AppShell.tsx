@@ -771,8 +771,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     let resolvedUrl = tab.url;
     if (tab.pathParams) {
       for (const [key, value] of Object.entries(tab.pathParams)) {
-        if (value) {
-          resolvedUrl = resolvedUrl.split(`{${key}}`).join(value);
+        if (value != null && value !== "") {
+          resolvedUrl = resolvedUrl.split(`{${key}}`).join(String(value));
         }
       }
     }
@@ -781,7 +781,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       input.replace(/{{\s*([^}]+)\s*}}/g, (match, key) => {
         const k = String(key).trim();
         const v = vars.get(k);
-        return v ? v.value : match;
+        return v !== undefined ? String(v.value ?? "") : match;
       })
     );
 
@@ -936,15 +936,54 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         });
       }
 
-      // Reload cached variable scopes if scripts modified them
+      // Apply variable changes from scripts immediately (optimistic) + background refetch
       const allResults = [response.pre_request_result, response.script_result];
       let needGlobals = false, needEnv = false, needCol = false;
       for (const sr of allResults) {
         if (!sr) continue;
-        if (sr.globals_updates && Object.keys(sr.globals_updates).length > 0) needGlobals = true;
-        if (sr.environment_updates && Object.keys(sr.environment_updates).length > 0) needEnv = true;
-        if (sr.collection_var_updates && Object.keys(sr.collection_var_updates).length > 0) needCol = true;
+        if (sr.globals_updates && Object.keys(sr.globals_updates).length > 0) {
+          needGlobals = true;
+          setWorkspaceGlobals((prev) => {
+            const next = { ...prev };
+            for (const [k, v] of Object.entries(sr.globals_updates!)) {
+              if (v === null) delete next[k]; else next[k] = String(v);
+            }
+            return next;
+          });
+        }
+        if (sr.environment_updates && Object.keys(sr.environment_updates).length > 0) {
+          needEnv = true;
+          setEnvironments((prev) => prev.map((env) => {
+            const envId = tab.envOverrideId ?? selectedEnvId;
+            if (env.id !== envId) return env;
+            const updatedVars = [...env.variables];
+            for (const [eKey, eVal] of Object.entries(sr.environment_updates!)) {
+              const idx = updatedVars.findIndex((v) => v.key === eKey);
+              if (eVal === null) {
+                if (idx >= 0) updatedVars.splice(idx, 1);
+              } else if (idx >= 0) {
+                const existing = updatedVars[idx]!;
+                updatedVars[idx] = { id: existing.id, key: existing.key, value: String(eVal), is_secret: existing.is_secret };
+              } else {
+                updatedVars.push({ id: `_tmp_${eKey}`, key: eKey, value: String(eVal), is_secret: false });
+              }
+            }
+            return { ...env, variables: updatedVars };
+          }));
+        }
+        if (sr.collection_var_updates && Object.keys(sr.collection_var_updates).length > 0) {
+          needCol = true;
+          setCollections((prev) => prev.map((col) => {
+            if (col.id !== tab.collectionId) return col;
+            const vars = { ...(col.variables ?? {}) };
+            for (const [k, v] of Object.entries(sr.collection_var_updates!)) {
+              if (v === null) delete vars[k]; else vars[k] = String(v);
+            }
+            return { ...col, variables: vars };
+          }));
+        }
       }
+      // Background refetch to ensure consistency with DB
       if (needGlobals) loadGlobals();
       if (needEnv) loadEnvironments();
       if (needCol) loadCollections();
@@ -1788,7 +1827,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   }, [loadCollections, loadCollectionTree, t]);
 
   // ── Save collection from detail view ──
-  const handleSaveCollectionDetail = useCallback(async (collectionId: string, data: { name: string; description: string; visibility: "private" | "shared"; variables: Record<string, string>; auth_type?: string | null; auth_config?: Record<string, string> | null; pre_request_script?: string | null; post_response_script?: string | null; script_language?: string | null; openapi_spec?: string | null }) => {
+  const handleSaveCollectionDetail = useCallback(async (collectionId: string, data: { name: string; description: string; visibility: "private" | "shared"; variables: Record<string, string>; default_headers?: Record<string, string> | null; default_query_params?: Record<string, string> | null; default_body?: string | null; default_body_type?: string | null; auth_type?: string | null; auth_config?: Record<string, string> | null; pre_request_script?: string | null; post_response_script?: string | null; script_language?: string | null; openapi_spec?: string | null }) => {
     try {
       await collectionsApi.update(collectionId, data);
       await loadCollections();
@@ -2371,6 +2410,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onDeleteEnv={handleDeleteEnv}
         onSetVariables={handleSetVariables}
         workspaceId={currentWorkspaceId}
+        onGlobalsSaved={loadGlobals}
       />
 
       <HistoryPanel

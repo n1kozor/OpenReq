@@ -92,6 +92,10 @@ export interface Collection {
   owner_id: string;
   workspace_id: string | null;
   variables: Record<string, string> | null;
+  default_headers?: Record<string, string> | null;
+  default_query_params?: Record<string, string> | null;
+  default_body?: string | null;
+  default_body_type?: string | null;
   auth_type: AuthType | null;
   auth_config: Record<string, string> | null;
   pre_request_script: string | null;
@@ -115,6 +119,10 @@ export interface CollectionItem {
   auth_config?: Record<string, string> | null;
   description?: string | null;
   variables?: Record<string, string> | null;
+  default_headers?: Record<string, string> | null;
+  default_query_params?: Record<string, string> | null;
+  default_body?: string | null;
+  default_body_type?: string | null;
   pre_request_script?: string | null;
   post_response_script?: string | null;
   script_language?: string | null;

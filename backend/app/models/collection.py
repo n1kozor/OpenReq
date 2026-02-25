@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from enum import Enum as PyEnum
 
-from sqlalchemy import String, DateTime, ForeignKey, Boolean, Integer, Enum as SAEnum, JSON
+from sqlalchemy import String, DateTime, ForeignKey, Boolean, Integer, Enum as SAEnum, JSON, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -25,6 +25,10 @@ class Collection(Base):
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     workspace_id: Mapped[str | None] = mapped_column(ForeignKey("workspaces.id", ondelete="SET NULL"))
     variables: Mapped[dict | None] = mapped_column(JSON, default=dict)
+    default_headers: Mapped[dict | None] = mapped_column(JSON, default=None)
+    default_query_params: Mapped[dict | None] = mapped_column(JSON, default=None)
+    default_body: Mapped[str | None] = mapped_column(Text, default=None)
+    default_body_type: Mapped[str | None] = mapped_column(String(50), default=None)
     auth_type: Mapped[str | None] = mapped_column(String(20), default=None)
     auth_config: Mapped[dict | None] = mapped_column(JSON, default=None)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
@@ -54,6 +58,10 @@ class CollectionItem(Base):
     auth_config: Mapped[dict | None] = mapped_column(JSON, default=None)
     description: Mapped[str | None] = mapped_column(default=None)
     variables: Mapped[dict | None] = mapped_column(JSON, default=None)
+    default_headers: Mapped[dict | None] = mapped_column(JSON, default=None)
+    default_query_params: Mapped[dict | None] = mapped_column(JSON, default=None)
+    default_body: Mapped[str | None] = mapped_column(Text, default=None)
+    default_body_type: Mapped[str | None] = mapped_column(String(50), default=None)
     pre_request_script: Mapped[str | None] = mapped_column(default=None)
     post_response_script: Mapped[str | None] = mapped_column(default=None)
     script_language: Mapped[str | None] = mapped_column(String(20), default=None)

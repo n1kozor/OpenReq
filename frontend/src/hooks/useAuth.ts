@@ -28,17 +28,10 @@ export function useAuth() {
     try {
       const { data } = await usersApi.me();
       setUser(data);
-    } catch (err: unknown) {
-      // Only clear token on explicit 401 (invalid/expired token)
-      // Do NOT clear on network errors, timeouts, 500s, etc.
-      if (
-        err &&
-        typeof err === "object" &&
-        "response" in err &&
-        (err as { response?: { status?: number } }).response?.status === 401
-      ) {
-        localStorage.removeItem("openreq-token");
-      }
+    } catch {
+      // Never clear the token automatically — network hiccup, server restart,
+      // whatever. The token never expires so it will work again once the
+      // server is back. Only the explicit Logout button removes the token.
     } finally {
       setLoading(false);
     }
