@@ -905,6 +905,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           method: prepared.method,
           headers: prepared.headers,
           body: prepared.body,
+          body_type: prepared.body_type,
+          form_data: prepared.form_data as any,
           query_params: prepared.query_params,
         });
         // Complete on server (post-scripts, history, pm.* persist)

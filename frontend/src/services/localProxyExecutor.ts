@@ -22,15 +22,84 @@ export interface LocalProxyRequest {
   method: string;
   headers: Record<string, string>;
   body?: string | null;
+  body_type?: string | null;
+  form_data?: {
+    key: string;
+    value: string;
+    type: string;
+    enabled: boolean;
+    file_name?: string | null;
+    file_content_base64?: string | null;
+  }[];
   query_params?: Record<string, string>;
+}
+
+function hasContentTypeHeader(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some((h) => h.toLowerCase() === "content-type");
+}
+
+function ensureContentType(headers: Record<string, string>, contentType: string): Record<string, string> {
+  if (hasContentTypeHeader(headers)) {
+    return headers;
+  }
+  return { ...headers, "Content-Type": contentType };
+}
+
+function normalizeLocalRequest(request: LocalProxyRequest): Omit<LocalProxyRequest, "form_data"> & { form_data?: never } {
+  const bodyType = (request.body_type || "").toLowerCase();
+  const hasBody = request.body !== undefined && request.body !== null && String(request.body) !== "";
+  const formData = request.form_data?.filter((item) => item.enabled && item.key);
+
+  let body = request.body;
+  let headers = request.headers;
+
+  if (!hasBody && formData && formData.length > 0) {
+    const hasFile = formData.some((item) => item.type === "file");
+    if (hasFile) {
+      throw new Error("Local proxy does not support file upload form-data. Switch to server mode.");
+    }
+
+    if (bodyType === "x-www-form-urlencoded" || bodyType === "form-data") {
+      const params = new URLSearchParams();
+      for (const item of formData) {
+        params.append(item.key, item.value || "");
+      }
+      body = params.toString();
+      headers = ensureContentType(headers, "application/x-www-form-urlencoded");
+    } else if (bodyType === "json") {
+      const payload: Record<string, string> = {};
+      for (const item of formData) {
+        payload[item.key] = item.value || "";
+      }
+      body = JSON.stringify(payload);
+      headers = ensureContentType(headers, "application/json");
+    }
+  }
+
+  return {
+    url: request.url,
+    method: request.method,
+    headers,
+    body,
+    body_type: request.body_type,
+    query_params: request.query_params,
+  };
 }
 
 /**
  * Execute an HTTP request via the Chrome extension's background service worker.
- * Communication: page → postMessage → content.js → chrome.runtime → background.js (fetch)
+ * Communication: page â†’ postMessage â†’ content.js â†’ chrome.runtime â†’ background.js (fetch)
  */
 export function executeViaExtension(request: LocalProxyRequest): Promise<LocalHttpResult> {
   return new Promise((resolve, reject) => {
+    let normalized: ReturnType<typeof normalizeLocalRequest>;
+    try {
+      normalized = normalizeLocalRequest(request);
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error("Local request normalization failed"));
+      return;
+    }
+
     const requestId = safeRandomUUID();
     let settled = false;
 
@@ -64,7 +133,7 @@ export function executeViaExtension(request: LocalProxyRequest): Promise<LocalHt
       {
         type: "OPENREQ_PROXY_REQUEST",
         requestId,
-        request,
+        request: normalized,
       },
       "*",
     );
@@ -79,7 +148,9 @@ export async function executeViaDesktop(request: LocalProxyRequest): Promise<Loc
   if (!api?.localProxy) {
     throw new Error("Desktop local proxy not available");
   }
-  return api.localProxy(request);
+
+  const normalized = normalizeLocalRequest(request);
+  return api.localProxy(normalized);
 }
 
 /**
