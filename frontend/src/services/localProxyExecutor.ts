@@ -38,8 +38,8 @@ function hasContentTypeHeader(headers: Record<string, string>): boolean {
   return Object.keys(headers).some((h) => h.toLowerCase() === "content-type");
 }
 
-function ensureContentType(headers: Record<string, string>, contentType: string): Record<string, string> {
-  if (hasContentTypeHeader(headers)) {
+function ensureContentType(headers: Record<string, string>, contentType: string, force = false): Record<string, string> {
+  if (!force && hasContentTypeHeader(headers)) {
     return headers;
   }
   return { ...headers, "Content-Type": contentType };
@@ -65,7 +65,7 @@ function normalizeLocalRequest(request: LocalProxyRequest): Omit<LocalProxyReque
         params.append(item.key, item.value || "");
       }
       body = params.toString();
-      headers = ensureContentType(headers, "application/x-www-form-urlencoded");
+      headers = ensureContentType(headers, "application/x-www-form-urlencoded", true);
     } else if (bodyType === "json") {
       const payload: Record<string, string> = {};
       for (const item of formData) {
@@ -73,6 +73,14 @@ function normalizeLocalRequest(request: LocalProxyRequest): Omit<LocalProxyReque
       }
       body = JSON.stringify(payload);
       headers = ensureContentType(headers, "application/json");
+    } else {
+      // Fallback: treat as x-www-form-urlencoded for compatibility with Slim/PHP login endpoint
+      const params = new URLSearchParams();
+      for (const item of formData) {
+        params.append(item.key, item.value || "");
+      }
+      body = params.toString();
+      headers = ensureContentType(headers, "application/x-www-form-urlencoded", true);
     }
   }
 

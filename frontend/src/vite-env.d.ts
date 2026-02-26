@@ -25,6 +25,8 @@ interface Window {
       url: string;
       method: string;
       headers: Record<string, string>;
+      body_type?: string | null;
+      form_data?: { key: string; value: string; type: string; enabled: boolean; file_name?: string | null; file_content_base64?: string | null }[];
       body?: string | null;
       query_params?: Record<string, string>;
     }) => Promise<{
