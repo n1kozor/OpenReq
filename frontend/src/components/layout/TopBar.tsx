@@ -34,7 +34,6 @@ import {
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@mui/material/styles";
-import useMediaQuery from "@mui/material/useMediaQuery";
 import { useProxyMode } from "@/hooks/useProxyMode";
 import type { Environment, Workspace } from "@/types";
 
@@ -96,7 +95,6 @@ export default function TopBar({
 }: TopBarProps) {
   const { t } = useTranslation();
   const theme = useTheme();
-  const showNavLabels = useMediaQuery("(min-width: 1400px)");
   const isDark = mode === "dark";
   const { proxyMode, setProxyMode, localAvailable } = useProxyMode();
   const [wsSearch, setWsSearch] = useState("");
@@ -105,26 +103,41 @@ export default function TopBar({
   const currentEnv = environments.find((e) => e.id === selectedEnvironmentId);
 
   const navBtnSx = (active: boolean) => ({
-    minWidth: showNavLabels ? 0 : 28,
+    minWidth: 28,
     height: 28,
-    px: showNavLabels ? 0.2 : 0,
+    px: 0,
     borderRadius: 1,
     color: active ? theme.palette.primary.main : theme.palette.text.secondary,
     backgroundColor: active ? (isDark ? "#2d4a6e" : "#cce0f5") : "transparent",
     textTransform: "none",
     fontSize: "0.72rem",
-    gap: 0.15,
+    gap: 0,
+    overflow: "hidden",
+    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
     "&:hover": {
       color: theme.palette.primary.main,
       backgroundColor: isDark ? "#4e5157" : "#e0e0e0",
+      px: 0.75,
+      gap: 0.15,
+      "& .nav-label": {
+        maxWidth: 120,
+        opacity: 1,
+        marginLeft: "4px",
+      },
     },
     "& .nav-label": {
-      display: showNavLabels ? "inline" : "none",
+      display: "inline-block",
+      maxWidth: 0,
+      opacity: 0,
+      overflow: "hidden",
       whiteSpace: "nowrap",
+      transition: "max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin-left 0.3s ease",
+      marginLeft: 0,
     },
     "& .MuiButton-startIcon": {
-      marginRight: showNavLabels ? 1 : 0,
+      marginRight: 0,
       marginLeft: 0,
+      transition: "margin 0.3s ease",
     },
   });
 
