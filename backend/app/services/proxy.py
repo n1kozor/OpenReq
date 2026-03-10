@@ -900,12 +900,10 @@ async def execute_proxy_request(
             request_kwargs["files"] = files
         elif data:
             request_kwargs["data"] = data
-            request_kwargs["files"] = []
     elif bt == "form-data" and body:
         try:
             form_dict = json.loads(body)
             request_kwargs["data"] = form_dict
-            request_kwargs["files"] = []
         except (json.JSONDecodeError, AttributeError):
             request_kwargs["content"] = body
     else:
