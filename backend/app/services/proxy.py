@@ -884,13 +884,19 @@ async def execute_proxy_request(
                 k = _resolve_variables(item.key, merged_vars)
                 for v in _resolve_form_item_values(item, merged_vars):
                     form_pairs.append((k, v))
-        request_kwargs["data"] = form_pairs
+        encoded = urlencode(form_pairs)
+        request_kwargs["content"] = encoded
+        if not any(k.lower() == "content-type" for k in headers):
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
     elif bt == "x-www-form-urlencoded" and body:
         try:
             form_dict = json.loads(body)
             form_dict = {k: _resolve_variables(v, merged_vars) if isinstance(v, str) else v
                          for k, v in form_dict.items()}
-            request_kwargs["data"] = form_dict
+            encoded = urlencode(form_dict)
+            request_kwargs["content"] = encoded
+            if not any(k.lower() == "content-type" for k in headers):
+                headers["Content-Type"] = "application/x-www-form-urlencoded"
         except (json.JSONDecodeError, AttributeError):
             request_kwargs["content"] = body
     elif bt == "form-data" and proxy_req.form_data:
@@ -899,11 +905,17 @@ async def execute_proxy_request(
             request_kwargs["data"] = data
             request_kwargs["files"] = files
         elif data:
-            request_kwargs["data"] = data
+            encoded = urlencode(data)
+            request_kwargs["content"] = encoded
+            if not any(k.lower() == "content-type" for k in headers):
+                headers["Content-Type"] = "application/x-www-form-urlencoded"
     elif bt == "form-data" and body:
         try:
             form_dict = json.loads(body)
-            request_kwargs["data"] = form_dict
+            encoded = urlencode(form_dict)
+            request_kwargs["content"] = encoded
+            if not any(k.lower() == "content-type" for k in headers):
+                headers["Content-Type"] = "application/x-www-form-urlencoded"
         except (json.JSONDecodeError, AttributeError):
             request_kwargs["content"] = body
     else:
