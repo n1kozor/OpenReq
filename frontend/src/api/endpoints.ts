@@ -211,7 +211,7 @@ export const proxyApi = {
       use_server_cipher_suite: boolean;
       disabled_tls_protocols: string[];
     };
-  }) => client.post<ProxyResponse>("/proxy/send", data),
+  }, signal?: AbortSignal) => client.post<ProxyResponse>("/proxy/send", data, { signal }),
 
   prepare: (data: {
     method: HttpMethod;
@@ -242,10 +242,10 @@ export const proxyApi = {
       use_server_cipher_suite: boolean;
       disabled_tls_protocols: string[];
     };
-  }) => client.post<PreparedRequest>("/proxy/prepare", data),
+  }, signal?: AbortSignal) => client.post<PreparedRequest>("/proxy/prepare", data, { signal }),
 
-  complete: (data: LocalProxyResponse) =>
-    client.post<ProxyResponse>("/proxy/complete", data),
+  complete: (data: LocalProxyResponse, signal?: AbortSignal) =>
+    client.post<ProxyResponse>("/proxy/complete", data, { signal }),
 
   runCollection: (
     collectionId: string,

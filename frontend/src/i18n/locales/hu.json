@@ -29,6 +29,7 @@
   },
   "request": {
     "send": "Küldés",
+    "stop": "Leállítás",
     "method": "Metódus",
     "url": "Kérés URL megadása",
     "headers": "Fejlécek",

@@ -38,7 +38,7 @@ class RequestSettings(BaseModel):
 class FormDataItem(BaseModel):
     key: str
     value: str = ""
-    type: str = "text"  # "text" | "file"
+    type: str = "text"  # "text" | "file" | "list"
     enabled: bool = True
     file_name: str | None = None
     file_content_base64: str | None = None  # base64-encoded file bytes

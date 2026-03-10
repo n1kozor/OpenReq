@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 import re
 import ssl
 import time
@@ -311,9 +312,9 @@ def _build_per_request_client(rs: RequestSettings) -> httpx.AsyncClient:
 def _build_form_data(
     items: list[FormDataItem],
     variables: dict[str, str],
-) -> tuple[dict[str, str], list[tuple[str, tuple[str, bytes, str]]]]:
-    """Build data dict and files list for httpx multipart from FormDataItem list."""
-    data: dict[str, str] = {}
+) -> tuple[list[tuple[str, str]], list[tuple[str, tuple[str, bytes, str]]]]:
+    """Build data tuples and files list for httpx multipart from FormDataItem list."""
+    data: list[tuple[str, str]] = []
     files: list[tuple[str, tuple[str, bytes, str]]] = []
 
     for item in items:
@@ -328,9 +329,31 @@ def _build_form_data(
             mime = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
             files.append((key, (file_name, file_bytes, mime)))
         else:
-            data[key] = _resolve_variables(item.value, variables)
+            for value in _resolve_form_item_values(item, variables):
+                data.append((key, value))
 
     return data, files
+
+
+def _resolve_form_item_values(item: FormDataItem, variables: dict[str, str]) -> list[str]:
+    """Resolve one FormDataItem into one-or-many text values."""
+    resolved = _resolve_variables(item.value or "", variables)
+    if item.type != "list":
+        return [resolved]
+
+    try:
+        parsed = json.loads(resolved)
+    except json.JSONDecodeError:
+        # Keep backward-compatible behavior if value is not valid JSON.
+        return [resolved]
+
+    if isinstance(parsed, list):
+        values: list[str] = []
+        for value in parsed:
+            values.append("" if value is None else str(value))
+        return values
+
+    return ["" if parsed is None else str(parsed)]
 
 
 def _resolve_form_data_snapshot(items: list[FormDataItem], variables: dict[str, str]) -> list[dict]:
@@ -855,15 +878,14 @@ async def execute_proxy_request(
     bt = body_type or ""
 
     if bt == "x-www-form-urlencoded" and proxy_req.form_data:
-        form_dict: dict[str, str] = {}
+        form_pairs: list[tuple[str, str]] = []
         for item in proxy_req.form_data:
             if item.enabled and item.key:
                 k = _resolve_variables(item.key, merged_vars)
-                v = _resolve_variables(item.value, merged_vars)
-                form_dict[k] = v
-        request_kwargs["data"] = form_dict
+                for v in _resolve_form_item_values(item, merged_vars):
+                    form_pairs.append((k, v))
+        request_kwargs["data"] = form_pairs
     elif bt == "x-www-form-urlencoded" and body:
-        import json
         try:
             form_dict = json.loads(body)
             form_dict = {k: _resolve_variables(v, merged_vars) if isinstance(v, str) else v
@@ -880,7 +902,6 @@ async def execute_proxy_request(
             request_kwargs["data"] = data
             request_kwargs["files"] = []
     elif bt == "form-data" and body:
-        import json
         try:
             form_dict = json.loads(body)
             request_kwargs["data"] = form_dict

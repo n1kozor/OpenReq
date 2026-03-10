@@ -250,6 +250,10 @@ function VariableValueCell({
           sx: {
             fontSize: 13,
             fontFamily: "monospace",
+            "& input::placeholder": {
+              color: theme.palette.text.secondary,
+              opacity: 0.55,
+            },
             ...(showOverlay
               ? { color: "transparent !important", caretColor: theme.palette.text.primary }
               : {}),

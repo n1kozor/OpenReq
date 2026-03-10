@@ -18,7 +18,7 @@ export interface KeyValuePair {
   value: string;
   enabled: boolean;
   description?: string;
-  type?: "text" | "file";
+  type?: "text" | "file" | "list";
   file?: File | null;
   fileName?: string;
 }
@@ -150,7 +150,7 @@ export interface ApiRequest {
 export interface FormDataItemSaved {
   key: string;
   value: string;
-  type: "text" | "file";
+  type: "text" | "file" | "list";
   enabled: boolean;
   file_name?: string | null;
 }

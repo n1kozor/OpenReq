@@ -217,6 +217,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     return initialTabs[0]?.id ?? "";
   });
   const [loading, setLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [snack, setSnack] = useState<{ msg: string; severity: "success" | "error" } | null>(null);
 
   // Data state
@@ -849,8 +850,11 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
     updateTab(activeTabId, { sentRequest });
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setLoading(true);
     try {
+      const { signal } = controller;
       const proxyPayload = {
         method: (isGraphQL ? "POST" : tab.method) as import("@/types").HttpMethod,
         url: resolvedUrl,
@@ -874,11 +878,11 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
       if (proxyMode === "server") {
         // Server-side proxy (original flow)
-        const { data } = await proxyApi.send(proxyPayload);
+        const { data } = await proxyApi.send(proxyPayload, signal);
         response = data;
       } else {
         // Local proxy: prepare → local execute → complete
-        const { data: prepared } = await proxyApi.prepare(proxyPayload);
+        const { data: prepared } = await proxyApi.prepare(proxyPayload, signal);
         // Update sent request with fully resolved payload from server
         const resolvedFromPrepare: SentRequestSnapshot = {
           method: (prepared.method || sentRequest.method) as import("@/types").HttpMethod,
@@ -913,7 +917,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         const { data } = await proxyApi.complete({
           ...localResult,
           prepare_token: prepared.prepare_token,
-        });
+        }, signal);
         // Merge pre_request_result from prepare phase
         response = { ...data, pre_request_result: prepared.pre_request_result };
       }
@@ -990,14 +994,23 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       if (needEnv) loadEnvironments();
       if (needCol) loadCollections();
     } catch (err: unknown) {
+      // If the request was aborted by the user, silently ignore the error
+      if (controller.signal.aborted) return;
       // Extract server error detail from axios response, fall back to generic message
       const axiosDetail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       const message = axiosDetail || (err instanceof Error ? err.message : t("request.failed"));
       setSnack({ msg: message, severity: "error" });
     } finally {
+      abortControllerRef.current = null;
       setLoading(false);
     }
   }, [tabs, activeTabId, selectedEnvId, updateTab, buildAuthConfig, fileToBase64, loadGlobals, loadEnvironments, loadCollections, workspaceGlobals, activeCollectionVars, activeEnvVariables, proxyMode, localChannel]);
+
+  const handleStopRequest = useCallback(() => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setLoading(false);
+  }, []);
 
   // ── Save helpers ──
   const buildTabPayload = useCallback((tab: RequestTab) => {
@@ -1273,7 +1286,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           ...newPair(),
           key: fd.key,
           value: fd.value,
-          type: fd.type as "text" | "file",
+          type: fd.type as "text" | "file" | "list",
           enabled: fd.enabled,
           fileName: fd.file_name || "",
         }));
@@ -1697,7 +1710,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         ...newPair(),
         key: fd.key,
         value: fd.value,
-        type: (fd.type as "text" | "file") || "text",
+        type: (fd.type as "text" | "file" | "list") || "text",
         enabled: fd.enabled,
         fileName: fd.file_name || "",
       }));
@@ -2189,6 +2202,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                   onApiKeyPlacementChange={(v) => updateTab(activeTabId, { apiKeyPlacement: v })}
                   onOAuthConfigChange={(config) => updateTab(activeTabId, { oauthConfig: config })}
                   onSend={handleSend}
+                  onStop={handleStopRequest}
                   onSave={() => activeTab.savedRequestId ? handleQuickSave() : (ensureHasCollection() && setShowSaveRequest(true))}
                   environments={environments}
                   selectedEnvId={selectedEnvId}
@@ -2260,6 +2274,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                       requestSettings={activeTab.requestSettings ?? defaultRequestSettings}
                       onRequestSettingsChange={(s) => updateTab(activeTabId, { requestSettings: s })}
                       onSend={handleSend}
+                      onStop={handleStopRequest}
                       onSave={() => activeTab.savedRequestId ? handleQuickSave() : (ensureHasCollection() && setShowSaveRequest(true))}
                     />
                   ),

@@ -45,6 +45,21 @@ function ensureContentType(headers: Record<string, string>, contentType: string,
   return { ...headers, "Content-Type": contentType };
 }
 
+function resolveFormItemValues(item: { type: string; value: string }): string[] {
+  if (item.type !== "list") {
+    return [item.value || ""];
+  }
+  try {
+    const parsed = JSON.parse(item.value || "");
+    if (Array.isArray(parsed)) {
+      return parsed.map((v) => (v == null ? "" : String(v)));
+    }
+    return [parsed == null ? "" : String(parsed)];
+  } catch {
+    return [item.value || ""];
+  }
+}
+
 function normalizeLocalRequest(request: LocalProxyRequest): Omit<LocalProxyRequest, "form_data"> & { form_data?: never } {
   const bodyType = (request.body_type || "").toLowerCase();
   const hasBody = request.body !== undefined && request.body !== null && String(request.body) !== "";
@@ -62,14 +77,17 @@ function normalizeLocalRequest(request: LocalProxyRequest): Omit<LocalProxyReque
     if (bodyType === "x-www-form-urlencoded" || bodyType === "form-data") {
       const params = new URLSearchParams();
       for (const item of formData) {
-        params.append(item.key, item.value || "");
+        for (const value of resolveFormItemValues(item)) {
+          params.append(item.key, value);
+        }
       }
       body = params.toString();
       headers = ensureContentType(headers, "application/x-www-form-urlencoded", true);
     } else if (bodyType === "json") {
       const payload: Record<string, string> = {};
       for (const item of formData) {
-        payload[item.key] = item.value || "";
+        const values = resolveFormItemValues(item);
+        payload[item.key] = values.length === 1 ? values[0] ?? "" : JSON.stringify(values);
       }
       body = JSON.stringify(payload);
       headers = ensureContentType(headers, "application/json");
@@ -77,7 +95,9 @@ function normalizeLocalRequest(request: LocalProxyRequest): Omit<LocalProxyReque
       // Fallback: treat as x-www-form-urlencoded for compatibility with Slim/PHP login endpoint
       const params = new URLSearchParams();
       for (const item of formData) {
-        params.append(item.key, item.value || "");
+        for (const value of resolveFormItemValues(item)) {
+          params.append(item.key, value);
+        }
       }
       body = params.toString();
       headers = ensureContentType(headers, "application/x-www-form-urlencoded", true);

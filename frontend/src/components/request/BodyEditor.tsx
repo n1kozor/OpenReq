@@ -206,7 +206,7 @@ export default function BodyEditor({
   );
 
   const handleTypeChange = useCallback(
-    (id: string, type: "text" | "file") => {
+    (id: string, type: "text" | "file" | "list") => {
       onFormDataChange(
         formData.map((p) =>
           p.id === id ? { ...p, type, file: null, fileName: "", value: "" } : p
@@ -410,11 +410,12 @@ export default function BodyEditor({
                       size="small"
                       value={pair.type || "text"}
                       onChange={(e) =>
-                        handleTypeChange(pair.id, e.target.value as "text" | "file")
+                        handleTypeChange(pair.id, e.target.value as "text" | "file" | "list")
                       }
                       sx={{ fontSize: "0.78rem", minWidth: 70 }}
                     >
                       <MenuItem value="text">{t("bodyEditor.textType", "Text")}</MenuItem>
+                      <MenuItem value="list">{t("bodyEditor.listType", "List")}</MenuItem>
                       <MenuItem value="file">{t("bodyEditor.fileType", "File")}</MenuItem>
                     </Select>
                   </TableCell>
@@ -428,11 +429,11 @@ export default function BodyEditor({
                     />
                   </TableCell>
                   <TableCell>
-                    {(pair.type || "text") === "text" ? (
+                    {(pair.type || "text") !== "file" ? (
                       <VariableValueCell
                         value={pair.value}
                         onChange={(v) => handleFormDataFieldChange(pair.id, "value", v)}
-                        placeholder={t("common.value")}
+                        placeholder={(pair.type || "text") === "list" ? "[\"listaelem1\",\"listaelem2\",\"listaelem3\"]" : t("common.value")}
                         resolvedVariables={resolvedVariables}
                         variableGroups={variableGroups}
                       />

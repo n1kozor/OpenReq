@@ -29,6 +29,7 @@
   },
   "request": {
     "send": "Senden",
+    "stop": "Stopp",
     "method": "Methode",
     "url": "Anfrage-URL eingeben",
     "headers": "Header",

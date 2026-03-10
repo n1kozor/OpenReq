@@ -7,7 +7,6 @@ import {
   Tabs,
   Tab,
   Badge,
-  CircularProgress,
   FormControl,
   Chip,
   Typography,
@@ -16,7 +15,7 @@ import {
   Tooltip,
   Portal,
 } from "@mui/material";
-import { Send, Save, Dns, NetworkPing, Code } from "@mui/icons-material";
+import { Send, Stop, Save, Dns, NetworkPing, Code } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import KeyValueEditor from "@/components/common/KeyValueEditor";
@@ -97,6 +96,7 @@ interface RequestBuilderProps {
   requestSettings: RequestSettings;
   onRequestSettingsChange: (settings: RequestSettings) => void;
   onSend: () => void;
+  onStop: () => void;
   onSave: () => void;
 }
 
@@ -350,33 +350,58 @@ export default function RequestBuilder(props: RequestBuilderProps) {
         </FormControl>
 
         <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-          <Button
-            ref={sendButtonRef}
-            variant="contained"
-            onClick={props.onSend}
-            disabled={props.loading || !props.url}
-            startIcon={props.loading ? <CircularProgress size={14} /> : <Send sx={{ fontSize: 16 }} />}
-            sx={{
-              minWidth: 100,
-              whiteSpace: "nowrap",
-              height: 36,
-              borderRadius: 2,
-              fontWeight: 600,
-              fontSize: "0.82rem",
-              background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.7)} 100%)`,
-              color: isDark ? "#0b0e14" : "#fff",
-              "&:hover": {
-                background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.85)} 100%)`,
-                boxShadow: `0 4px 16px ${alpha(methodColor, 0.35)}`,
-              },
-              "&:disabled": {
-                background: alpha(theme.palette.text.primary, 0.08),
-                color: alpha(theme.palette.text.primary, 0.3),
-              },
-            }}
-          >
-            {t("request.send")}
-          </Button>
+          {props.loading ? (
+            <Button
+              ref={sendButtonRef}
+              variant="contained"
+              onClick={props.onStop}
+              startIcon={<Stop sx={{ fontSize: 16 }} />}
+              sx={{
+                minWidth: 100,
+                whiteSpace: "nowrap",
+                height: 36,
+                borderRadius: 2,
+                fontWeight: 600,
+                fontSize: "0.82rem",
+                background: `linear-gradient(135deg, #ef4444 0%, ${alpha("#ef4444", 0.7)} 100%)`,
+                color: "#fff",
+                "&:hover": {
+                  background: `linear-gradient(135deg, #ef4444 0%, ${alpha("#ef4444", 0.85)} 100%)`,
+                  boxShadow: `0 4px 16px ${alpha("#ef4444", 0.35)}`,
+                },
+              }}
+            >
+              {t("request.stop")}
+            </Button>
+          ) : (
+            <Button
+              ref={sendButtonRef}
+              variant="contained"
+              onClick={props.onSend}
+              disabled={!props.url}
+              startIcon={<Send sx={{ fontSize: 16 }} />}
+              sx={{
+                minWidth: 100,
+                whiteSpace: "nowrap",
+                height: 36,
+                borderRadius: 2,
+                fontWeight: 600,
+                fontSize: "0.82rem",
+                background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.7)} 100%)`,
+                color: isDark ? "#0b0e14" : "#fff",
+                "&:hover": {
+                  background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.85)} 100%)`,
+                  boxShadow: `0 4px 16px ${alpha(methodColor, 0.35)}`,
+                },
+                "&:disabled": {
+                  background: alpha(theme.palette.text.primary, 0.08),
+                  color: alpha(theme.palette.text.primary, 0.3),
+                },
+              }}
+            >
+              {t("request.send")}
+            </Button>
+          )}
 
           <Button
             variant="outlined"
@@ -523,37 +548,65 @@ export default function RequestBuilder(props: RequestBuilderProps) {
 
       {showFloatingSend && (
         <Portal>
-          <Button
-            variant="contained"
-            onClick={props.onSend}
-            disabled={props.loading || !props.url}
-            startIcon={props.loading ? <CircularProgress size={14} /> : <Send sx={{ fontSize: 16 }} />}
-            sx={{
-              position: "fixed",
-              right: 24,
-              bottom: 24,
-              zIndex: theme.zIndex.modal + 1,
-              borderRadius: 999,
-              px: 2.25,
-              py: 1,
-              fontWeight: 700,
-              fontSize: "0.9rem",
-              background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.7)} 100%)`,
-              color: isDark ? "#0b0e14" : "#fff",
-              boxShadow: `0 12px 30px ${alpha(methodColor, 0.35)}`,
-              "&:hover": {
-                background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.85)} 100%)`,
-                boxShadow: `0 14px 36px ${alpha(methodColor, 0.45)}`,
-              },
-              "&:disabled": {
-                background: alpha(theme.palette.text.primary, 0.08),
-                color: alpha(theme.palette.text.primary, 0.3),
-                boxShadow: "none",
-              },
-            }}
-          >
-            {t("request.send")}
-          </Button>
+          {props.loading ? (
+            <Button
+              variant="contained"
+              onClick={props.onStop}
+              startIcon={<Stop sx={{ fontSize: 16 }} />}
+              sx={{
+                position: "fixed",
+                right: 24,
+                bottom: 24,
+                zIndex: theme.zIndex.modal + 1,
+                borderRadius: 999,
+                px: 2.25,
+                py: 1,
+                fontWeight: 700,
+                fontSize: "0.9rem",
+                background: `linear-gradient(135deg, #ef4444 0%, ${alpha("#ef4444", 0.7)} 100%)`,
+                color: "#fff",
+                boxShadow: `0 12px 30px ${alpha("#ef4444", 0.35)}`,
+                "&:hover": {
+                  background: `linear-gradient(135deg, #ef4444 0%, ${alpha("#ef4444", 0.85)} 100%)`,
+                  boxShadow: `0 14px 36px ${alpha("#ef4444", 0.45)}`,
+                },
+              }}
+            >
+              {t("request.stop")}
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              onClick={props.onSend}
+              disabled={!props.url}
+              startIcon={<Send sx={{ fontSize: 16 }} />}
+              sx={{
+                position: "fixed",
+                right: 24,
+                bottom: 24,
+                zIndex: theme.zIndex.modal + 1,
+                borderRadius: 999,
+                px: 2.25,
+                py: 1,
+                fontWeight: 700,
+                fontSize: "0.9rem",
+                background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.7)} 100%)`,
+                color: isDark ? "#0b0e14" : "#fff",
+                boxShadow: `0 12px 30px ${alpha(methodColor, 0.35)}`,
+                "&:hover": {
+                  background: `linear-gradient(135deg, ${methodColor} 0%, ${alpha(methodColor, 0.85)} 100%)`,
+                  boxShadow: `0 14px 36px ${alpha(methodColor, 0.45)}`,
+                },
+                "&:disabled": {
+                  background: alpha(theme.palette.text.primary, 0.08),
+                  color: alpha(theme.palette.text.primary, 0.3),
+                  boxShadow: "none",
+                },
+              }}
+            >
+              {t("request.send")}
+            </Button>
+          )}
         </Portal>
       )}
 
