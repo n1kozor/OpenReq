@@ -54,6 +54,7 @@ import { ProxyModeContext, useProxyModeProvider } from "@/hooks/useProxyMode";
 import { executeViaExtension, executeViaDesktop } from "@/services/localProxyExecutor";
 import type {
   RequestTab,
+  RequestTabSnapshot,
   HttpMethod,
   BodyType,
   AuthType,
@@ -92,6 +93,63 @@ const defaultOAuthConfig: OAuthConfig = {
   usePkce: false,
   accessToken: "",
 };
+
+/** Fields that are purely runtime and should never affect isDirty */
+const RUNTIME_FIELDS = new Set<keyof RequestTab>([
+  "response", "responseTimestamp", "scriptResult", "preRequestResult",
+  "sentRequest", "wsMessages", "wsConnected", "_savedSnapshot",
+  "envOverrideId",
+]);
+
+/** Serialize KVP arrays for snapshot comparison (only enabled, non-empty keys) */
+function serializeKvp(pairs: { key: string; value: string; enabled?: boolean; type?: string; fileName?: string }[]): string {
+  return JSON.stringify(
+    pairs
+      .filter((p) => p.key.trim())
+      .map((p) => ({ k: p.key, v: p.value, e: p.enabled ?? true, t: p.type, f: p.fileName }))
+  );
+}
+
+/** Create a snapshot of the user-editable fields from a tab */
+function takeSnapshot(tab: RequestTab): RequestTabSnapshot {
+  return {
+    name: tab.name,
+    method: tab.method,
+    url: tab.url,
+    protocol: tab.protocol,
+    headers: serializeKvp(tab.headers),
+    queryParams: serializeKvp(tab.queryParams),
+    body: tab.body,
+    bodyType: tab.bodyType,
+    formData: serializeKvp(tab.formData),
+    authType: tab.authType,
+    bearerToken: tab.bearerToken,
+    basicUsername: tab.basicUsername,
+    basicPassword: tab.basicPassword,
+    apiKeyName: tab.apiKeyName,
+    apiKeyValue: tab.apiKeyValue,
+    apiKeyPlacement: tab.apiKeyPlacement,
+    oauthConfig: JSON.stringify(tab.oauthConfig),
+    preRequestScript: tab.preRequestScript,
+    postResponseScript: tab.postResponseScript,
+    scriptLanguage: tab.scriptLanguage,
+    pathParams: JSON.stringify(tab.pathParams),
+    requestSettings: JSON.stringify(tab.requestSettings),
+    graphqlQuery: tab.graphqlQuery ?? "",
+    graphqlVariables: tab.graphqlVariables ?? "",
+  };
+}
+
+/** Compare current tab state against its saved snapshot */
+function computeIsDirty(tab: RequestTab): boolean {
+  const snap = tab._savedSnapshot;
+  if (!snap) return false; // No saved state = new unsaved tab, don't auto-dirty
+  const cur = takeSnapshot(tab);
+  for (const key of Object.keys(snap) as (keyof RequestTabSnapshot)[]) {
+    if (cur[key] !== snap[key]) return true;
+  }
+  return false;
+}
 
 function createNewTab(protocol: Protocol = "http"): RequestTab {
   return {
@@ -142,6 +200,7 @@ function stripRuntimeTab(tab: RequestTab): RequestTab {
     sentRequest: null,
     wsMessages: [],
     wsConnected: false,
+    _savedSnapshot: null, // Reconstructed on restore
     // Strip File objects from formData (not serializable)
     formData: tab.formData.map((f) => ({ ...f, file: null })),
   };
@@ -190,7 +249,15 @@ function restoreTabs(): RequestTab[] {
           }
         }
         tabCounter = Math.max(tabCounter, maxId + 1);
-        return parsed.map(stripRuntimeTab);
+        return parsed.map((t) => {
+          const stripped = stripRuntimeTab(t);
+          // Restore snapshot for saved tabs so isDirty comparison works
+          if (stripped.savedRequestId && !stripped._savedSnapshot) {
+            stripped._savedSnapshot = takeSnapshot(stripped);
+            stripped.isDirty = false;
+          }
+          return stripped;
+        });
       }
     }
   } catch {
@@ -470,7 +537,24 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
   // ── Tab operations ──
   const updateTab = useCallback((id: string, patch: Partial<RequestTab>) => {
-    setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch, ...("isDirty" in patch ? {} : { isDirty: true }) } : t)));
+    setTabs((prev) => prev.map((t) => {
+      if (t.id !== id) return t;
+      const updated = { ...t, ...patch };
+      // If isDirty is explicitly set in the patch, respect it
+      if ("isDirty" in patch) return updated;
+      // If the patch only contains runtime fields, don't change isDirty
+      const patchKeys = Object.keys(patch) as (keyof RequestTab)[];
+      const isRuntimeOnly = patchKeys.every((k) => RUNTIME_FIELDS.has(k));
+      if (isRuntimeOnly) return updated;
+      // For user-editable fields: compute isDirty from snapshot comparison
+      if (updated._savedSnapshot) {
+        updated.isDirty = computeIsDirty(updated);
+      } else {
+        // No snapshot (unsaved new tab) — mark dirty if any editable field changed
+        updated.isDirty = true;
+      }
+      return updated;
+    }));
   }, []);
 
   const handleNewTab = useCallback((protocol: Protocol = "http") => {
@@ -478,7 +562,13 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     setTabs((prev) => [...prev, t]);
     setActiveTabId(t.id);
     setView("request");
-  }, []);
+    // If collections exist, prompt to save into one right away
+    if (collections.length > 0) {
+      setSaveTarget(null);
+      // Use setTimeout so that activeTabId state is committed before dialog reads it
+      setTimeout(() => setShowSaveRequest(true), 0);
+    }
+  }, [collections.length]);
 
   const handleCloseTab = useCallback((id: string) => {
     setTabs((prev) => {
@@ -549,7 +639,13 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
             break;
           }
         }
-        updateTab(id, { isDirty: false });
+        // Update snapshot with the new name
+        const renamedTab = tabs.find((t) => t.id === id);
+        if (renamedTab) {
+          updateTab(id, { isDirty: false, _savedSnapshot: takeSnapshot({ ...renamedTab, name: newName }) });
+        } else {
+          updateTab(id, { isDirty: false });
+        }
         loadCollections();
       } catch {
         setSnack({ msg: t("request.saveFailed"), severity: "error" });
@@ -1102,7 +1198,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         settings: settings as any,
         protocol,
       });
-      updateTab(tab.id, { isDirty: false });
+      // Update snapshot to current state as the new "saved" baseline
+      updateTab(tab.id, { isDirty: false, _savedSnapshot: takeSnapshot(tab) });
       setSnack({ msg: t("request.saved"), severity: "success" });
       loadCollections();
       return true;
@@ -1203,7 +1300,9 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         protocol,
       });
       await collectionsApi.createItem(collectionId, { name, request_id: req.id, parent_id: folderId || undefined });
-      updateTab(activeTabId, { name, savedRequestId: req.id, collectionId, isDirty: false });
+      // Take snapshot of current state as the new "saved" baseline
+      const savedTab = { ...tab, name, savedRequestId: req.id, collectionId };
+      updateTab(activeTabId, { name, savedRequestId: req.id, collectionId, isDirty: false, _savedSnapshot: takeSnapshot(savedTab) });
       setSnack({ msg: t("request.saved"), severity: "success" });
       loadCollections();
       if (pendingCloseId && pendingCloseId === activeTabId) {
@@ -1322,6 +1421,9 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       if (req.body_type === "graphql" && !tab.graphqlVariables) {
         tab.graphqlVariables = "{}";
       }
+
+      // Take a snapshot of the saved state for isDirty comparison
+      tab._savedSnapshot = takeSnapshot(tab);
 
       setTabs((prev) => [...prev, tab]);
       setActiveTabId(tab.id);
@@ -1462,10 +1564,38 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     return false;
   }, [collections.length, t]);
 
-  const handleNewRequest = useCallback((collectionId: string, folderId?: string) => {
-    setSaveTarget({ collectionId, folderId });
-    handleNewTab();
-  }, [handleNewTab]);
+  const handleNewRequest = useCallback(async (collectionId: string, folderId?: string) => {
+    const protocol: Protocol = "http";
+    const name = "New Request";
+    try {
+      const { data: req } = await requestsApi.create({
+        name,
+        method: "GET",
+        url: "",
+        headers: {},
+        body: "",
+        body_type: "none",
+        auth_type: "none",
+        auth_config: null as any,
+        query_params: {},
+        protocol,
+      });
+      await collectionsApi.createItem(collectionId, { name, request_id: req.id, parent_id: folderId || undefined });
+      const tab = createNewTab(protocol);
+      tab.name = name;
+      tab.savedRequestId = req.id;
+      tab.collectionId = collectionId;
+      tab.isDirty = false;
+      tab._savedSnapshot = takeSnapshot(tab);
+      setTabs((prev) => [...prev, tab]);
+      setActiveTabId(tab.id);
+      setView("request");
+      loadCollections();
+      await loadCollectionTree(collectionId);
+    } catch {
+      setSnack({ msg: t("common.error"), severity: "error" });
+    }
+  }, [loadCollections, loadCollectionTree, t]);
 
   const handleMoveItem = useCallback(async (collectionId: string, itemId: string, parentId: string | null) => {
     const items = collectionItems[collectionId] ?? [];

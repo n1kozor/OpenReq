@@ -387,6 +387,36 @@ export interface RequestTab {
   // WebSocket-specific (runtime only)
   wsMessages?: WebSocketMessage[];
   wsConnected?: boolean;
+  // Snapshot of the saved state for isDirty comparison
+  _savedSnapshot?: RequestTabSnapshot | null;
+}
+
+/** Subset of RequestTab fields that represent user-editable content (not runtime state). */
+export interface RequestTabSnapshot {
+  name: string;
+  method: HttpMethod;
+  url: string;
+  protocol?: Protocol;
+  headers: string; // JSON-serialized for easy comparison
+  queryParams: string;
+  body: string;
+  bodyType: BodyType;
+  formData: string;
+  authType: AuthType;
+  bearerToken: string;
+  basicUsername: string;
+  basicPassword: string;
+  apiKeyName: string;
+  apiKeyValue: string;
+  apiKeyPlacement: "header" | "query";
+  oauthConfig: string;
+  preRequestScript: string;
+  postResponseScript: string;
+  scriptLanguage: ScriptLanguage;
+  pathParams: string;
+  requestSettings: string;
+  graphqlQuery: string;
+  graphqlVariables: string;
 }
 
 // ── GraphQL Schema Introspection Types ──
