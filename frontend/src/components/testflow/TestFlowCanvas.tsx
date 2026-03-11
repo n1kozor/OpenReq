@@ -274,102 +274,150 @@ export default function TestFlowCanvas({
             };
             setNodes((nds) => [...nds, newNode]);
           } else if (item.request_id) {
-            // Request → node type based on protocol
-            const protocol = item.protocol ?? "http";
-            const nodeType = protocol === "websocket" ? "websocket"
-              : protocol === "graphql" ? "graphql"
-              : "http_request";
-            const nodeConfig: Record<string, unknown> = {
-              request_id: item.request_id,
-              request_name_hint: item.name,
-              collection_id: payload.collectionId,
-            };
-            if (nodeType === "http_request") {
-              nodeConfig.method = item.method || "GET";
-            }
+            // Request → always fetch full data to get scripts + protocol-specific config
+            const capturedId = id;
+            const capturedName = item.name;
+            const capturedRequestId = item.request_id;
+            const capturedCollectionId = payload.collectionId;
+            const capturedProtocol = item.protocol ?? "http";
+            const capturedMethod = item.method || "GET";
 
-            // Fetch full request data to populate node config
-            // Use local copies to avoid race conditions when multiple items are dropped quickly
-            if (nodeType === "websocket" || nodeType === "graphql") {
-              const capturedId = id;
-              const capturedType = nodeType;
-              const capturedName = item.name;
-              const capturedRequestId = item.request_id;
-              requestsApi.get(capturedRequestId).then(({ data: req }) => {
-                const asyncConfig: Record<string, unknown> = {
-                  request_id: capturedRequestId,
-                  request_name_hint: capturedName,
-                  collection_id: payload.collectionId,
-                };
-                if (capturedType === "websocket") {
-                  asyncConfig.ws_url = req.url || "";
-                  asyncConfig.ws_message = "";
-                  asyncConfig.ws_timeout_ms = 5000;
-                  asyncConfig.ws_wait_response = true;
-                } else {
-                  asyncConfig.graphql_url = req.url || "";
-                  asyncConfig.graphql_query = req.body || "";
-                  asyncConfig.graphql_variables = req.settings?.graphql_variables || "{}";
-                }
-                const newNode: Node = {
-                  id: capturedId,
-                  type: capturedType,
-                  position,
+            requestsApi.get(capturedRequestId).then(({ data: req }) => {
+              const protocol = capturedProtocol;
+              const nodeType = protocol === "websocket" ? "websocket"
+                : protocol === "graphql" ? "graphql"
+                : "http_request";
+
+              const nodeConfig: Record<string, unknown> = {
+                request_id: capturedRequestId,
+                request_name_hint: capturedName,
+                collection_id: capturedCollectionId,
+              };
+
+              if (nodeType === "http_request") {
+                nodeConfig.method = capturedMethod;
+                // Store script presence flags for the node indicator
+                nodeConfig._hasPreScript = !!req.pre_request_script?.trim();
+                nodeConfig._hasPostScript = !!req.post_response_script?.trim();
+              } else if (nodeType === "websocket") {
+                nodeConfig.ws_url = req.url || "";
+                nodeConfig.ws_message = "";
+                nodeConfig.ws_timeout_ms = 5000;
+                nodeConfig.ws_wait_response = true;
+              } else {
+                nodeConfig.graphql_url = req.url || "";
+                nodeConfig.graphql_query = req.body || "";
+                nodeConfig.graphql_variables = (req.settings as any)?.graphql_variables || "{}";
+              }
+
+              const requestNode: Node = {
+                id: capturedId,
+                type: nodeType,
+                position,
+                data: {
+                  node_type: nodeType,
+                  label: capturedName,
+                  config: nodeConfig,
+                },
+              };
+
+              const newNodes: Node[] = [requestNode];
+              const newEdges: Edge[] = [];
+              const VERTICAL_GAP = 60;
+              let yOffset = 0;
+
+              // Auto-create pre-request script node if the request has one
+              if (req.pre_request_script?.trim()) {
+                const preId = `node-${++nodeCounter}-${safeRandomUUID().slice(0, 8)}`;
+                const preNode: Node = {
+                  id: preId,
+                  type: "script",
+                  position: { x: position.x, y: position.y - VERTICAL_GAP },
                   data: {
-                    node_type: capturedType,
-                    label: capturedName,
-                    config: asyncConfig,
+                    node_type: "script",
+                    label: `Pre: ${capturedName}`,
+                    config: {
+                      script: req.pre_request_script,
+                      language: "javascript",
+                    },
                   },
                 };
-                setNodes((nds) => [...nds, newNode]);
-                setIsDirty(true);
-                setSelectedNodeId(capturedId);
-                pushHistory();
-              }).catch(() => {
-                const fallbackConfig: Record<string, unknown> = {
-                  request_id: capturedRequestId,
-                  request_name_hint: capturedName,
-                  collection_id: payload.collectionId,
-                };
-                if (capturedType === "websocket") {
-                  fallbackConfig.ws_url = "";
-                  fallbackConfig.ws_message = "";
-                  fallbackConfig.ws_timeout_ms = 5000;
-                  fallbackConfig.ws_wait_response = true;
-                } else {
-                  fallbackConfig.graphql_url = "";
-                  fallbackConfig.graphql_query = "";
-                  fallbackConfig.graphql_variables = "{}";
-                }
-                const newNode: Node = {
-                  id: capturedId,
-                  type: capturedType,
-                  position,
+                newNodes.unshift(preNode);
+                newEdges.push({
+                  id: `edge-${preId}-${capturedId}`,
+                  source: preId,
+                  target: capturedId,
+                  type: "animated",
+                  data: {},
+                });
+                // Shift request node down
+                requestNode.position = { x: position.x, y: position.y };
+                preNode.position = { x: position.x, y: position.y - VERTICAL_GAP };
+                yOffset = VERTICAL_GAP;
+              }
+
+              // Auto-create post-response script node if the request has one
+              if (req.post_response_script?.trim()) {
+                const postId = `node-${++nodeCounter}-${safeRandomUUID().slice(0, 8)}`;
+                const postNode: Node = {
+                  id: postId,
+                  type: "script",
+                  position: { x: position.x, y: position.y + yOffset + VERTICAL_GAP },
                   data: {
-                    node_type: capturedType,
-                    label: capturedName,
-                    config: fallbackConfig,
+                    node_type: "script",
+                    label: `Post: ${capturedName}`,
+                    config: {
+                      script: req.post_response_script,
+                      language: "javascript",
+                    },
                   },
                 };
-                setNodes((nds) => [...nds, newNode]);
-                setIsDirty(true);
-                setSelectedNodeId(capturedId);
-                pushHistory();
-              });
-              return; // async path handles setIsDirty etc.
-            }
+                newNodes.push(postNode);
+                newEdges.push({
+                  id: `edge-${capturedId}-${postId}`,
+                  source: capturedId,
+                  target: postId,
+                  type: "animated",
+                  data: {},
+                });
+              }
 
-            const newNode: Node = {
-              id,
-              type: nodeType,
-              position,
-              data: {
-                node_type: nodeType,
-                label: item.name,
-                config: nodeConfig,
-              },
-            };
-            setNodes((nds) => [...nds, newNode]);
+              setNodes((nds) => [...nds, ...newNodes]);
+              if (newEdges.length > 0) {
+                setEdges((eds) => [...eds, ...newEdges]);
+              }
+              setIsDirty(true);
+              setSelectedNodeId(capturedId);
+              pushHistory();
+            }).catch(() => {
+              // Fallback: create basic node without script info
+              const protocol = capturedProtocol;
+              const nodeType = protocol === "websocket" ? "websocket"
+                : protocol === "graphql" ? "graphql"
+                : "http_request";
+              const fallbackConfig: Record<string, unknown> = {
+                request_id: capturedRequestId,
+                request_name_hint: capturedName,
+                collection_id: capturedCollectionId,
+              };
+              if (nodeType === "http_request") fallbackConfig.method = capturedMethod;
+              else if (nodeType === "websocket") {
+                fallbackConfig.ws_url = ""; fallbackConfig.ws_message = "";
+                fallbackConfig.ws_timeout_ms = 5000; fallbackConfig.ws_wait_response = true;
+              } else {
+                fallbackConfig.graphql_url = ""; fallbackConfig.graphql_query = "";
+                fallbackConfig.graphql_variables = "{}";
+              }
+              const newNode: Node = {
+                id: capturedId, type: nodeType, position,
+                data: { node_type: nodeType, label: capturedName, config: fallbackConfig },
+              };
+              setNodes((nds) => [...nds, newNode]);
+              setIsDirty(true);
+              setSelectedNodeId(capturedId);
+              pushHistory();
+            });
+            return; // async path
           }
           setIsDirty(true);
           setSelectedNodeId(id);
@@ -425,10 +473,62 @@ export default function TestFlowCanvas({
     }
   }, []);
 
-  const handleNodeDragStop = useCallback(() => {
-    setIsDirty(true);
-    pushHistory();
-  }, [pushHistory]);
+  const handleNodeDragStop = useCallback(
+    (_event: React.MouseEvent, draggedNode: Node) => {
+      // Check if the dragged node was dropped over a group node
+      if (draggedNode.type === "group") {
+        setIsDirty(true);
+        pushHistory();
+        return;
+      }
+
+      setNodes((nds) => {
+        const groupNodes = nds.filter((n) => n.type === "group" && n.id !== draggedNode.id);
+        let updated = nds;
+
+        for (const group of groupNodes) {
+          const gw = group.measured?.width ?? 300;
+          const gh = group.measured?.height ?? 200;
+          const inGroup =
+            draggedNode.position.x >= group.position.x &&
+            draggedNode.position.x <= group.position.x + gw &&
+            draggedNode.position.y >= group.position.y &&
+            draggedNode.position.y <= group.position.y + gh;
+
+          if (inGroup && draggedNode.parentId !== group.id) {
+            // Reparent into group - convert to relative position
+            updated = updated.map((n) =>
+              n.id === draggedNode.id
+                ? {
+                    ...n,
+                    parentId: group.id,
+                    extent: "parent" as const,
+                    position: {
+                      x: draggedNode.position.x - group.position.x,
+                      y: draggedNode.position.y - group.position.y,
+                    },
+                  }
+                : n,
+            );
+            break;
+          }
+        }
+
+        // Update child counts on all group nodes
+        return updated.map((n) => {
+          if (n.type === "group") {
+            const count = updated.filter((c) => c.parentId === n.id).length;
+            return { ...n, data: { ...n.data, _childCount: count } };
+          }
+          return n;
+        });
+      });
+
+      setIsDirty(true);
+      pushHistory();
+    },
+    [pushHistory, setNodes],
+  );
 
   const handleUpdateNode = useCallback(
     (nodeId: string, data: Record<string, unknown>) => {
