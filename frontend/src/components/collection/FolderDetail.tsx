@@ -247,7 +247,7 @@ export default function FolderDetail({
     if (scriptLanguage !== ((folder.script_language as ScriptLanguage) || "python")) return true;
     if (openapiSpec !== (folder.openapi_spec || "")) return true;
     return false;
-  }, [name, description, vars, folder, authType, bearerToken, basicUsername, basicPassword, apiKeyName, apiKeyValue, apiKeyPlacement, oauthConfig, preRequestScript, postResponseScript, scriptLanguage, openapiSpec]);
+  }, [name, description, vars, folder, authType, bearerToken, basicUsername, basicPassword, apiKeyName, apiKeyValue, apiKeyPlacement, oauthConfig, preRequestScript, postResponseScript, scriptLanguage, openapiSpec, defaultHeaders, defaultQueryParams, defaultBody, defaultBodyType]);
 
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;

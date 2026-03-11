@@ -295,7 +295,7 @@ export default function CollectionDetail({
     if (scriptLanguage !== ((collection.script_language as ScriptLanguage) || "python")) return true;
     if (openapiSpec !== (collection.openapi_spec || "")) return true;
     return false;
-  }, [name, description, visibility, vars, collection, authType, bearerToken, basicUsername, basicPassword, apiKeyName, apiKeyValue, apiKeyPlacement, oauthConfig.accessToken, preRequestScript, postResponseScript, scriptLanguage, openapiSpec]);
+  }, [name, description, visibility, vars, collection, authType, bearerToken, basicUsername, basicPassword, apiKeyName, apiKeyValue, apiKeyPlacement, oauthConfig.accessToken, preRequestScript, postResponseScript, scriptLanguage, openapiSpec, defaultHeaders, defaultQueryParams, defaultBody, defaultBodyType]);
 
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
