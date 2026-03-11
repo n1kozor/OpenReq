@@ -52,6 +52,7 @@ interface EnvironmentManagerProps {
   onSetVariables: (id: string, variables: Variable[]) => void;
   workspaceId?: string | null;
   onGlobalsSaved?: () => void;
+  workspaceGlobals?: Record<string, string>;
 }
 
 /** Wizard dialog for creating a variable across all environments at once */
@@ -169,6 +170,7 @@ export default function EnvironmentManager({
   onSetVariables,
   workspaceId,
   onGlobalsSaved,
+  workspaceGlobals,
 }: EnvironmentManagerProps) {
   const { t } = useTranslation();
   const [selectedEnvId, setSelectedEnvId] = useState<string | null>(null);
@@ -193,6 +195,13 @@ export default function EnvironmentManager({
       }).catch(() => setGlobalsVars([]));
     }
   }, [showGlobals, workspaceId]);
+
+  // Sync globals from parent when they change externally (e.g. via script execution)
+  useEffect(() => {
+    if (showGlobals && workspaceGlobals) {
+      setGlobalsVars(Object.entries(workspaceGlobals).map(([key, value]) => ({ key, value })));
+    }
+  }, [showGlobals, workspaceGlobals]);
 
   useEffect(() => {
     if (selectedEnv) {

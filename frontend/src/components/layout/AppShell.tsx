@@ -2428,6 +2428,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         onSetVariables={handleSetVariables}
         workspaceId={currentWorkspaceId}
         onGlobalsSaved={loadGlobals}
+        workspaceGlobals={workspaceGlobals}
       />
 
       <HistoryPanel
