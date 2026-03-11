@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Drawer,
   Toolbar,
@@ -34,10 +34,24 @@ import {
   Refresh,
   IosShare,
   Settings,
+  DragIndicator,
 } from "@mui/icons-material";
 import { List as VirtualList } from "react-window";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragStartEvent,
+  type DragOverEvent,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+
 import type { Collection, CollectionItem } from "@/types";
 
 const DRAWER_WIDTH = 264;
@@ -56,6 +70,73 @@ const METHOD_COLORS: Record<string, string> = {
   HEAD: "#06b6d4",
   OPTIONS: "#f97316",
 };
+
+/* ------------------------------------------------------------------ */
+/*  Drag-and-drop row wrappers                                        */
+/* ------------------------------------------------------------------ */
+
+/** Unique drag ID encoding so we can decode type + ids on drop */
+function encodeDragId(kind: "collection" | "item", id: string, collectionId?: string) {
+  return `${kind}::${collectionId ?? ""}::${id}`;
+}
+function decodeDragId(encoded: string) {
+  const [kind, collectionId, id] = encoded.split("::");
+  return { kind: kind as "collection" | "item", collectionId: collectionId || null, id: id ?? "" };
+}
+
+/** Drop position relative to the target row */
+type DropPosition = "before" | "after" | "inside";
+
+function DraggableDroppableRow({
+  dragId,
+  dropId,
+  disabled,
+  children,
+  style,
+  ariaAttributes,
+}: {
+  dragId: string;
+  dropId: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+  ariaAttributes?: Record<string, unknown>;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setDragRef,
+    isDragging,
+  } = useDraggable({ id: dragId, disabled });
+
+  const { setNodeRef: setDropRef } = useDroppable({ id: dropId });
+
+  const ref = useCallback(
+    (node: HTMLElement | null) => {
+      setDragRef(node);
+      setDropRef(node);
+    },
+    [setDragRef, setDropRef],
+  );
+
+  return (
+    <Box
+      ref={ref}
+      style={{
+        ...style,
+        opacity: isDragging ? 0.35 : 1,
+        position: style?.position ?? "relative",
+      }}
+      {...ariaAttributes}
+      {...attributes}
+      {...listeners}
+    >
+      {children}
+    </Box>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 
 interface SidebarProps {
   collections: Collection[];
@@ -151,32 +232,19 @@ export default function Sidebar({
   const [itemMenuCollectionId, setItemMenuCollectionId] = useState<string | null>(null);
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const [listHeight, setListHeight] = useState(0);
-  const dragPayloadRef = useRef<{ itemId: string; collectionId: string } | null>(null);
-  const dragCollectionRef = useRef<string | null>(null);
-  const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
-  const [dragOverTarget, setDragOverTarget] = useState<{ type: "collection" | "folder" | "item"; id: string } | null>(null);
-  const dragMime = "application/openreq-item";
-  const dragCollectionMime = "application/openreq-collection";
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
   const [inlineEditValue, setInlineEditValue] = useState("");
 
-  // Safety cleanup: if a drag ends anywhere (e.g. drop into TestBuilder canvas),
-  // onDragEnd on the item might not fire. Listen at document level.
-  // Registered once with empty deps — no stale closure, uses state setters directly.
-  useEffect(() => {
-    const cleanup = () => {
-      setDraggingItemId(null);
-      setDragOverTarget(null);
-      dragPayloadRef.current = null;
-      dragCollectionRef.current = null;
-    };
-    document.addEventListener("dragend", cleanup);
-    document.addEventListener("drop", cleanup);
-    return () => {
-      document.removeEventListener("dragend", cleanup);
-      document.removeEventListener("drop", cleanup);
-    };
-  }, []);
+  /* ---- dnd-kit state ---- */
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [overDropId, setOverDropId] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<DropPosition>("after");
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+  );
 
   const handleColMenu = (e: React.MouseEvent, col: Collection) => {
     e.preventDefault();
@@ -300,6 +368,493 @@ export default function Sidebar({
 
   const itemSize = (index: number) =>
     flatRows[index]?.type === "collection" ? COLLECTION_ROW_HEIGHT : ITEM_ROW_HEIGHT;
+
+  /* ---- dnd-kit helper: find the row data for a drag/drop id ---- */
+  const findRowByDragId = useCallback(
+    (encoded: string) => {
+      const { kind, id } = decodeDragId(encoded);
+      if (kind === "collection") {
+        return flatRows.find((r) => r.type === "collection" && r.collection.id === id) ?? null;
+      }
+      return flatRows.find((r) => r.type === "item" && r.item.id === id) ?? null;
+    },
+    [flatRows],
+  );
+
+  /* ---- dnd-kit overlay content ---- */
+  const activeRow = activeDragId ? findRowByDragId(activeDragId) : null;
+
+  /* ---- dnd-kit handlers ---- */
+  const handleDragStart = useCallback((event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  }, []);
+
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const overId = event.over?.id ? String(event.over.id) : null;
+    setOverDropId(overId);
+
+    if (overId && event.over) {
+      // Determine drop position based on cursor location within the target
+      const overRect = event.over.rect;
+      const pointerY = (event.activatorEvent as PointerEvent)?.clientY ?? 0;
+      const delta = event.delta?.y ?? 0;
+      const currentY = pointerY + delta;
+      const overTop = overRect.top;
+      const overHeight = overRect.height;
+
+      const decoded = decodeDragId(overId);
+      // For folders: top 25% = before, middle 50% = inside, bottom 25% = after
+      // For items/collections: top 50% = before, bottom 50% = after
+      const targetRow = flatRows.find(
+        (r) =>
+          (r.type === "collection" && decoded.kind === "collection" && r.collection.id === decoded.id) ||
+          (r.type === "item" && decoded.kind === "item" && r.item.id === decoded.id),
+      );
+      const isFolder = targetRow?.type === "item" && targetRow.item.is_folder;
+      const relativeY = (currentY - overTop) / overHeight;
+
+      if (isFolder) {
+        if (relativeY < 0.25) setDropPosition("before");
+        else if (relativeY > 0.75) setDropPosition("after");
+        else setDropPosition("inside");
+      } else {
+        setDropPosition(relativeY < 0.5 ? "before" : "after");
+      }
+    }
+  }, [flatRows]);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      setActiveDragId(null);
+      setOverDropId(null);
+
+      if (!over || active.id === over.id) return;
+
+      const dragInfo = decodeDragId(String(active.id));
+      const dropInfo = decodeDragId(String(over.id));
+
+      // Collection → Collection reorder
+      if (dragInfo.kind === "collection" && dropInfo.kind === "collection") {
+        onReorderCollection(dragInfo.id, dropInfo.id);
+        return;
+      }
+
+      // Item → something
+      if (dragInfo.kind === "item" && dragInfo.collectionId) {
+        // Dropping on a collection root = move to root
+        if (dropInfo.kind === "collection") {
+          onMoveItem(dragInfo.collectionId, dragInfo.id, null);
+          return;
+        }
+
+        // Dropping on an item/folder within same collection
+        if (dropInfo.kind === "item" && dropInfo.collectionId === dragInfo.collectionId) {
+          // If dropping inside a folder, move into it
+          const targetRow = flatRows.find((r) => r.type === "item" && r.item.id === dropInfo.id);
+          if (targetRow?.type === "item" && targetRow.item.is_folder && dropPosition === "inside") {
+            onMoveItem(dragInfo.collectionId, dragInfo.id, dropInfo.id);
+          } else {
+            // Reorder
+            onReorderItem(dragInfo.collectionId, dragInfo.id, dropInfo.id);
+          }
+          return;
+        }
+      }
+    },
+    [flatRows, dropPosition, onReorderCollection, onMoveItem, onReorderItem],
+  );
+
+  const handleDragCancel = useCallback(() => {
+    setActiveDragId(null);
+    setOverDropId(null);
+  }, []);
+
+  /* ---- Compute drop target context for preview ---- */
+  const dropTargetContext = useMemo(() => {
+    if (!overDropId || !activeDragId) return null;
+    const dropDecoded = decodeDragId(overDropId);
+    const dragDecoded = decodeDragId(activeDragId);
+
+    // Collection → Collection: just reorder, no context needed
+    if (dragDecoded.kind === "collection") return null;
+
+    let targetParentName: string | null = null;
+    let targetParentAuth: string | null = null;
+    let targetParentHeaders: Record<string, string> | null = null;
+    let targetParentQueryParams: Record<string, string> | null = null;
+    let targetParentScripts: { pre?: string | null; post?: string | null } = {};
+    let breadcrumb: string[] = [];
+
+    if (dropDecoded.kind === "collection") {
+      // Dropping onto collection root
+      const col = collections.find((c) => c.id === dropDecoded.id);
+      if (col) {
+        targetParentName = col.name;
+        targetParentAuth = col.auth_type || null;
+        targetParentHeaders = col.default_headers || null;
+        targetParentQueryParams = col.default_query_params || null;
+        targetParentScripts = { pre: col.pre_request_script, post: col.post_response_script };
+        breadcrumb = [col.name];
+      }
+    } else if (dropDecoded.kind === "item" && dropDecoded.collectionId) {
+      const col = collections.find((c) => c.id === dropDecoded.collectionId);
+      const items = collectionItems[dropDecoded.collectionId] ?? [];
+      const targetItem = items.find((i) => i.id === dropDecoded.id);
+
+      if (targetItem && col) {
+        if (targetItem.is_folder && dropPosition === "inside") {
+          // Moving INTO this folder
+          targetParentName = targetItem.name;
+          targetParentAuth = targetItem.auth_type || null;
+          targetParentHeaders = targetItem.default_headers || null;
+          targetParentQueryParams = targetItem.default_query_params || null;
+          targetParentScripts = { pre: targetItem.pre_request_script, post: targetItem.post_response_script };
+          // Build breadcrumb
+          const crumbs: string[] = [targetItem.name];
+          let parentId = targetItem.parent_id;
+          while (parentId) {
+            const parent = items.find((i) => i.id === parentId);
+            if (parent) {
+              crumbs.unshift(parent.name);
+              parentId = parent.parent_id;
+            } else break;
+          }
+          crumbs.unshift(col.name);
+          breadcrumb = crumbs;
+        } else {
+          // Reordering next to this item — parent is the item's parent
+          const parentId = targetItem.parent_id;
+          if (parentId) {
+            const parentFolder = items.find((i) => i.id === parentId);
+            if (parentFolder) {
+              targetParentName = parentFolder.name;
+              targetParentAuth = parentFolder.auth_type || null;
+              targetParentHeaders = parentFolder.default_headers || null;
+              targetParentQueryParams = parentFolder.default_query_params || null;
+              targetParentScripts = { pre: parentFolder.pre_request_script, post: parentFolder.post_response_script };
+              const crumbs: string[] = [parentFolder.name];
+              let pid = parentFolder.parent_id;
+              while (pid) {
+                const p = items.find((i) => i.id === pid);
+                if (p) {
+                  crumbs.unshift(p.name);
+                  pid = p.parent_id;
+                } else break;
+              }
+              crumbs.unshift(col.name);
+              breadcrumb = crumbs;
+            }
+          } else {
+            // At collection root level
+            targetParentName = col.name;
+            targetParentAuth = col.auth_type || null;
+            targetParentHeaders = col.default_headers || null;
+            targetParentQueryParams = col.default_query_params || null;
+            targetParentScripts = { pre: col.pre_request_script, post: col.post_response_script };
+            breadcrumb = [col.name];
+          }
+        }
+      }
+    }
+
+    if (!targetParentName) return null;
+
+    const headerCount = targetParentHeaders ? Object.keys(targetParentHeaders).length : 0;
+    const paramCount = targetParentQueryParams ? Object.keys(targetParentQueryParams).length : 0;
+    const hasPreScript = !!targetParentScripts.pre;
+    const hasPostScript = !!targetParentScripts.post;
+    const authLabel = !targetParentAuth || targetParentAuth === "none" || targetParentAuth === "inherit"
+      ? null
+      : targetParentAuth === "bearer" ? "Bearer"
+      : targetParentAuth === "basic" ? "Basic"
+      : targetParentAuth === "api_key" ? "API Key"
+      : targetParentAuth === "oauth2" ? "OAuth2"
+      : targetParentAuth;
+
+    return {
+      breadcrumb,
+      authLabel,
+      headerCount,
+      paramCount,
+      headers: targetParentHeaders,
+      hasPreScript,
+      hasPostScript,
+    };
+  }, [overDropId, activeDragId, dropPosition, collections, collectionItems]);
+
+  /* ---- Overlay rendering ---- */
+  const renderOverlay = () => {
+    if (!activeRow) return null;
+
+    const renderDragGhost = () => {
+      if (activeRow.type === "collection") {
+        const col = activeRow.collection;
+        return (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0.5,
+              px: 1.5,
+              py: 0.5,
+              minHeight: COLLECTION_ROW_HEIGHT,
+              backgroundColor: isDark ? "#3c3f41" : "#e8e8e8",
+              borderRadius: 1.5,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.4)}`,
+              maxWidth: drawerWidth - 16,
+            }}
+          >
+            <DragIndicator sx={{ fontSize: 14, color: "primary.main", mr: 0.5 }} />
+            <Typography variant="body2" fontSize={12.5} fontWeight={600} noWrap>
+              {col.name}
+            </Typography>
+          </Box>
+        );
+      }
+      if (activeRow.type === "item") {
+        const item = activeRow.item;
+        return (
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0.5,
+              px: 1.5,
+              py: 0.4,
+              minHeight: ITEM_ROW_HEIGHT,
+              backgroundColor: isDark ? "#3c3f41" : "#e8e8e8",
+              borderRadius: 1.5,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.4)}`,
+              maxWidth: drawerWidth - 16,
+            }}
+          >
+            <DragIndicator sx={{ fontSize: 12, color: "primary.main", mr: 0.5 }} />
+            {item.is_folder ? (
+              <ChevronRight sx={{ fontSize: 14, color: "text.secondary" }} />
+            ) : (
+              <Box
+                component="span"
+                sx={{
+                  fontSize: "0.55rem",
+                  fontWeight: 700,
+                  fontFamily: "monospace",
+                  px: 0.4,
+                  py: 0.2,
+                  borderRadius: 0.5,
+                  color:
+                    item.protocol === "websocket"
+                      ? "#14b8a6"
+                      : item.protocol === "graphql"
+                        ? "#e879f9"
+                        : METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary,
+                  backgroundColor: alpha(
+                    item.protocol === "websocket"
+                      ? "#14b8a6"
+                      : item.protocol === "graphql"
+                        ? "#e879f9"
+                        : METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary,
+                    0.12,
+                  ),
+                }}
+              >
+                {item.protocol === "websocket" ? "WS" : item.protocol === "graphql" ? "GQL" : item.method?.toUpperCase().slice(0, 3) ?? "GET"}
+              </Box>
+            )}
+            <Typography variant="body2" fontSize={12.5} fontWeight={item.is_folder ? 500 : 400} noWrap>
+              {item.name}
+            </Typography>
+          </Box>
+        );
+      }
+      return null;
+    };
+
+    return (
+      <Box>
+        {renderDragGhost()}
+        {/* Drop target context preview */}
+        {dropTargetContext && (
+          <Box
+            sx={{
+              mt: 0.5,
+              px: 1.5,
+              py: 1,
+              backgroundColor: isDark ? alpha("#1e1f22", 0.95) : alpha("#ffffff", 0.95),
+              borderRadius: 1.5,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.25)}`,
+              maxWidth: drawerWidth + 40,
+              backdropFilter: "blur(8px)",
+            }}
+          >
+            {/* Breadcrumb path */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.3, mb: 0.5, flexWrap: "wrap" }}>
+              <Typography variant="caption" sx={{ fontSize: 10, color: "text.secondary", fontWeight: 500 }}>
+                {t("common.target")}:
+              </Typography>
+              {dropTargetContext.breadcrumb.map((crumb, i) => (
+                <Box key={i} sx={{ display: "flex", alignItems: "center", gap: 0.3 }}>
+                  {i > 0 && (
+                    <ChevronRight sx={{ fontSize: 10, color: "text.disabled" }} />
+                  )}
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      fontSize: 10,
+                      fontWeight: i === dropTargetContext.breadcrumb.length - 1 ? 600 : 400,
+                      color: i === dropTargetContext.breadcrumb.length - 1 ? "primary.main" : "text.secondary",
+                    }}
+                  >
+                    {crumb}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+
+            {/* Inherited settings chips */}
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+              {dropTargetContext.authLabel && (
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.3,
+                    px: 0.8,
+                    py: 0.2,
+                    borderRadius: 1,
+                    backgroundColor: alpha(theme.palette.warning.main, 0.12),
+                    border: `1px solid ${alpha(theme.palette.warning.main, 0.25)}`,
+                  }}
+                >
+                  <Lock sx={{ fontSize: 10, color: "warning.main" }} />
+                  <Typography variant="caption" sx={{ fontSize: 9.5, color: "warning.main", fontWeight: 600 }}>
+                    {dropTargetContext.authLabel}
+                  </Typography>
+                </Box>
+              )}
+              {dropTargetContext.headerCount > 0 && (
+                <Box
+                  sx={{
+                    px: 0.8,
+                    py: 0.2,
+                    borderRadius: 1,
+                    backgroundColor: alpha(theme.palette.info.main, 0.12),
+                    border: `1px solid ${alpha(theme.palette.info.main, 0.25)}`,
+                  }}
+                >
+                  <Typography variant="caption" sx={{ fontSize: 9.5, color: "info.main", fontWeight: 600 }}>
+                    {dropTargetContext.headerCount} header{dropTargetContext.headerCount > 1 ? "s" : ""}
+                  </Typography>
+                </Box>
+              )}
+              {dropTargetContext.paramCount > 0 && (
+                <Box
+                  sx={{
+                    px: 0.8,
+                    py: 0.2,
+                    borderRadius: 1,
+                    backgroundColor: alpha(theme.palette.secondary.main, 0.12),
+                    border: `1px solid ${alpha(theme.palette.secondary.main, 0.25)}`,
+                  }}
+                >
+                  <Typography variant="caption" sx={{ fontSize: 9.5, color: "secondary.main", fontWeight: 600 }}>
+                    {dropTargetContext.paramCount} param{dropTargetContext.paramCount > 1 ? "s" : ""}
+                  </Typography>
+                </Box>
+              )}
+              {dropTargetContext.hasPreScript && (
+                <Box
+                  sx={{
+                    px: 0.8,
+                    py: 0.2,
+                    borderRadius: 1,
+                    backgroundColor: alpha(theme.palette.success.main, 0.12),
+                    border: `1px solid ${alpha(theme.palette.success.main, 0.25)}`,
+                  }}
+                >
+                  <Typography variant="caption" sx={{ fontSize: 9.5, color: "success.main", fontWeight: 600 }}>
+                    Pre-script
+                  </Typography>
+                </Box>
+              )}
+              {dropTargetContext.hasPostScript && (
+                <Box
+                  sx={{
+                    px: 0.8,
+                    py: 0.2,
+                    borderRadius: 1,
+                    backgroundColor: alpha(theme.palette.success.main, 0.12),
+                    border: `1px solid ${alpha(theme.palette.success.main, 0.25)}`,
+                  }}
+                >
+                  <Typography variant="caption" sx={{ fontSize: 9.5, color: "success.main", fontWeight: 600 }}>
+                    Post-script
+                  </Typography>
+                </Box>
+              )}
+              {!dropTargetContext.authLabel && dropTargetContext.headerCount === 0 && dropTargetContext.paramCount === 0 && !dropTargetContext.hasPreScript && !dropTargetContext.hasPostScript && (
+                <Typography variant="caption" sx={{ fontSize: 9.5, color: "text.disabled", fontStyle: "italic" }}>
+                  {t("collection.noDefaults")}
+                </Typography>
+              )}
+            </Box>
+
+            {/* Show header details if few */}
+            {dropTargetContext.headers && dropTargetContext.headerCount > 0 && dropTargetContext.headerCount <= 3 && (
+              <Box sx={{ mt: 0.5, pl: 0.5 }}>
+                {Object.entries(dropTargetContext.headers).map(([key, val]) => (
+                  <Typography key={key} variant="caption" sx={{ fontSize: 9, color: "text.secondary", display: "block", fontFamily: "monospace" }}>
+                    {key}: {val.length > 20 ? val.slice(0, 20) + "..." : val}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+          </Box>
+        )}
+      </Box>
+    );
+  };
+
+  /* ---- Drop indicator lines ---- */
+  const getDropIndicatorSx = (rowDragId: string, isFolder: boolean) => {
+    if (!activeDragId || overDropId !== rowDragId) return {};
+
+    const indicatorColor = theme.palette.primary.main;
+
+    if (isFolder && dropPosition === "inside") {
+      return {
+        "&::after": {
+          content: '""',
+          position: "absolute",
+          inset: 2,
+          borderRadius: 1.5,
+          border: `2px solid ${indicatorColor}`,
+          pointerEvents: "none",
+          zIndex: 10,
+        },
+      };
+    }
+
+    const isTop = dropPosition === "before";
+    return {
+      [`&::${isTop ? "before" : "after"}`]: {
+        content: '""',
+        position: "absolute",
+        left: 8,
+        right: 8,
+        [isTop ? "top" : "bottom"]: -1,
+        height: 2,
+        backgroundColor: indicatorColor,
+        borderRadius: 1,
+        pointerEvents: "none",
+        zIndex: 10,
+        boxShadow: `0 0 6px ${alpha(indicatorColor, 0.5)}`,
+      },
+    };
+  };
 
   return (
     <Drawer
@@ -449,134 +1004,268 @@ export default function Sidebar({
             {t("collection.empty")}
           </Typography>
         ) : listHeight > 0 ? (
-          <VirtualList
-            style={{ height: listHeight, width: "100%" }}
-            rowCount={flatRows.length}
-            rowHeight={(index) => itemSize(index)}
-            overscanCount={8}
-            rowProps={{}}
-            rowComponent={({ index, style, ariaAttributes }) => {
-              const row = flatRows[index];
-              if (!row) return null;
-              if (row.type === "collection") {
-                const col = row.collection;
-                const isOpen = row.forceOpen || collectionOpen[col.id] === true;
-                const isLoaded = !!collectionTrees[col.id];
-                const isLoading = !!collectionTreeLoading[col.id];
-                const isDragTarget = dragOverTarget?.type === "collection" && dragOverTarget.id === col.id;
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
+          >
+            <VirtualList
+              style={{ height: listHeight, width: "100%" }}
+              rowCount={flatRows.length}
+              rowHeight={(index) => itemSize(index)}
+              overscanCount={8}
+              rowProps={{}}
+              rowComponent={({ index, style, ariaAttributes }) => {
+                const row = flatRows[index];
+                if (!row) return null;
+
+                if (row.type === "collection") {
+                  const col = row.collection;
+                  const isOpen = row.forceOpen || collectionOpen[col.id] === true;
+                  const isLoaded = !!collectionTrees[col.id];
+                  const isLoading = !!collectionTreeLoading[col.id];
+                  const dragId = encodeDragId("collection", col.id);
+
+                  return (
+                    <DraggableDroppableRow
+                      dragId={dragId}
+                      dropId={dragId}
+                      style={style}
+                      ariaAttributes={ariaAttributes}
+                    >
+                      <ListItemButton
+                        sx={{
+                          py: 0.5,
+                          minHeight: COLLECTION_ROW_HEIGHT,
+                          borderRadius: 0,
+                          mx: 0,
+                          position: "relative",
+                          ...getDropIndicatorSx(dragId, false),
+                        }}
+                        onClick={() => {
+                          onOpenCollection(col.id);
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          handleColMenu(e, col);
+                        }}
+                      >
+                        <ListItemIcon
+                          sx={{
+                            minWidth: 24,
+                            cursor: "pointer",
+                            borderRadius: 1,
+                            "&:hover": { backgroundColor: alpha(theme.palette.text.primary, 0.08) },
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!row.forceOpen) {
+                              const willOpen = collectionOpen[col.id] !== true;
+                              if (willOpen && !isLoaded && !isLoading) {
+                                onRequestCollectionTree(col.id);
+                              }
+                              setCollectionOpen((prev) => ({ ...prev, [col.id]: !(prev[col.id] === true) }));
+                            }
+                          }}
+                        >
+                          {isOpen ? (
+                            <ExpandMore sx={{ fontSize: 16, color: "text.secondary" }} />
+                          ) : (
+                            <ChevronRight sx={{ fontSize: 16, color: "text.secondary" }} />
+                          )}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={col.name}
+                          primaryTypographyProps={{
+                            variant: "body2",
+                            fontWeight: 600,
+                            fontSize: 12.5,
+                            noWrap: true,
+                          }}
+                        />
+                        <ListItemSecondaryAction>
+                          <IconButton
+                            size="small"
+                            onClick={(e) => handleColMenuFromButton(e, col)}
+                            sx={{
+                              width: 22,
+                              height: 22,
+                              opacity: 0,
+                              transition: "opacity 0.15s",
+                              ".MuiListItemButton-root:hover &": { opacity: 1 },
+                            }}
+                          >
+                            <MoreVert sx={{ fontSize: 14 }} />
+                          </IconButton>
+                        </ListItemSecondaryAction>
+                      </ListItemButton>
+                    </DraggableDroppableRow>
+                  );
+                }
+
+                if (row.type === "loading") {
+                  return (
+                    <Box style={style} {...ariaAttributes}>
+                      <ListItemButton
+                        sx={{
+                          pl: 1.5 + row.depth * 1.5,
+                          py: 0.4,
+                          minHeight: ITEM_ROW_HEIGHT,
+                          borderRadius: 0,
+                          mx: 0,
+                        }}
+                      >
+                        <ListItemText
+                          primary={t("common.loading")}
+                          primaryTypographyProps={{
+                            variant: "body2",
+                            fontSize: 12.5,
+                            noWrap: true,
+                            color: "text.secondary",
+                          }}
+                        />
+                      </ListItemButton>
+                    </Box>
+                  );
+                }
+
+                const item = row.item;
+                const depth = row.depth;
+                const open = row.forceOpen || folderOpen[item.id] === true;
+                const dragId = encodeDragId("item", item.id, row.collectionId);
+                const isBeingDragged = activeDragId === dragId;
+
                 return (
-                  <Box style={style} {...ariaAttributes}>
+                  <DraggableDroppableRow
+                    dragId={dragId}
+                    dropId={dragId}
+                    style={style}
+                    ariaAttributes={ariaAttributes}
+                  >
                     <ListItemButton
-                      draggable
-                      onDragStart={(e) => {
-                        dragCollectionRef.current = col.id;
-                        e.dataTransfer.setData(dragCollectionMime, JSON.stringify({ collectionId: col.id }));
-                        e.dataTransfer.effectAllowed = "copyMove";
-                      }}
-                      onDragEnd={() => {
-                        dragCollectionRef.current = null;
-                        setDragOverTarget(null);
-                      }}
                       sx={{
-                        py: 0.5,
-                        minHeight: COLLECTION_ROW_HEIGHT,
-                        borderRadius: 0,
-                        mx: 0,
-                        backgroundColor: isDragTarget ? alpha(theme.palette.primary.main, 0.12) : "transparent",
+                        pl: 1.5 + depth * 1.5,
+                        py: 0.4,
+                        minHeight: ITEM_ROW_HEIGHT,
+                        borderRadius: 1.5,
+                        mx: 1,
+                        position: "relative",
+                        opacity: isBeingDragged ? 0.35 : 1,
+                        ...getDropIndicatorSx(dragId, item.is_folder),
                       }}
                       onClick={() => {
-                        onOpenCollection(col.id);
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        handleColMenu(e, col);
-                      }}
-                      onDragOver={(e) => {
-                        const payload = dragPayloadRef.current;
-                        const hasItemPayload = payload && payload.collectionId === col.id;
-                        const hasItemType = Array.from(e.dataTransfer.types || []).includes(dragMime);
-                        const hasColType = Array.from(e.dataTransfer.types || []).includes(dragCollectionMime);
-                        if (!hasItemPayload && !hasItemType && !hasColType) return;
-                        e.preventDefault();
-                        e.dataTransfer.dropEffect = "move";
-                        setDragOverTarget((prev) =>
-                          prev?.type === "collection" && prev.id === col.id ? prev : { type: "collection", id: col.id }
-                        );
-                      }}
-                      onDragLeave={(e) => {
-                        if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-                        setDragOverTarget((prev) => (prev?.type === "collection" && prev.id === col.id ? null : prev));
-                      }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const colPayload = dragCollectionRef.current ?? (() => {
-                        try {
-                          const raw = e.dataTransfer.getData(dragCollectionMime);
-                          return raw ? (JSON.parse(raw) as { collectionId: string }).collectionId : null;
-                        } catch {
-                          return null;
+                        if (item.is_folder) {
+                          onOpenFolder(item.id, row.collectionId);
+                        } else if (item.request_id) {
+                          onSelectRequest(item.request_id, row.collectionId, item.id);
                         }
-                      })();
-                      if (colPayload && colPayload !== col.id) {
-                        onReorderCollection(colPayload, col.id);
-                        dragCollectionRef.current = null;
-                        setDragOverTarget(null);
-                        return;
-                      }
-
-                      const payload = dragPayloadRef.current ?? (() => {
-                        try {
-                          const raw = e.dataTransfer.getData(dragMime);
-                          return raw ? JSON.parse(raw) as { itemId: string; collectionId: string } : null;
-                        } catch {
-                          return null;
-                        }
-                      })();
-                      if (!payload || payload.collectionId !== col.id) return;
-                      onMoveItem(col.id, payload.itemId, null);
-                      dragPayloadRef.current = null;
-                      setDraggingItemId(null);
-                      setDragOverTarget(null);
-                    }}
+                      }}
+                      onContextMenu={(e) => handleItemContext(e, item, row.collectionId)}
                     >
                       <ListItemIcon
-                        sx={{
-                          minWidth: 24,
-                          cursor: "pointer",
-                          borderRadius: 1,
-                          "&:hover": { backgroundColor: alpha(theme.palette.text.primary, 0.08) },
-                        }}
+                        sx={{ minWidth: item.is_folder ? 22 : 38, cursor: item.is_folder ? "pointer" : undefined }}
                         onClick={(e) => {
-                          e.stopPropagation();
-                          if (!row.forceOpen) {
-                            const willOpen = collectionOpen[col.id] !== true;
-                            if (willOpen && !isLoaded && !isLoading) {
-                              onRequestCollectionTree(col.id);
+                          if (item.is_folder) {
+                            e.stopPropagation();
+                            if (!row.forceOpen) {
+                              setFolderOpen((prev) => ({
+                                ...prev,
+                                [item.id]: !(prev[item.id] === true),
+                              }));
                             }
-                            setCollectionOpen((prev) => ({ ...prev, [col.id]: !(prev[col.id] === true) }));
                           }
                         }}
                       >
-                        {isOpen ? (
-                          <ExpandMore sx={{ fontSize: 16, color: "text.secondary" }} />
+                        {item.is_folder ? (
+                          open || row.forceOpen ? (
+                            <ExpandMore sx={{ fontSize: 15, color: "text.secondary" }} />
+                          ) : (
+                            <ChevronRight sx={{ fontSize: 15, color: "text.secondary" }} />
+                          )
                         ) : (
-                          <ChevronRight sx={{ fontSize: 16, color: "text.secondary" }} />
+                          <Box
+                            component="span"
+                            sx={{
+                              fontSize: "0.55rem",
+                              fontWeight: 700,
+                              fontFamily: "monospace",
+                              lineHeight: 1,
+                              px: 0.4,
+                              py: 0.2,
+                              borderRadius: 0.5,
+                              color: item.protocol === "websocket" ? "#14b8a6" : item.protocol === "graphql" ? "#e879f9" : (METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary),
+                              backgroundColor: alpha(
+                                item.protocol === "websocket" ? "#14b8a6" : item.protocol === "graphql" ? "#e879f9" : (METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary),
+                                0.12,
+                              ),
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {item.protocol === "websocket" ? "WS" : item.protocol === "graphql" ? "GQL" : (item.method?.toUpperCase().slice(0, 3) ?? "GET")}
+                          </Box>
                         )}
                       </ListItemIcon>
-                      <ListItemText
-                        primary={col.name}
-                        primaryTypographyProps={{
-                          variant: "body2",
-                          fontWeight: 600,
-                          fontSize: 12.5,
-                          noWrap: true,
-                        }}
-                      />
+                      {inlineEditId === item.id ? (
+                        <TextField
+                          size="small"
+                          variant="standard"
+                          autoFocus
+                          value={inlineEditValue}
+                          onChange={(e) => setInlineEditValue(e.target.value)}
+                          onBlur={() => {
+                            const trimmed = inlineEditValue.trim();
+                            if (trimmed && trimmed !== item.name) {
+                              if (onDirectRenameItem) onDirectRenameItem(item.id, trimmed);
+                              else onRenameItem(item.id, trimmed);
+                            }
+                            setInlineEditId(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              (e.target as HTMLInputElement).blur();
+                            } else if (e.key === "Escape") {
+                              setInlineEditId(null);
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          onDoubleClick={(e) => e.stopPropagation()}
+                          sx={{
+                            flex: 1,
+                            "& .MuiInput-input": {
+                              fontSize: 12.5,
+                              py: 0,
+                              fontFamily: "inherit",
+                            },
+                          }}
+                          inputProps={{ style: { padding: 0 } }}
+                        />
+                      ) : (
+                        <ListItemText
+                          primary={item.name}
+                          primaryTypographyProps={{
+                            variant: "body2",
+                            fontSize: 12.5,
+                            fontWeight: item.is_folder ? 500 : 400,
+                            noWrap: true,
+                            color: item.is_folder ? "text.primary" : "text.secondary",
+                          }}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            setInlineEditId(item.id);
+                            setInlineEditValue(item.name);
+                          }}
+                        />
+                      )}
+                      {item.is_folder && item.auth_type && item.auth_type !== "none" && item.auth_type !== "inherit" && (
+                        <Lock sx={{ fontSize: 12, color: "warning.main", ml: 0.5, flexShrink: 0 }} />
+                      )}
                       <ListItemSecondaryAction>
                         <IconButton
                           size="small"
-                          onClick={(e) => handleColMenuFromButton(e, col)}
+                          onClick={(e) => handleItemMenuFromButton(e, item, row.collectionId)}
                           sx={{
                             width: 22,
                             height: 22,
@@ -589,235 +1278,19 @@ export default function Sidebar({
                         </IconButton>
                       </ListItemSecondaryAction>
                     </ListItemButton>
-                  </Box>
+                  </DraggableDroppableRow>
                 );
-              }
-
-              if (row.type === "loading") {
-                return (
-                  <Box style={style} {...ariaAttributes}>
-                    <ListItemButton
-                      sx={{
-                        pl: 1.5 + row.depth * 1.5,
-                        py: 0.4,
-                        minHeight: ITEM_ROW_HEIGHT,
-                        borderRadius: 0,
-                        mx: 0,
-                      }}
-                    >
-                      <ListItemText
-                        primary={t("common.loading")}
-                        primaryTypographyProps={{
-                          variant: "body2",
-                          fontSize: 12.5,
-                          noWrap: true,
-                          color: "text.secondary",
-                        }}
-                      />
-                    </ListItemButton>
-                  </Box>
-                );
-              }
-
-              const item = row.item;
-              const depth = row.depth;
-              const open = row.forceOpen || folderOpen[item.id] === true;
-              const isDragTarget = (dragOverTarget?.type === "folder" || dragOverTarget?.type === "item") && dragOverTarget.id === item.id;
-              return (
-                <Box
-                  style={style}
-                  {...ariaAttributes}
-                  draggable={!item.is_folder}
-                  onDragStart={(e) => {
-                    if (item.is_folder) return;
-                    const payload = { itemId: item.id, collectionId: row.collectionId };
-                    dragPayloadRef.current = payload;
-                    e.dataTransfer.setData(dragMime, JSON.stringify(payload));
-                    e.dataTransfer.effectAllowed = "move";
-                    // Defer state update so VirtualList re-render doesn't cancel the drag
-                    requestAnimationFrame(() => setDraggingItemId(item.id));
-                  }}
-                  onDragEnd={() => {
-                    dragPayloadRef.current = null;
-                    setDraggingItemId(null);
-                    setDragOverTarget(null);
-                  }}
-                  onDragOver={(e) => {
-                    const payload = dragPayloadRef.current;
-                    const hasPayload = payload && payload.collectionId === row.collectionId;
-                    const hasType = Array.from(e.dataTransfer.types || []).includes(dragMime);
-                    if (!hasPayload && !hasType) return;
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = "move";
-                    setDragOverTarget((prev) => {
-                      const nextType = item.is_folder ? "folder" : "item";
-                      return prev?.type === nextType && prev.id === item.id ? prev : { type: nextType, id: item.id };
-                    });
-                  }}
-                  onDragLeave={(e) => {
-                    if ((e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) return;
-                    setDragOverTarget((prev) => {
-                      if ((prev?.type === "folder" || prev?.type === "item") && prev.id === item.id) return null;
-                      return prev;
-                    });
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const payload = dragPayloadRef.current ?? (() => {
-                      try {
-                        const raw = e.dataTransfer.getData(dragMime);
-                        return raw ? JSON.parse(raw) as { itemId: string; collectionId: string } : null;
-                      } catch {
-                        return null;
-                      }
-                    })();
-                    if (!payload || payload.collectionId !== row.collectionId) return;
-                    if (item.is_folder) {
-                      onMoveItem(row.collectionId, payload.itemId, item.id);
-                    } else if (payload.itemId !== item.id) {
-                      onReorderItem(row.collectionId, payload.itemId, item.id);
-                    }
-                    dragPayloadRef.current = null;
-                    setDraggingItemId(null);
-                    setDragOverTarget(null);
-                  }}
-                >
-                  <ListItemButton
-                    sx={{
-                      pl: 1.5 + depth * 1.5,
-                      py: 0.4,
-                      minHeight: ITEM_ROW_HEIGHT,
-                      borderRadius: 1.5,
-                      mx: 1,
-                      backgroundColor: isDragTarget ? alpha(theme.palette.primary.main, 0.12) : "transparent",
-                      opacity: draggingItemId === item.id ? 0.6 : 1,
-                    }}
-                    onClick={() => {
-                      if (item.is_folder) {
-                        onOpenFolder(item.id, row.collectionId);
-                      } else if (item.request_id) {
-                        onSelectRequest(item.request_id, row.collectionId, item.id);
-                      }
-                    }}
-                    onContextMenu={(e) => handleItemContext(e, item, row.collectionId)}
-                  >
-                    <ListItemIcon
-                      sx={{ minWidth: item.is_folder ? 22 : 38, cursor: item.is_folder ? "pointer" : undefined }}
-                      onClick={(e) => {
-                        if (item.is_folder) {
-                          e.stopPropagation();
-                          if (!row.forceOpen) {
-                            setFolderOpen((prev) => ({
-                              ...prev,
-                              [item.id]: !(prev[item.id] === true),
-                            }));
-                          }
-                        }
-                      }}
-                    >
-                      {item.is_folder ? (
-                        open || row.forceOpen ? (
-                          <ExpandMore sx={{ fontSize: 15, color: "text.secondary" }} />
-                        ) : (
-                          <ChevronRight sx={{ fontSize: 15, color: "text.secondary" }} />
-                        )
-                      ) : (
-                        <Box
-                          component="span"
-                          sx={{
-                            fontSize: "0.55rem",
-                            fontWeight: 700,
-                            fontFamily: "monospace",
-                            lineHeight: 1,
-                            px: 0.4,
-                            py: 0.2,
-                            borderRadius: 0.5,
-                            color: item.protocol === "websocket" ? "#14b8a6" : item.protocol === "graphql" ? "#e879f9" : (METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary),
-                            backgroundColor: alpha(
-                              item.protocol === "websocket" ? "#14b8a6" : item.protocol === "graphql" ? "#e879f9" : (METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary),
-                              0.12,
-                            ),
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {item.protocol === "websocket" ? "WS" : item.protocol === "graphql" ? "GQL" : (item.method?.toUpperCase().slice(0, 3) ?? "GET")}
-                        </Box>
-                      )}
-                    </ListItemIcon>
-                    {inlineEditId === item.id ? (
-                      <TextField
-                        size="small"
-                        variant="standard"
-                        autoFocus
-                        value={inlineEditValue}
-                        onChange={(e) => setInlineEditValue(e.target.value)}
-                        onBlur={() => {
-                          const trimmed = inlineEditValue.trim();
-                          if (trimmed && trimmed !== item.name) {
-                            if (onDirectRenameItem) onDirectRenameItem(item.id, trimmed);
-                            else onRenameItem(item.id, trimmed);
-                          }
-                          setInlineEditId(null);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            (e.target as HTMLInputElement).blur();
-                          } else if (e.key === "Escape") {
-                            setInlineEditId(null);
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        onDoubleClick={(e) => e.stopPropagation()}
-                        sx={{
-                          flex: 1,
-                          "& .MuiInput-input": {
-                            fontSize: 12.5,
-                            py: 0,
-                            fontFamily: "inherit",
-                          },
-                        }}
-                        inputProps={{ style: { padding: 0 } }}
-                      />
-                    ) : (
-                      <ListItemText
-                        primary={item.name}
-                        primaryTypographyProps={{
-                          variant: "body2",
-                          fontSize: 12.5,
-                          fontWeight: item.is_folder ? 500 : 400,
-                          noWrap: true,
-                          color: item.is_folder ? "text.primary" : "text.secondary",
-                        }}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          setInlineEditId(item.id);
-                          setInlineEditValue(item.name);
-                        }}
-                      />
-                    )}
-                    {item.is_folder && item.auth_type && item.auth_type !== "none" && item.auth_type !== "inherit" && (
-                      <Lock sx={{ fontSize: 12, color: "warning.main", ml: 0.5, flexShrink: 0 }} />
-                    )}
-                    <ListItemSecondaryAction>
-                      <IconButton
-                        size="small"
-                        onClick={(e) => handleItemMenuFromButton(e, item, row.collectionId)}
-                        sx={{
-                          width: 22,
-                          height: 22,
-                          opacity: 0,
-                          transition: "opacity 0.15s",
-                          ".MuiListItemButton-root:hover &": { opacity: 1 },
-                        }}
-                      >
-                        <MoreVert sx={{ fontSize: 14 }} />
-                      </IconButton>
-                    </ListItemSecondaryAction>
-                  </ListItemButton>
-                </Box>
-              );
-            }}
-          />
+              }}
+            />
+            <DragOverlay
+              dropAnimation={{
+                duration: 200,
+                easing: "cubic-bezier(0.18, 0.67, 0.6, 1.22)",
+              }}
+            >
+              {renderOverlay()}
+            </DragOverlay>
+          </DndContext>
         ) : null}
       </Box>
 
