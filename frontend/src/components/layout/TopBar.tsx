@@ -31,10 +31,12 @@ import {
   FileDownload,
   SmartToy,
   Settings,
+  School,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import { useProxyMode } from "@/hooks/useProxyMode";
+import { useLearningMode } from "@/hooks/useLearningMode";
 import type { Environment, Workspace } from "@/types";
 
 declare const __APP_VERSION__: string;
@@ -97,6 +99,7 @@ export default function TopBar({
   const theme = useTheme();
   const isDark = mode === "dark";
   const { proxyMode, setProxyMode, localAvailable } = useProxyMode();
+  const { learningMode } = useLearningMode();
   const [wsSearch, setWsSearch] = useState("");
 
   const currentWs = workspaces.find((w) => w.id === currentWorkspaceId);
@@ -338,6 +341,32 @@ export default function TopBar({
         </FormControl>
 
         <VerticalDivider />
+
+        {/* Learning Mode indicator */}
+        {learningMode && (
+          <>
+            <Tooltip title={t("learningMode.topBarTooltip")}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.5,
+                  px: 0.75,
+                  height: 28,
+                  borderRadius: 1,
+                  backgroundColor: alpha(theme.palette.info.main, isDark ? 0.15 : 0.1),
+                  border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
+                }}
+              >
+                <School sx={{ fontSize: 13, color: theme.palette.info.main }} />
+                <Typography variant="caption" sx={{ fontSize: "0.68rem", fontWeight: 600, color: theme.palette.info.main }}>
+                  {t("learningMode.title")}
+                </Typography>
+              </Box>
+            </Tooltip>
+            <VerticalDivider />
+          </>
+        )}
 
         {/* Proxy mode */}
         <Tooltip title={proxyMode === "local" ? t("proxyMode.localDesc") : t("proxyMode.serverDesc")}>

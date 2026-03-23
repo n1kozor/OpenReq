@@ -1064,5 +1064,18 @@
     "editorTitle": "API Specifikáció (OpenAPI / AsyncAPI)",
     "description": "Írd meg az OpenAPI vagy AsyncAPI specifikációdat YAML vagy JSON formátumban. Mentsd el a változások megőrzéséhez, majd használd az Előnézet gombot az interaktív dokumentáció megtekintéséhez (SwaggerUI OpenAPI-hoz, AsyncAPI megjelenítő AsyncAPI-hoz).",
     "preview": "Dokumentáció előnézet"
+  },
+  "learningMode": {
+    "title": "Tanuló mód",
+    "description": "Ha be van kapcsolva, minden kérés küldése előtt megjelenik egy megerősítő ablak, amely megmutatja, melyik környezetbe fog menni a kérés. Ideális tanuláshoz és a véletlen kérések elkerüléséhez.",
+    "enabled": "Tanuló mód aktív",
+    "confirmTitle": "Kérés megerősítése",
+    "confirmDescription": "Tanuló módban vagy. Kérlek, ellenőrizd a kérés részleteit és a célkörnyezetet küldés előtt.",
+    "requestInfo": "Kérés",
+    "targetEnvironment": "Célkörnyezet",
+    "noEnvironment": "Nincs környezet kiválasztva",
+    "liveWarning": "Figyelem: Egy ÉLŐ (LIVE) környezetbe készülsz kérést küldeni!",
+    "confirmSend": "Kérés küldése",
+    "topBarTooltip": "Tanuló mód aktív — megerősítés szükséges a kérések küldése előtt"
   }
 }

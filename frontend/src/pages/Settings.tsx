@@ -45,11 +45,13 @@ import {
   CheckCircle,
   Cancel,
   Refresh,
+  School,
 } from "@mui/icons-material";
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import { appSettingsApi, usersApi } from "@/api/endpoints";
+import { useLearningMode } from "@/hooks/useLearningMode";
 import type { User, OllamaModel, OpenAIModel } from "@/types";
 
 const LANGUAGES = [
@@ -69,6 +71,7 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
   const { t, i18n } = useTranslation();
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
+  const { learningMode, setLearningMode } = useLearningMode();
   const [proxyTimeout, setProxyTimeout] = useState("30");
   const [followRedirects, setFollowRedirects] = useState(true);
   const [saved, setSaved] = useState(false);
@@ -365,6 +368,41 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
                 ))}
               </Select>
             </FormControl>
+
+            {/* Learning Mode */}
+            <Box sx={{ mt: 1.5, pt: 1.5, borderTop: `1px solid ${isDark ? alpha("#8b949e", 0.1) : alpha("#64748b", 0.1)}` }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                <School sx={{ fontSize: 18, color: theme.palette.info.main }} />
+                <Typography variant="body2" fontWeight={600}>
+                  {t("learningMode.title")}
+                </Typography>
+                <Chip
+                  label="EDU"
+                  size="small"
+                  sx={{
+                    fontSize: "0.6rem",
+                    height: 18,
+                    fontWeight: 700,
+                    borderRadius: 1,
+                    background: `linear-gradient(135deg, ${theme.palette.info.main}, ${theme.palette.info.dark})`,
+                    color: "#fff",
+                  }}
+                />
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1, maxWidth: 400 }}>
+                {t("learningMode.description")}
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={learningMode}
+                    onChange={(e) => setLearningMode(e.target.checked)}
+                    color="info"
+                  />
+                }
+                label={t("learningMode.title")}
+              />
+            </Box>
           </Paper>
 
           {/* Request Defaults */}

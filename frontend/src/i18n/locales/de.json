@@ -1062,5 +1062,18 @@
     "editorTitle": "API-Spezifikation (OpenAPI / AsyncAPI)",
     "description": "Schreiben Sie Ihre OpenAPI- oder AsyncAPI-Spezifikation in YAML oder JSON. Speichern Sie, um Änderungen zu übernehmen, und verwenden Sie dann die Vorschau für die interaktive Dokumentation (SwaggerUI für OpenAPI, AsyncAPI-Viewer für AsyncAPI).",
     "preview": "Dokumentation Vorschau"
+  },
+  "learningMode": {
+    "title": "Lernmodus",
+    "description": "Wenn aktiviert, erscheint vor jeder Anfrage ein Bestätigungsdialog, der zeigt, an welche Umgebung die Anfrage gesendet wird. Ideal zum Lernen und zur Vermeidung versehentlicher Anfragen.",
+    "enabled": "Lernmodus ist aktiv",
+    "confirmTitle": "Anfrage bestätigen",
+    "confirmDescription": "Sie befinden sich im Lernmodus. Bitte überprüfen Sie die Anfragedetails und die Zielumgebung, bevor Sie senden.",
+    "requestInfo": "Anfrage",
+    "targetEnvironment": "Zielumgebung",
+    "noEnvironment": "Keine Umgebung ausgewählt",
+    "liveWarning": "Achtung: Sie sind dabei, eine Anfrage an eine LIVE-Umgebung zu senden!",
+    "confirmSend": "Anfrage senden",
+    "topBarTooltip": "Lernmodus ist aktiv — Bestätigung vor dem Senden von Anfragen erforderlich"
   }
 }

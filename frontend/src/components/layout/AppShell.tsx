@@ -50,6 +50,8 @@ import {
   importExportApi,
 } from "@/api/endpoints";
 import { useVariableGroups } from "@/hooks/useVariableGroups";
+import { useLearningMode } from "@/hooks/useLearningMode";
+import LearningModeConfirmDialog from "@/components/learning/LearningModeConfirmDialog";
 import { ProxyModeContext, useProxyModeProvider } from "@/hooks/useProxyMode";
 import { executeViaExtension, executeViaDesktop } from "@/services/localProxyExecutor";
 import type {
@@ -272,6 +274,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const { t } = useTranslation();
   const proxyModeValue = useProxyModeProvider();
   const { proxyMode, localChannel } = proxyModeValue;
+  const { learningMode } = useLearningMode();
+  const [learningConfirmOpen, setLearningConfirmOpen] = useState(false);
   const initialTabs = useMemo(() => restoreTabs(), []);
   const [view, setView] = useState<View>(() => {
     const saved = localStorage.getItem(VIEW_STORAGE_KEY);
@@ -1101,6 +1105,20 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       setLoading(false);
     }
   }, [tabs, activeTabId, selectedEnvId, updateTab, buildAuthConfig, fileToBase64, loadGlobals, loadEnvironments, loadCollections, workspaceGlobals, activeCollectionVars, activeEnvVariables, proxyMode, localChannel]);
+
+  // Learning mode: wrap handleSend to show confirmation dialog
+  const handleSendWithLearningMode = useCallback(() => {
+    if (learningMode) {
+      setLearningConfirmOpen(true);
+      return;
+    }
+    handleSend();
+  }, [learningMode, handleSend]);
+
+  const handleLearningConfirm = useCallback(() => {
+    setLearningConfirmOpen(false);
+    handleSend();
+  }, [handleSend]);
 
   const handleStopRequest = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -2331,7 +2349,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                   onApiKeyValueChange={(v) => updateTab(activeTabId, { apiKeyValue: v })}
                   onApiKeyPlacementChange={(v) => updateTab(activeTabId, { apiKeyPlacement: v })}
                   onOAuthConfigChange={(config) => updateTab(activeTabId, { oauthConfig: config })}
-                  onSend={handleSend}
+                  onSend={handleSendWithLearningMode}
                   onStop={handleStopRequest}
                   onSave={() => activeTab.savedRequestId ? handleQuickSave() : (ensureHasCollection() && setShowSaveRequest(true))}
                   environments={environments}
@@ -2403,7 +2421,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
                       onEnvOverrideChange={(id) => updateTab(activeTabId, { envOverrideId: id })}
                       requestSettings={activeTab.requestSettings ?? defaultRequestSettings}
                       onRequestSettingsChange={(s) => updateTab(activeTabId, { requestSettings: s })}
-                      onSend={handleSend}
+                      onSend={handleSendWithLearningMode}
                       onStop={handleStopRequest}
                       onSave={() => activeTab.savedRequestId ? handleQuickSave() : (ensureHasCollection() && setShowSaveRequest(true))}
                     />
@@ -2696,6 +2714,16 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       />
 
 
+
+      {/* Learning Mode Confirm Dialog */}
+      <LearningModeConfirmDialog
+        open={learningConfirmOpen}
+        onClose={() => setLearningConfirmOpen(false)}
+        onConfirm={handleLearningConfirm}
+        environment={environments.find((e) => e.id === (activeTab?.envOverrideId ?? selectedEnvId)) ?? null}
+        method={activeTab?.protocol === "graphql" ? "POST" : (activeTab?.method ?? "GET")}
+        url={activeTab?.url ?? ""}
+      />
 
       {/* Snackbar */}
       <Snackbar
