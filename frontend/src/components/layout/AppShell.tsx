@@ -984,6 +984,23 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         // Local proxy: prepare → local execute → complete
         const { data: prepared } = await proxyApi.prepare(proxyPayload, signal);
         // Update sent request with fully resolved payload from server
+        // Detect inherited auth from resolved headers
+        let prepAuthType = sentRequest.auth_type;
+        let prepAuthConfig = sentRequest.auth_config;
+        if (sentRequest.auth_type === "inherit" || sentRequest.auth_type === "none") {
+          const prepHeaders = prepared.headers || {};
+          const authH = Object.entries(prepHeaders).find(([k]) => k.toLowerCase() === "authorization");
+          if (authH) {
+            const [, val] = authH;
+            if (val.toLowerCase().startsWith("basic ")) {
+              prepAuthType = "basic";
+              prepAuthConfig = { inherited: "true" };
+            } else if (val.toLowerCase().startsWith("bearer ")) {
+              prepAuthType = "bearer";
+              prepAuthConfig = { inherited: "true" };
+            }
+          }
+        }
         const resolvedFromPrepare: SentRequestSnapshot = {
           method: (prepared.method || sentRequest.method) as import("@/types").HttpMethod,
           url: prepared.url,
@@ -992,8 +1009,8 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           body: prepared.body ?? undefined,
           body_type: (prepared.body_type as any) ?? sentRequest.body_type,
           form_data: (prepared.form_data as any) ?? sentRequest.form_data,
-          auth_type: sentRequest.auth_type,
-          auth_config: sentRequest.auth_config,
+          auth_type: prepAuthType,
+          auth_config: prepAuthConfig,
           environment_id: sentRequest.environment_id,
           secret_values: sentRequest.secret_values,
         };
@@ -1030,12 +1047,33 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       });
 
       if (response.resolved_request) {
+        // Detect inherited auth from resolved headers
+        const resolved = response.resolved_request;
+        let resolvedAuthType = sentRequest.auth_type;
+        let resolvedAuthConfig = sentRequest.auth_config;
+        if (sentRequest.auth_type === "inherit" || sentRequest.auth_type === "none") {
+          const resolvedHeaders: Record<string, string> = resolved.headers ?? sentRequest.headers;
+          const authHeader = Object.entries(resolvedHeaders).find(([k]) => k.toLowerCase() === "authorization");
+          if (authHeader) {
+            const [, val] = authHeader;
+            if (val.toLowerCase().startsWith("basic ")) {
+              resolvedAuthType = "basic";
+              resolvedAuthConfig = { inherited: "true" };
+            } else if (val.toLowerCase().startsWith("bearer ")) {
+              resolvedAuthType = "bearer";
+              resolvedAuthConfig = { inherited: "true" };
+            } else {
+              resolvedAuthType = "bearer";
+              resolvedAuthConfig = { inherited: "true" };
+            }
+          }
+        }
         updateTab(activeTabId, {
           sentRequest: {
             ...sentRequest,
-            ...response.resolved_request,
-            auth_type: sentRequest.auth_type,
-            auth_config: sentRequest.auth_config,
+            ...resolved,
+            auth_type: resolvedAuthType,
+            auth_config: resolvedAuthConfig,
             environment_id: sentRequest.environment_id,
             secret_values: sentRequest.secret_values,
           },

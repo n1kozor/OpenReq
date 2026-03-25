@@ -1021,6 +1021,101 @@ function ResponsePanel({ response, sentRequest, responseTimestamp, onClearRespon
                 )}
               </Box>
 
+              {/* Auth info */}
+              {sentRequest.auth_type && sentRequest.auth_type !== "none" && (
+                <Box
+                  sx={{
+                    borderRadius: 2,
+                    border: `1px solid ${alpha(isDark ? "#8b949e" : "#64748b", 0.1)}`,
+                    overflow: "hidden",
+                  }}
+                >
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600, fontSize: "0.78rem" }} colSpan={2}>
+                          {t("request.auth")}
+                        </TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell
+                          sx={{
+                            fontFamily: "'JetBrains Mono', monospace",
+                            fontSize: "0.75rem",
+                            color: "primary.main",
+                            fontWeight: 500,
+                            width: "30%",
+                          }}
+                        >
+                          {t("request.authType")}
+                        </TableCell>
+                        <TableCell
+                          sx={{
+                            fontFamily: "'JetBrains Mono', monospace",
+                            fontSize: "0.75rem",
+                          }}
+                        >
+                          <Chip
+                            label={sentRequest.auth_type === "inherit"
+                              ? t("request.inherit")
+                              : sentRequest.auth_type === "bearer"
+                                ? t("request.bearer")
+                                : sentRequest.auth_type === "basic"
+                                  ? t("request.basic")
+                                  : sentRequest.auth_type === "api_key"
+                                    ? t("request.apiKey")
+                                    : sentRequest.auth_type}
+                            size="small"
+                            sx={{ fontWeight: 600, fontSize: "0.7rem", height: 20 }}
+                          />
+                        </TableCell>
+                      </TableRow>
+                      {sentRequest.auth_config?.inherited === "true" ? (
+                        <TableRow>
+                          <TableCell
+                            sx={{
+                              fontFamily: "'JetBrains Mono', monospace",
+                              fontSize: "0.75rem",
+                              color: "text.secondary",
+                              fontStyle: "italic",
+                            }}
+                            colSpan={2}
+                          >
+                            {t("request.inheritDescription")}
+                          </TableCell>
+                        </TableRow>
+                      ) : sentRequest.auth_config && Object.entries(sentRequest.auth_config)
+                        .filter(([, v]) => v)
+                        .map(([key, value]) => (
+                          <TableRow key={key}>
+                            <TableCell
+                              sx={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: "0.75rem",
+                                color: "primary.main",
+                                fontWeight: 500,
+                              }}
+                            >
+                              {key}
+                            </TableCell>
+                            <TableCell
+                              sx={{
+                                fontFamily: "'JetBrains Mono', monospace",
+                                fontSize: "0.75rem",
+                                wordBreak: "break-all",
+                              }}
+                            >
+                              {maskSecrets(value)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </Box>
+              )}
+
               {sentHeaderEntries.length > 0 && (
                 <Box
                   sx={{
