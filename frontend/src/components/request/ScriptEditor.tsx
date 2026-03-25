@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -51,6 +51,53 @@ interface ScriptEditorProps {
   onScriptLanguageChange: (lang: ScriptLanguage) => void;
   variableGroups?: VariableGroup[];
   resolvedVariables?: Map<string, VariableInfo>;
+}
+
+// ── Language Detection ──
+
+/** Detect whether a script is JavaScript or Python based on syntax patterns. */
+export function detectScriptLanguage(script: string): "javascript" | "python" | null {
+  if (!script || !script.trim()) return null;
+
+  const lines = script.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("//") && !l.startsWith("#"));
+  if (lines.length === 0) {
+    // Only comments — check comment style
+    const allLines = script.split("\n").map((l) => l.trim()).filter(Boolean);
+    const pyComments = allLines.filter((l) => l.startsWith("#")).length;
+    const jsComments = allLines.filter((l) => l.startsWith("//")).length;
+    if (pyComments > 0 && jsComments === 0) return "python";
+    if (jsComments > 0 && pyComments === 0) return "javascript";
+    return null;
+  }
+
+  let jsScore = 0;
+  let pyScore = 0;
+
+  const full = script;
+
+  // Strong JS indicators
+  if (/console\.log\s*\(/.test(full)) jsScore += 3;
+  if (/===|!==/.test(full)) jsScore += 3;
+  if (/\bconst\s|let\s|var\s/.test(full)) jsScore += 3;
+  if (/String\(|Number\(|Boolean\(/.test(full)) jsScore += 2;
+  if (/\.includes\(|\.startsWith\(|\.endsWith\(/.test(full)) jsScore += 1;
+  if (/\bfunction\b|\b=>\b/.test(full)) jsScore += 2;
+  if (/JSON\.parse|JSON\.stringify/.test(full)) jsScore += 1;
+  if (/Date\.now\(\)/.test(full)) jsScore += 2;
+
+  // Strong Python indicators
+  if (/req\.log\s*\(/.test(full)) pyScore += 3;
+  if (/\b==\b/.test(full) && !/===/.test(full)) pyScore += 1;
+  if (/\bstr\(|int\(|float\(|bool\(/.test(full)) pyScore += 3;
+  if (/\blen\(/.test(full)) pyScore += 3;
+  if (/\bis not None\b|\bis None\b/.test(full)) pyScore += 3;
+  if (/\bTrue\b|\bFalse\b|\bNone\b/.test(full)) pyScore += 2;
+  if (/\bimport\s/.test(full)) pyScore += 2;
+  if (/\bassert\b/.test(full)) pyScore += 2;
+  if (/\btime\.time\(\)/.test(full)) pyScore += 2;
+
+  if (jsScore === pyScore) return null;
+  return jsScore > pyScore ? "javascript" : "python";
 }
 
 // ── Templates ──
@@ -110,6 +157,19 @@ export default function ScriptEditor({
   const [scriptTab, setScriptTab] = useState<"pre" | "post" | "output">("pre");
   const isDark = theme.palette.mode === "dark";
   const editorTheme = getVariableTheme(isDark);
+
+  // Auto-detect script language on mount / when scripts change externally
+  const hasAutoDetected = useRef(false);
+  useEffect(() => {
+    if (hasAutoDetected.current) return;
+    const scripts = [preRequestScript, postResponseScript].filter(Boolean).join("\n");
+    if (!scripts.trim()) return;
+    const detected = detectScriptLanguage(scripts);
+    if (detected && detected !== scriptLanguage) {
+      onScriptLanguageChange(detected);
+    }
+    hasAutoDetected.current = true;
+  }, [preRequestScript, postResponseScript]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isJS = scriptLanguage === "javascript";
   const editorLang = isJS ? "javascript" : "python";

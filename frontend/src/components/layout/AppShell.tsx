@@ -33,7 +33,7 @@ import SDKGeneratorDialog from "@/components/sdk/SDKGeneratorDialog";
 import CollectionRunnerDialog from "@/components/collection/CollectionRunnerDialog";
 import DocGeneratorDialog from "@/components/collection/DocGeneratorDialog";
 import ShareManageDialog from "@/components/share/ShareManageDialog";
-import ScriptEditor from "@/components/request/ScriptEditor";
+import ScriptEditor, { detectScriptLanguage } from "@/components/request/ScriptEditor";
 import PanelGridLayout from "./PanelGridLayout";
 import AIAgentDrawer, { DRAWER_WIDTH, type ApplyScriptPayload } from "@/components/ai/AIAgentDrawer";
 import TestFlowCanvas from "@/components/testflow/TestFlowCanvas";
@@ -1369,6 +1369,11 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       if (req.auth_type) tab.authType = req.auth_type as AuthType;
       if (req.pre_request_script) tab.preRequestScript = req.pre_request_script;
       if (req.post_response_script) tab.postResponseScript = req.post_response_script;
+
+      // Auto-detect script language from content
+      const scripts = [req.pre_request_script, req.post_response_script].filter(Boolean).join("\n");
+      const detected = detectScriptLanguage(scripts);
+      if (detected) tab.scriptLanguage = detected;
 
       // Restore auth_config
       if (req.auth_config) {
