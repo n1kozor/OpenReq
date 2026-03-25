@@ -617,15 +617,18 @@ async def _run_prepare_phase(
 
     # ── 4. Auth: request-level > folder tree > collection ──
     if proxy_req.auth_type and proxy_req.auth_type not in (AuthType.NONE, AuthType.INHERIT):
+        # Explicit auth on the request (bearer, basic, api_key, oauth2)
         resolved_ac = _resolve_auth_config(proxy_req.auth_config, merged_vars)
         headers = _apply_auth(headers, proxy_req.auth_type, resolved_ac)
-    else:
+    elif proxy_req.auth_type != AuthType.NONE:
+        # Inherit or unset → walk folder tree / collection
         inherited_type, inherited_config = _resolve_inherited_auth(
             db, proxy_req.collection_item_id, collection
         )
         if inherited_type and inherited_type not in (AuthType.NONE, AuthType.INHERIT):
             resolved_ac = _resolve_auth_config(inherited_config, merged_vars)
             headers = _apply_auth(headers, inherited_type, resolved_ac)
+    # else: auth_type is explicitly "none" → no auth applied
 
     return (
         url, req_method, headers, body, params,
