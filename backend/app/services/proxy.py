@@ -602,10 +602,14 @@ async def _run_prepare_phase(
         _persist_scope_changes(db, combined_pre, proxy_req.collection_id, proxy_req.environment_id)
 
     # ── 3. Resolve variables in URL, headers, body, params ──
-    url = _resolve_variables(req_url, merged_vars)
+    url = _resolve_variables(req_url, merged_vars).strip()
     headers = {k: _resolve_variables(v, merged_vars) for k, v in req_headers.items()}
     body = _resolve_variables(req_body, merged_vars) if req_body else None
     params = {k: _resolve_variables(v, merged_vars) for k, v in req_params.items()}
+
+    # ── 3a. Ensure URL has a protocol ──
+    if url and not url.lower().startswith(("http://", "https://")):
+        url = "https://" + url
 
     # ── 3b. URL encoding ──
     rs = proxy_req.request_settings

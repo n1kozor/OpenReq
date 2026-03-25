@@ -211,7 +211,9 @@
     "globalsDescription": "Workspace szintű változók, minden kérésben elérhetők. Legalacsonyabb prioritás — a kollekció és környezeti változók felülírják.",
     "deleteConfirmTitle": "Környezet törlése",
     "deleteConfirmDesc": "Írd be, hogy \"delete\" a {{name}} törlésének megerősítéséhez.",
-    "deleteConfirmPlaceholder": "Írd be: delete"
+    "deleteConfirmPlaceholder": "Írd be: delete",
+    "deleteVariableTitle": "Változó törlése",
+    "deleteVariableDesc": "Biztosan törölni szeretnéd a \"{{name}}\" változót?"
   },
   "workspace": {
     "new": "Új munkaterület",

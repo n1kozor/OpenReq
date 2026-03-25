@@ -213,15 +213,24 @@ export default function ShareManageDialog({
                         sx={{ fontSize: 10, height: 20 }}
                       />
                     </Box>
-                    <Typography
-                      variant="caption"
-                      fontFamily="monospace"
-                      color="text.secondary"
-                      noWrap
-                      sx={{ display: "block", mb: 0.5 }}
-                    >
-                      {window.location.origin}{share.share_url}
-                    </Typography>
+                    <Tooltip title={t("share.copyLink")}>
+                      <Typography
+                        variant="caption"
+                        fontFamily="monospace"
+                        color="text.secondary"
+                        onClick={() => copyLink(share)}
+                        sx={{
+                          display: "block",
+                          mb: 0.5,
+                          wordBreak: "break-all",
+                          cursor: "pointer",
+                          userSelect: "text",
+                          "&:hover": { color: "primary.main" },
+                        }}
+                      >
+                        {window.location.origin}{share.share_url}
+                      </Typography>
+                    </Tooltip>
                     <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
                       <Typography variant="caption" color="text.secondary">
                         {t("share.viewCount")}: {share.view_count}

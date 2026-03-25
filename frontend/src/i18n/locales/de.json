@@ -210,7 +210,9 @@
     "globalsDescription": "Workspace-übergreifende Variablen, die in allen Anfragen verfügbar sind. Niedrigste Priorität — werden durch Sammlungs- und Umgebungsvariablen überschrieben.",
     "deleteConfirmTitle": "Umgebung löschen",
     "deleteConfirmDesc": "Gib \"delete\" ein, um das Löschen von {{name}} zu bestätigen.",
-    "deleteConfirmPlaceholder": "Gib delete zur Bestätigung ein"
+    "deleteConfirmPlaceholder": "Gib delete zur Bestätigung ein",
+    "deleteVariableTitle": "Variable löschen",
+    "deleteVariableDesc": "Möchtest du die Variable \"{{name}}\" wirklich löschen?"
   },
   "workspace": {
     "new": "Neuer Arbeitsbereich",

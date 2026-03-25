@@ -72,8 +72,12 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
   const theme = useTheme();
   const isDark = theme.palette.mode === "dark";
   const { learningMode, setLearningMode } = useLearningMode();
-  const [proxyTimeout, setProxyTimeout] = useState("30");
-  const [followRedirects, setFollowRedirects] = useState(true);
+  const [proxyTimeout, setProxyTimeout] = useState(
+    () => localStorage.getItem("openreq-proxy-timeout") || "30"
+  );
+  const [followRedirects, setFollowRedirects] = useState(
+    () => localStorage.getItem("openreq-follow-redirects") !== "false"
+  );
   const [saved, setSaved] = useState(false);
 
   // AI provider state
@@ -152,12 +156,30 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
     localStorage.setItem("openreq-lang", lang);
   };
 
-  const handleSave = () => {
-    localStorage.setItem("openreq-proxy-timeout", proxyTimeout);
-    localStorage.setItem("openreq-follow-redirects", String(followRedirects));
+  // Auto-save request defaults on change
+  const showSavedFlash = useCallback(() => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
+  }, []);
+
+  const handleProxyTimeoutChange = useCallback((val: string) => {
+    setProxyTimeout(val);
+    localStorage.setItem("openreq-proxy-timeout", val);
+  }, []);
+
+  const handleFollowRedirectsChange = useCallback((val: boolean) => {
+    setFollowRedirects(val);
+    localStorage.setItem("openreq-follow-redirects", String(val));
+    showSavedFlash();
+  }, [showSavedFlash]);
+
+  // Debounced save for proxy timeout (fires after user stops typing)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      localStorage.setItem("openreq-proxy-timeout", proxyTimeout);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [proxyTimeout]);
 
   const handleSaveKey = async () => {
     if (!openaiKey.trim()) return;
@@ -330,7 +352,7 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
       </Box>
 
       {saved && (
-        <Alert severity="success" sx={{ borderRadius: 2 }}>
+        <Alert severity="success" sx={{ borderRadius: 2, position: "sticky", top: 0, zIndex: 10 }}>
           {t("common.save")}!
         </Alert>
       )}
@@ -420,14 +442,14 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
                 type="number"
                 size="small"
                 value={proxyTimeout}
-                onChange={(e) => setProxyTimeout(e.target.value)}
+                onChange={(e) => handleProxyTimeoutChange(e.target.value)}
                 sx={{ maxWidth: 200 }}
               />
               <FormControlLabel
                 control={
                   <Switch
                     checked={followRedirects}
-                    onChange={(e) => setFollowRedirects(e.target.checked)}
+                    onChange={(e) => handleFollowRedirectsChange(e.target.checked)}
                   />
                 }
                 label={t("settings.followRedirects")}
@@ -785,17 +807,6 @@ export default function Settings({ mode, onToggleTheme, user, onClose }: Setting
             </Box>
           </Paper>
 
-          <Button
-            variant="contained"
-            onClick={handleSave}
-            sx={{
-              alignSelf: "flex-start",
-              px: 4,
-              borderRadius: 2,
-            }}
-          >
-            {t("common.save")}
-          </Button>
         </Box>
 
         {/* Right column: User management */}

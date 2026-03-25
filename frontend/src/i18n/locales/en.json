@@ -211,7 +211,9 @@
     "globalsDescription": "Workspace-level variables available in all requests. Lowest priority — overridden by collection and environment variables.",
     "deleteConfirmTitle": "Delete Environment",
     "deleteConfirmDesc": "Type \"delete\" to confirm deleting {{name}}.",
-    "deleteConfirmPlaceholder": "Type delete to confirm"
+    "deleteConfirmPlaceholder": "Type delete to confirm",
+    "deleteVariableTitle": "Delete Variable",
+    "deleteVariableDesc": "Are you sure you want to delete the variable \"{{name}}\"?"
   },
   "workspace": {
     "new": "New Workspace",
