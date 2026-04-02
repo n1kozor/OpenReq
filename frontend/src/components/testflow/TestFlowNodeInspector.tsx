@@ -163,17 +163,6 @@ export default function TestFlowNodeInspector({
           </>
         )}
 
-        {nodeType === "group" && (
-          <TextField
-            label={t("testFlow.nodeConfig.groupColor")}
-            size="small"
-            fullWidth
-            type="color"
-            value={(config.color as string) || "#3b82f6"}
-            onChange={(e) => updateConfig({ color: e.target.value })}
-          />
-        )}
-
         {nodeType === "websocket" && (
           <>
             <NodeHelpBox text={t("testFlow.nodeHelp.websocket")} />
@@ -315,66 +304,92 @@ function HttpRequestConfig({
   const selectedRequest = allRequests.find((r) => r.id === (config.request_id as string)) || null;
 
   return (
-    <Autocomplete
-      size="small"
-      fullWidth
-      options={allRequests}
-      value={selectedRequest}
-      onChange={(_, req) => {
-        updateConfig({
-          request_id: req?.id || undefined,
-          request_name_hint: req?.name,
-          collection_id: req?.collectionId || undefined,
-        });
-      }}
-      getOptionLabel={(opt) => `${opt.method} ${opt.name}`}
-      filterOptions={(options, { inputValue }) => {
-        const q = inputValue.toLowerCase();
-        return options.filter(
-          (o) =>
-            o.name.toLowerCase().includes(q) ||
-            o.method.toLowerCase().includes(q) ||
-            o.collectionName.toLowerCase().includes(q),
-        );
-      }}
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          label={t("testFlow.nodeConfig.selectRequest")}
-          placeholder={t("testFlow.nodeConfig.searchRequests")}
-          slotProps={{
-            input: {
-              ...params.InputProps,
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search sx={{ fontSize: 16, color: "text.secondary" }} />
-                </InputAdornment>
-              ),
-            },
-          }}
-        />
-      )}
-      renderOption={(props, opt) => (
-        <li {...props} key={opt.id}>
-          <Box sx={{ display: "flex", alignItems: "center", width: "100%", gap: 0.75 }}>
-            <Box
-              component="span"
-              sx={{ fontWeight: 700, color: methodColor(opt.method), fontSize: "0.65rem", minWidth: 32 }}
-            >
-              {opt.method}
-            </Box>
-            <Typography variant="body2" noWrap sx={{ flex: 1, fontSize: "0.8rem" }}>
-              {opt.name}
+    <>
+      {selectedRequest && (
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, p: 1, border: "1px solid", borderColor: "divider", borderRadius: 1, bgcolor: "action.hover" }}>
+          <Box
+            component="span"
+            sx={{ fontWeight: 700, color: methodColor(selectedRequest.method), fontSize: "0.7rem", minWidth: 36 }}
+          >
+            {selectedRequest.method}
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={600} noWrap sx={{ fontSize: "0.8rem" }}>
+              {selectedRequest.name}
             </Typography>
-            <Typography variant="caption" sx={{ color: "text.secondary", fontSize: "0.65rem", flexShrink: 0 }}>
-              {opt.collectionName}
+            <Typography variant="caption" color="text.secondary" noWrap sx={{ fontSize: "0.65rem" }}>
+              {selectedRequest.collectionName}
             </Typography>
           </Box>
-        </li>
+        </Box>
       )}
-      isOptionEqualToValue={(opt, val) => opt.id === val.id}
-      noOptionsText={t("testFlow.nodeConfig.noRequest")}
-    />
+      {selectedRequest && (
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: "0.65rem", fontStyle: "italic" }}>
+          {t("testFlow.nodeConfig.doubleClickToOpen")}
+        </Typography>
+      )}
+      <Autocomplete
+        size="small"
+        fullWidth
+        options={allRequests}
+        value={selectedRequest}
+        onChange={(_, req) => {
+          updateConfig({
+            request_id: req?.id || undefined,
+            request_name_hint: req?.name,
+            collection_id: req?.collectionId || undefined,
+            method: req?.method || "GET",
+          });
+        }}
+        getOptionLabel={(opt) => `${opt.method} ${opt.name}`}
+        filterOptions={(options, { inputValue }) => {
+          const q = inputValue.toLowerCase();
+          return options.filter(
+            (o) =>
+              o.name.toLowerCase().includes(q) ||
+              o.method.toLowerCase().includes(q) ||
+              o.collectionName.toLowerCase().includes(q),
+          );
+        }}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={selectedRequest ? t("testFlow.nodeConfig.changeRequest") : t("testFlow.nodeConfig.selectRequest")}
+            placeholder={t("testFlow.nodeConfig.searchRequests")}
+            slotProps={{
+              input: {
+                ...params.InputProps,
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search sx={{ fontSize: 16, color: "text.secondary" }} />
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
+        )}
+        renderOption={(props, opt) => (
+          <li {...props} key={opt.id}>
+            <Box sx={{ display: "flex", alignItems: "center", width: "100%", gap: 0.75 }}>
+              <Box
+                component="span"
+                sx={{ fontWeight: 700, color: methodColor(opt.method), fontSize: "0.65rem", minWidth: 32 }}
+              >
+                {opt.method}
+              </Box>
+              <Typography variant="body2" noWrap sx={{ flex: 1, fontSize: "0.8rem" }}>
+                {opt.name}
+              </Typography>
+              <Typography variant="caption" sx={{ color: "text.secondary", fontSize: "0.65rem", flexShrink: 0 }}>
+                {opt.collectionName}
+              </Typography>
+            </Box>
+          </li>
+        )}
+        isOptionEqualToValue={(opt, val) => opt.id === val.id}
+        noOptionsText={t("testFlow.nodeConfig.noRequest")}
+      />
+    </>
   );
 }
 

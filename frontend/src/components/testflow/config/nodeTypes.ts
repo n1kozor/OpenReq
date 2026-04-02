@@ -123,5 +123,4 @@ export const DRAGGABLE_NODE_TYPES: TestFlowNodeType[] = [
   "condition",
   "loop",
   "set_variable",
-  "group",
 ];

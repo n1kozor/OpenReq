@@ -6,10 +6,7 @@ import { nodeStatusStyles } from "./shared";
 export default function HttpRequestNode({ data, selected }: NodeProps) {
   const d = data as Record<string, unknown>;
   const config = (d.config ?? {}) as Record<string, unknown>;
-  const method =
-    (config.inline_request as Record<string, string>)?.method ||
-    (config.request_name_hint as string) ||
-    "GET";
+  const method = (config.method as string) || "GET";
   const runStatus = d._runStatus as string | undefined;
   const animating = d._animating as boolean | undefined;
   const statusCode = d._statusCode as number | undefined;

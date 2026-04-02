@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Drawer,
-  Toolbar,
   ListItemButton,
   ListItemIcon,
   ListItemText,
@@ -35,7 +34,6 @@ import {
   IosShare,
   Settings,
 } from "@mui/icons-material";
-import { List as VirtualList } from "react-window";
 import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import type { Collection, CollectionItem } from "@/types";
@@ -97,7 +95,7 @@ type SidebarRow =
   | { type: "item"; item: CollectionItem; depth: number; forceOpen: boolean; collectionId: string }
   | { type: "loading"; collectionId: string; depth: number };
 
-/** Drag payload stored in a ref (survives VirtualList re-renders) */
+/** Drag payload stored in a ref */
 interface DragInfo {
   kind: "collection" | "item";
   id: string;
@@ -158,21 +156,20 @@ export default function Sidebar({
   const [itemMenuTarget, setItemMenuTarget] = useState<CollectionItem | null>(null);
   const [itemMenuCollectionId, setItemMenuCollectionId] = useState<string | null>(null);
   const listContainerRef = useRef<HTMLDivElement | null>(null);
-  const [listHeight, setListHeight] = useState(0);
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
   const [inlineEditValue, setInlineEditValue] = useState("");
 
   /* ── Drag state ── */
   const dragRef = useRef<DragInfo | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const [overIndex, setOverIndex] = useState<number | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{ rowIndex: number; position: "before" | "after" | "inside" } | null>(null);
 
   // Cleanup on drag end anywhere
   useEffect(() => {
     const cleanup = () => {
       dragRef.current = null;
       setDraggingId(null);
-      setOverIndex(null);
+      setDropIndicator(null);
     };
     document.addEventListener("dragend", cleanup);
     return () => document.removeEventListener("dragend", cleanup);
@@ -247,17 +244,6 @@ export default function Sidebar({
     });
   }, [collections, collectionTrees, searchTerm]);
 
-  useEffect(() => {
-    const el = listContainerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      setListHeight(entry.contentRect.height);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
 
   const baseRows = useMemo(() => {
     const rows: SidebarRow[] = [];
@@ -293,25 +279,23 @@ export default function Sidebar({
     return rows;
   }, [collectionViews, collectionOpen, folderOpen, collectionTrees, collectionTreeLoading]);
 
-  /* ── Live-reordered rows: move dragged item to overIndex position ── */
-  const flatRows = useMemo(() => {
-    const drag = dragRef.current;
-    if (!drag || overIndex === null || !draggingId) return baseRows;
-
-    const fromIdx = drag.rowIndex;
-    if (fromIdx === overIndex || fromIdx < 0 || fromIdx >= baseRows.length) return baseRows;
-
-    const rows = [...baseRows];
-    const moved = rows.splice(fromIdx, 1)[0];
-    if (!moved) return baseRows;
-    rows.splice(overIndex, 0, moved);
-    // Update the stored rowIndex so the next dragover uses the right position
-    drag.rowIndex = overIndex;
-    return rows;
-  }, [baseRows, draggingId, overIndex]);
-
-  const itemSize = (index: number) =>
-    flatRows[index]?.type === "collection" ? COLLECTION_ROW_HEIGHT : ITEM_ROW_HEIGHT;
+  // Drop indicator line component
+  const DropLine = ({ position }: { position: "before" | "after" }) => (
+    <Box
+      sx={{
+        position: "absolute",
+        left: 8,
+        right: 8,
+        height: 2,
+        borderRadius: 1,
+        backgroundColor: theme.palette.primary.main,
+        boxShadow: `0 0 6px ${alpha(theme.palette.primary.main, 0.5)}`,
+        zIndex: 10,
+        pointerEvents: "none",
+        ...(position === "before" ? { top: -1 } : { bottom: -1 }),
+      }}
+    />
+  );
 
   /* ── Drag handlers ── */
   const startDrag = useCallback((e: React.DragEvent, info: DragInfo) => {
@@ -323,11 +307,6 @@ export default function Sidebar({
     } else {
       e.dataTransfer.setData("application/openreq-item", JSON.stringify({ itemId: info.id, collectionId: info.collectionId }));
     }
-    // Use a tiny transparent image so only our opacity change shows
-    const img = new Image();
-    img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-    e.dataTransfer.setDragImage(img, 0, 0);
-    // Defer so the VirtualList doesn't cancel the drag
     requestAnimationFrame(() => setDraggingId(info.id));
   }, []);
 
@@ -335,70 +314,78 @@ export default function Sidebar({
     if (!dragRef.current) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    setOverIndex(rowIndex);
-  }, []);
+
+    const row = baseRows[rowIndex];
+    if (!row) return;
+
+    // Don't allow drop on yourself
+    const dragId = dragRef.current.id;
+    if (row.type === "collection" && row.collection.id === dragId) {
+      setDropIndicator(null);
+      return;
+    }
+    if (row.type === "item" && row.item.id === dragId) {
+      setDropIndicator(null);
+      return;
+    }
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+
+    // For folders: top third = before, middle third = inside, bottom third = after
+    if (row.type === "item" && row.item.is_folder) {
+      if (y < height * 0.3) {
+        setDropIndicator({ rowIndex, position: "before" });
+      } else if (y > height * 0.7) {
+        setDropIndicator({ rowIndex, position: "after" });
+      } else {
+        setDropIndicator({ rowIndex, position: "inside" });
+      }
+    } else {
+      // For non-folders and collections: top half = before, bottom half = after
+      setDropIndicator({ rowIndex, position: y < height / 2 ? "before" : "after" });
+    }
+  }, [baseRows]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     const drag = dragRef.current;
-    if (!drag) return;
+    const indicator = dropIndicator;
 
-    // The rows are already visually reordered — now figure out what API call to make
-    // We find the current row at drag.rowIndex (which was updated during drags)
-    const currentRows = flatRows;
-    const nowAt = drag.rowIndex;
-    const row = currentRows[nowAt];
-    if (!row) return;
-
-    if (drag.kind === "collection") {
-      // Find nearest adjacent collection row to reorder relative to
-      let targetColId: string | null = null;
-      for (let i = nowAt + 1; i < currentRows.length; i++) {
-        const r = currentRows[i];
-        if (r && r.type === "collection") { targetColId = r.collection.id; break; }
-      }
-      if (!targetColId) {
-        for (let i = nowAt - 1; i >= 0; i--) {
-          const r = currentRows[i];
-          if (r && r.type === "collection") { targetColId = r.collection.id; break; }
-        }
-      }
-      if (targetColId) onReorderCollection(drag.id, targetColId);
-    } else if (drag.kind === "item" && drag.collectionId) {
-      // Find the drop target: what's the row right before/after?
-      // Check if we're inside a folder (the previous item row is a folder and we're at depth+1)
-      const prevRow = nowAt > 0 ? currentRows[nowAt - 1] ?? null : null;
-      const nextRow = nowAt < currentRows.length - 1 ? currentRows[nowAt + 1] ?? null : null;
-
-      if (prevRow?.type === "collection") {
-        // Dropped right under a collection header = move to root
-        onMoveItem(drag.collectionId, drag.id, null);
-      } else if (prevRow?.type === "item" && prevRow.item.is_folder) {
-        // Dropped right after a folder = move into that folder
-        onMoveItem(drag.collectionId, drag.id, prevRow.item.id);
-      } else {
-        // Reorder relative to nearest sibling in same collection
-        const target = prevRow?.type === "item" && prevRow.collectionId === drag.collectionId
-          ? prevRow.item
-          : nextRow?.type === "item" && nextRow.collectionId === drag.collectionId
-            ? nextRow.item
-            : null;
-        if (target && target.id !== drag.id) {
-          onReorderItem(drag.collectionId, drag.id, target.id);
-        }
-      }
-    }
-
-    // Cleanup
+    // Reset state
     dragRef.current = null;
     setDraggingId(null);
-    setOverIndex(null);
-  }, [flatRows, onReorderCollection, onReorderItem, onMoveItem]);
+    setDropIndicator(null);
+
+    if (!drag || !indicator) return;
+
+    const targetRow = baseRows[indicator.rowIndex];
+    if (!targetRow) return;
+
+    if (drag.kind === "collection") {
+      // Collection reorder: find the target collection
+      if (targetRow.type === "collection") {
+        onReorderCollection(drag.id, targetRow.collection.id);
+      }
+    } else if (drag.kind === "item" && drag.collectionId) {
+      if (indicator.position === "inside" && targetRow.type === "item" && targetRow.item.is_folder) {
+        // Drop into folder
+        onMoveItem(drag.collectionId, drag.id, targetRow.item.id);
+      } else if (targetRow.type === "collection") {
+        // Drop onto collection header = move to root
+        onMoveItem(drag.collectionId, drag.id, null);
+      } else if (targetRow.type === "item") {
+        // Reorder relative to target item
+        onReorderItem(drag.collectionId, drag.id, targetRow.item.id);
+      }
+    }
+  }, [baseRows, dropIndicator, onReorderCollection, onReorderItem, onMoveItem]);
 
   const handleDragEnd = useCallback(() => {
     dragRef.current = null;
     setDraggingId(null);
-    setOverIndex(null);
+    setDropIndicator(null);
   }, []);
 
   return (
@@ -420,8 +407,6 @@ export default function Sidebar({
         },
       }}
     >
-      <Toolbar variant="dense" sx={{ minHeight: "40px !important" }} />
-
       {/* Search */}
       <Box sx={{ px: 1, py: 0.75 }}>
         <TextField
@@ -531,14 +516,22 @@ export default function Sidebar({
         </Box>
       </Box>
 
-      {/* Collection tree */}
+      {/* Collection tree — plain scrollable list (no virtualization) */}
       <Box
         ref={listContainerRef}
         sx={{
           flexGrow: 1,
           minHeight: 0,
-          position: "relative",
+          overflowY: "auto",
+          overflowX: "hidden",
+          "&::-webkit-scrollbar": { width: 6 },
+          "&::-webkit-scrollbar-thumb": { backgroundColor: alpha(theme.palette.text.primary, 0.15), borderRadius: 3 },
         }}
+        onDragOver={(e) => {
+          // Allow drops in the empty area below all rows
+          if (dragRef.current) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }
+        }}
+        onDrop={handleDrop}
       >
         {collectionViews.filter((c) => c.visible).length === 0 ? (
           <Typography
@@ -548,263 +541,83 @@ export default function Sidebar({
           >
             {t("collection.empty")}
           </Typography>
-        ) : listHeight > 0 ? (
-          <VirtualList
-            style={{ height: listHeight, width: "100%" }}
-            rowCount={flatRows.length}
-            rowHeight={(index) => itemSize(index)}
-            overscanCount={8}
-            rowProps={{}}
-            rowComponent={({ index, style, ariaAttributes }) => {
-              const row = flatRows[index];
-              if (!row) return null;
+        ) : (
+          baseRows.map((row, index) => {
+            const isDropBefore = dropIndicator?.rowIndex === index && dropIndicator.position === "before";
+            const isDropAfter = dropIndicator?.rowIndex === index && dropIndicator.position === "after";
+            const isDropInside = dropIndicator?.rowIndex === index && dropIndicator.position === "inside";
 
-              if (row.type === "collection") {
-                const col = row.collection;
-                const isOpen = row.forceOpen || collectionOpen[col.id] === true;
-                const isLoaded = !!collectionTrees[col.id];
-                const isLoading = !!collectionTreeLoading[col.id];
-                const isDraggedItem = draggingId === col.id;
-
-                return (
-                  <Box
-                    style={style}
-                    {...ariaAttributes}
-                    draggable
-                    onDragStart={(e) => startDrag(e, { kind: "collection", id: col.id, collectionId: null, rowIndex: index })}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDrop={handleDrop}
-                    onDragEnd={handleDragEnd}
-                  >
-                    <ListItemButton
-                      sx={{
-                        py: 0.5,
-                        minHeight: COLLECTION_ROW_HEIGHT,
-                        borderRadius: 0,
-                        mx: 0,
-                        opacity: isDraggedItem ? 0.4 : 1,
-                        transition: "opacity 0.15s, transform 0.15s",
-                      }}
-                      onClick={() => onOpenCollection(col.id)}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        handleColMenu(e, col);
-                      }}
-                    >
-                      <ListItemIcon
-                        sx={{
-                          minWidth: 24,
-                          cursor: "pointer",
-                          borderRadius: 1,
-                          "&:hover": { backgroundColor: alpha(theme.palette.text.primary, 0.08) },
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!row.forceOpen) {
-                            const willOpen = collectionOpen[col.id] !== true;
-                            if (willOpen && !isLoaded && !isLoading) {
-                              onRequestCollectionTree(col.id);
-                            }
-                            setCollectionOpen((prev) => ({ ...prev, [col.id]: !(prev[col.id] === true) }));
-                          }
-                        }}
-                      >
-                        {isOpen ? (
-                          <ExpandMore sx={{ fontSize: 16, color: "text.secondary" }} />
-                        ) : (
-                          <ChevronRight sx={{ fontSize: 16, color: "text.secondary" }} />
-                        )}
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={col.name}
-                        primaryTypographyProps={{
-                          variant: "body2",
-                          fontWeight: 600,
-                          fontSize: 12.5,
-                          noWrap: true,
-                        }}
-                      />
-                      <ListItemSecondaryAction>
-                        <IconButton
-                          size="small"
-                          onClick={(e) => handleColMenuFromButton(e, col)}
-                          sx={{
-                            width: 22,
-                            height: 22,
-                            opacity: 0,
-                            transition: "opacity 0.15s",
-                            ".MuiListItemButton-root:hover &": { opacity: 1 },
-                          }}
-                        >
-                          <MoreVert sx={{ fontSize: 14 }} />
-                        </IconButton>
-                      </ListItemSecondaryAction>
-                    </ListItemButton>
-                  </Box>
-                );
-              }
-
-              if (row.type === "loading") {
-                return (
-                  <Box style={style} {...ariaAttributes}>
-                    <ListItemButton
-                      sx={{
-                        pl: 1.5 + row.depth * 1.5,
-                        py: 0.4,
-                        minHeight: ITEM_ROW_HEIGHT,
-                        borderRadius: 0,
-                        mx: 0,
-                      }}
-                    >
-                      <ListItemText
-                        primary={t("common.loading")}
-                        primaryTypographyProps={{
-                          variant: "body2",
-                          fontSize: 12.5,
-                          noWrap: true,
-                          color: "text.secondary",
-                        }}
-                      />
-                    </ListItemButton>
-                  </Box>
-                );
-              }
-
-              const item = row.item;
-              const depth = row.depth;
-              const open = row.forceOpen || folderOpen[item.id] === true;
-              const isDraggedItem = draggingId === item.id;
+            if (row.type === "collection") {
+              const col = row.collection;
+              const isOpen = row.forceOpen || collectionOpen[col.id] === true;
+              const isLoaded = !!collectionTrees[col.id];
+              const isLoading = !!collectionTreeLoading[col.id];
+              const isDraggedItem = draggingId === col.id;
 
               return (
                 <Box
-                  style={style}
-                  {...ariaAttributes}
+                  key={`col-${col.id}`}
+                  sx={{ position: "relative" }}
                   draggable
-                  onDragStart={(e) => startDrag(e, { kind: "item", id: item.id, collectionId: row.collectionId, rowIndex: index })}
+                  onDragStart={(e) => startDrag(e, { kind: "collection", id: col.id, collectionId: null, rowIndex: index })}
                   onDragOver={(e) => handleDragOver(e, index)}
-                  onDrop={handleDrop}
+                  onDrop={(e) => { e.stopPropagation(); handleDrop(e); }}
                   onDragEnd={handleDragEnd}
                 >
+                  {isDropBefore && <DropLine position="before" />}
                   <ListItemButton
                     sx={{
-                      pl: 1.5 + depth * 1.5,
-                      py: 0.4,
-                      minHeight: ITEM_ROW_HEIGHT,
-                      borderRadius: 1.5,
-                      mx: 1,
-                      opacity: isDraggedItem ? 0.4 : 1,
-                      transition: "opacity 0.15s, transform 0.15s",
+                      py: 0.5,
+                      minHeight: COLLECTION_ROW_HEIGHT,
+                      borderRadius: 0,
+                      mx: 0,
+                      opacity: isDraggedItem ? 0.35 : 1,
+                      transition: "opacity 0.2s ease, background-color 0.15s ease",
+                      ...(isDropInside && { backgroundColor: alpha(theme.palette.primary.main, 0.1) }),
                     }}
-                    onClick={() => {
-                      if (item.is_folder) {
-                        onOpenFolder(item.id, row.collectionId);
-                      } else if (item.request_id) {
-                        onSelectRequest(item.request_id, row.collectionId, item.id);
-                      }
+                    onClick={() => onOpenCollection(col.id)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      handleColMenu(e, col);
                     }}
-                    onContextMenu={(e) => handleItemContext(e, item, row.collectionId)}
                   >
                     <ListItemIcon
-                      sx={{ minWidth: item.is_folder ? 22 : 38, cursor: item.is_folder ? "pointer" : undefined }}
+                      sx={{
+                        minWidth: 24,
+                        cursor: "pointer",
+                        borderRadius: 1,
+                        "&:hover": { backgroundColor: alpha(theme.palette.text.primary, 0.08) },
+                      }}
                       onClick={(e) => {
-                        if (item.is_folder) {
-                          e.stopPropagation();
-                          if (!row.forceOpen) {
-                            setFolderOpen((prev) => ({
-                              ...prev,
-                              [item.id]: !(prev[item.id] === true),
-                            }));
+                        e.stopPropagation();
+                        if (!row.forceOpen) {
+                          const willOpen = collectionOpen[col.id] !== true;
+                          if (willOpen && !isLoaded && !isLoading) {
+                            onRequestCollectionTree(col.id);
                           }
+                          setCollectionOpen((prev) => ({ ...prev, [col.id]: !(prev[col.id] === true) }));
                         }
                       }}
                     >
-                      {item.is_folder ? (
-                        open || row.forceOpen ? (
-                          <ExpandMore sx={{ fontSize: 15, color: "text.secondary" }} />
-                        ) : (
-                          <ChevronRight sx={{ fontSize: 15, color: "text.secondary" }} />
-                        )
+                      {isOpen ? (
+                        <ExpandMore sx={{ fontSize: 16, color: "text.secondary" }} />
                       ) : (
-                        <Box
-                          component="span"
-                          sx={{
-                            fontSize: "0.55rem",
-                            fontWeight: 700,
-                            fontFamily: "monospace",
-                            lineHeight: 1,
-                            px: 0.4,
-                            py: 0.2,
-                            borderRadius: 0.5,
-                            color: item.protocol === "websocket" ? "#14b8a6" : item.protocol === "graphql" ? "#e879f9" : (METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary),
-                            backgroundColor: alpha(
-                              item.protocol === "websocket" ? "#14b8a6" : item.protocol === "graphql" ? "#e879f9" : (METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary),
-                              0.12,
-                            ),
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {item.protocol === "websocket" ? "WS" : item.protocol === "graphql" ? "GQL" : (item.method?.toUpperCase().slice(0, 3) ?? "GET")}
-                        </Box>
+                        <ChevronRight sx={{ fontSize: 16, color: "text.secondary" }} />
                       )}
                     </ListItemIcon>
-                    {inlineEditId === item.id ? (
-                      <TextField
-                        size="small"
-                        variant="standard"
-                        autoFocus
-                        value={inlineEditValue}
-                        onChange={(e) => setInlineEditValue(e.target.value)}
-                        onBlur={() => {
-                          const trimmed = inlineEditValue.trim();
-                          if (trimmed && trimmed !== item.name) {
-                            if (onDirectRenameItem) onDirectRenameItem(item.id, trimmed);
-                            else onRenameItem(item.id, trimmed);
-                          }
-                          setInlineEditId(null);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            (e.target as HTMLInputElement).blur();
-                          } else if (e.key === "Escape") {
-                            setInlineEditId(null);
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        onDoubleClick={(e) => e.stopPropagation()}
-                        sx={{
-                          flex: 1,
-                          "& .MuiInput-input": {
-                            fontSize: 12.5,
-                            py: 0,
-                            fontFamily: "inherit",
-                          },
-                        }}
-                        inputProps={{ style: { padding: 0 } }}
-                      />
-                    ) : (
-                      <ListItemText
-                        primary={item.name}
-                        primaryTypographyProps={{
-                          variant: "body2",
-                          fontSize: 12.5,
-                          fontWeight: item.is_folder ? 500 : 400,
-                          noWrap: true,
-                          color: item.is_folder ? "text.primary" : "text.secondary",
-                        }}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          setInlineEditId(item.id);
-                          setInlineEditValue(item.name);
-                        }}
-                      />
-                    )}
-                    {item.is_folder && item.auth_type && item.auth_type !== "none" && item.auth_type !== "inherit" && (
-                      <Lock sx={{ fontSize: 12, color: "warning.main", ml: 0.5, flexShrink: 0 }} />
-                    )}
+                    <ListItemText
+                      primary={col.name}
+                      primaryTypographyProps={{
+                        variant: "body2",
+                        fontWeight: 600,
+                        fontSize: 12.5,
+                        noWrap: true,
+                      }}
+                    />
                     <ListItemSecondaryAction>
                       <IconButton
                         size="small"
-                        onClick={(e) => handleItemMenuFromButton(e, item, row.collectionId)}
+                        onClick={(e) => handleColMenuFromButton(e, col)}
                         sx={{
                           width: 22,
                           height: 22,
@@ -817,11 +630,195 @@ export default function Sidebar({
                       </IconButton>
                     </ListItemSecondaryAction>
                   </ListItemButton>
+                  {isDropAfter && <DropLine position="after" />}
                 </Box>
               );
-            }}
-          />
-        ) : null}
+            }
+
+            if (row.type === "loading") {
+              return (
+                <Box key={`load-${row.collectionId}`}>
+                  <ListItemButton
+                    sx={{
+                      pl: 1.5 + row.depth * 1.5,
+                      py: 0.4,
+                      minHeight: ITEM_ROW_HEIGHT,
+                      borderRadius: 0,
+                      mx: 0,
+                    }}
+                  >
+                    <ListItemText
+                      primary={t("common.loading")}
+                      primaryTypographyProps={{
+                        variant: "body2",
+                        fontSize: 12.5,
+                        noWrap: true,
+                        color: "text.secondary",
+                      }}
+                    />
+                  </ListItemButton>
+                </Box>
+              );
+            }
+
+            const item = row.item;
+            const depth = row.depth;
+            const open = row.forceOpen || folderOpen[item.id] === true;
+            const isDraggedItem = draggingId === item.id;
+
+            return (
+              <Box
+                key={`item-${item.id}`}
+                sx={{ position: "relative" }}
+                draggable
+                onDragStart={(e) => startDrag(e, { kind: "item", id: item.id, collectionId: row.collectionId, rowIndex: index })}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={(e) => { e.stopPropagation(); handleDrop(e); }}
+                onDragEnd={handleDragEnd}
+              >
+                {isDropBefore && <DropLine position="before" />}
+                <ListItemButton
+                  sx={{
+                    pl: 1.5 + depth * 1.5,
+                    py: 0.4,
+                    minHeight: ITEM_ROW_HEIGHT,
+                    borderRadius: 1.5,
+                    mx: 1,
+                    opacity: isDraggedItem ? 0.35 : 1,
+                    transition: "opacity 0.2s ease, background-color 0.15s ease",
+                    ...(isDropInside && {
+                      backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                      outline: `1.5px dashed ${alpha(theme.palette.primary.main, 0.5)}`,
+                      outlineOffset: -1,
+                    }),
+                  }}
+                  onClick={() => {
+                    if (item.is_folder) {
+                      onOpenFolder(item.id, row.collectionId);
+                    } else if (item.request_id) {
+                      onSelectRequest(item.request_id, row.collectionId, item.id);
+                    }
+                  }}
+                  onContextMenu={(e) => handleItemContext(e, item, row.collectionId)}
+                >
+                  <ListItemIcon
+                    sx={{ minWidth: item.is_folder ? 22 : 38, cursor: item.is_folder ? "pointer" : undefined }}
+                    onClick={(e) => {
+                      if (item.is_folder) {
+                        e.stopPropagation();
+                        if (!row.forceOpen) {
+                          setFolderOpen((prev) => ({
+                            ...prev,
+                            [item.id]: !(prev[item.id] === true),
+                          }));
+                        }
+                      }
+                    }}
+                  >
+                    {item.is_folder ? (
+                      open || row.forceOpen ? (
+                        <ExpandMore sx={{ fontSize: 15, color: "text.secondary" }} />
+                      ) : (
+                        <ChevronRight sx={{ fontSize: 15, color: "text.secondary" }} />
+                      )
+                    ) : (
+                      <Box
+                        component="span"
+                        sx={{
+                          fontSize: "0.55rem",
+                          fontWeight: 700,
+                          fontFamily: "monospace",
+                          lineHeight: 1,
+                          px: 0.4,
+                          py: 0.2,
+                          borderRadius: 0.5,
+                          color: item.protocol === "websocket" ? "#14b8a6" : item.protocol === "graphql" ? "#e879f9" : (METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary),
+                          backgroundColor: alpha(
+                            item.protocol === "websocket" ? "#14b8a6" : item.protocol === "graphql" ? "#e879f9" : (METHOD_COLORS[item.method?.toUpperCase() ?? ""] ?? theme.palette.text.secondary),
+                            0.12,
+                          ),
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {item.protocol === "websocket" ? "WS" : item.protocol === "graphql" ? "GQL" : (item.method?.toUpperCase().slice(0, 3) ?? "GET")}
+                      </Box>
+                    )}
+                  </ListItemIcon>
+                  {inlineEditId === item.id ? (
+                    <TextField
+                      size="small"
+                      variant="standard"
+                      autoFocus
+                      value={inlineEditValue}
+                      onChange={(e) => setInlineEditValue(e.target.value)}
+                      onBlur={() => {
+                        const trimmed = inlineEditValue.trim();
+                        if (trimmed && trimmed !== item.name) {
+                          if (onDirectRenameItem) onDirectRenameItem(item.id, trimmed);
+                          else onRenameItem(item.id, trimmed);
+                        }
+                        setInlineEditId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          (e.target as HTMLInputElement).blur();
+                        } else if (e.key === "Escape") {
+                          setInlineEditId(null);
+                        }
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      sx={{
+                        flex: 1,
+                        "& .MuiInput-input": {
+                          fontSize: 12.5,
+                          py: 0,
+                          fontFamily: "inherit",
+                        },
+                      }}
+                      inputProps={{ style: { padding: 0 } }}
+                    />
+                  ) : (
+                    <ListItemText
+                      primary={item.name}
+                      primaryTypographyProps={{
+                        variant: "body2",
+                        fontSize: 12.5,
+                        fontWeight: item.is_folder ? 500 : 400,
+                        noWrap: true,
+                        color: item.is_folder ? "text.primary" : "text.secondary",
+                      }}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        setInlineEditId(item.id);
+                        setInlineEditValue(item.name);
+                      }}
+                    />
+                  )}
+                  {item.is_folder && item.auth_type && item.auth_type !== "none" && item.auth_type !== "inherit" && (
+                    <Lock sx={{ fontSize: 12, color: "warning.main", ml: 0.5, flexShrink: 0 }} />
+                  )}
+                  <ListItemSecondaryAction>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => handleItemMenuFromButton(e, item, row.collectionId)}
+                      sx={{
+                        width: 22,
+                        height: 22,
+                        opacity: 0,
+                        transition: "opacity 0.15s",
+                        ".MuiListItemButton-root:hover &": { opacity: 1 },
+                      }}
+                    >
+                      <MoreVert sx={{ fontSize: 14 }} />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItemButton>
+                {isDropAfter && <DropLine position="after" />}
+              </Box>
+            );
+          })
+        )}
       </Box>
 
       {/* Collection context menu */}

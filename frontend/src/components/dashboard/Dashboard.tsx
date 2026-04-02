@@ -198,13 +198,14 @@ export default function Dashboard({
         <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
           {t("dashboard.quickActions")}
         </Typography>
-        <Grid container spacing={2} sx={{ mb: 4 }}>
+        <Grid container spacing={2} sx={{ mb: 4, alignItems: "stretch" }}>
           {quickActions.map((action) => (
             <Grid key={action.label} size={{ xs: 12, sm: 6, md: 4 }}>
               <Paper
                 variant="outlined"
                 sx={{
                   p: 2,
+                  height: "100%",
                   borderRadius: 2,
                   cursor: "pointer",
                   transition: "all 0.2s ease",
@@ -219,7 +220,7 @@ export default function Dashboard({
                 }}
                 onClick={action.onClick}
               >
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, height: "100%" }}>
                   <Box
                     sx={{
                       width: 40,
@@ -230,11 +231,12 @@ export default function Dashboard({
                       justifyContent: "center",
                       backgroundColor: alpha(action.color, 0.12),
                       color: action.color,
+                      flexShrink: 0,
                     }}
                   >
                     {action.icon}
                   </Box>
-                  <Box>
+                  <Box sx={{ minWidth: 0 }}>
                     <Typography variant="body2" fontWeight={600}>
                       {action.label}
                     </Typography>

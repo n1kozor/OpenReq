@@ -1,40 +1,19 @@
-import { useState } from "react";
+import { Box, Typography, Tooltip } from "@mui/material";
 import {
-  Box,
-  Typography,
-  Select,
-  MenuItem,
-  FormControl,
-  Tooltip,
-  TextField,
-  InputAdornment,
-  ListSubheader,
-} from "@mui/material";
-import {
-  Workspaces,
   Cloud,
   Lan,
-  Search,
   FiberManualRecord,
-  KeyboardArrowDown,
+  Workspaces,
+  School,
+  Language,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@mui/material/styles";
 import { useProxyMode } from "@/hooks/useProxyMode";
-import type { Environment, Workspace, ProxyResponse } from "@/types";
+import { useLearningMode } from "@/hooks/useLearningMode";
+import type { Environment, Workspace } from "@/types";
 
 declare const __APP_VERSION__: string;
-
-interface StatusBarProps {
-  workspaces: Workspace[];
-  currentWorkspaceId: string | null;
-  onSelectWorkspace: (id: string) => void;
-  environments: Environment[];
-  selectedEnvironmentId: string | null;
-  onSelectEnvironment: (id: string | null) => void;
-  activeResponse?: ProxyResponse | null;
-  activeResponseTimestamp?: number | null;
-}
 
 const ENV_COLORS: Record<string, string> = {
   LIVE: "#cf5b56",
@@ -42,225 +21,196 @@ const ENV_COLORS: Record<string, string> = {
   DEV: "#59a869",
 };
 
-export default function StatusBar({
-  workspaces,
-  currentWorkspaceId,
-  onSelectWorkspace,
-  environments,
-  selectedEnvironmentId,
-  onSelectEnvironment,
-  activeResponse,
-  activeResponseTimestamp,
-}: StatusBarProps) {
-  const { t } = useTranslation();
-  const theme = useTheme();
-  const isDark = theme.palette.mode === "dark";
-  const { proxyMode, setProxyMode, localAvailable } = useProxyMode();
-  const [wsSearch, setWsSearch] = useState("");
+interface StatusBarProps {
+  mode: "dark" | "light";
+  username?: string;
+  workspace?: Workspace | null;
+  environment?: Environment | null;
+  tabCount: number;
+  activeTabMethod?: string;
+  activeTabUrl?: string;
+}
 
-  const currentWs = workspaces.find((w) => w.id === currentWorkspaceId);
-  const currentEnv = environments.find((e) => e.id === selectedEnvironmentId);
+export default function StatusBar({
+  mode,
+  username,
+  workspace,
+  environment,
+  tabCount,
+  activeTabMethod,
+  activeTabUrl,
+}: StatusBarProps) {
+  const { t, i18n } = useTranslation();
+  const theme = useTheme();
+  const isDark = mode === "dark";
+  const { proxyMode, localAvailable } = useProxyMode();
+  const { learningMode } = useLearningMode();
+
+  const segmentSx = {
+    display: "flex",
+    alignItems: "center",
+    gap: 0.5,
+    px: 0.75,
+    height: "100%",
+    cursor: "default",
+    "&:hover": {
+      backgroundColor: isDark ? "#3c3f41" : "#dcdcdc",
+    },
+  };
+
+  const textSx = {
+    fontSize: "0.68rem",
+    lineHeight: 1,
+    whiteSpace: "nowrap" as const,
+  };
+
+  const dividerSx = {
+    width: 1,
+    height: 14,
+    backgroundColor: isDark ? "#4e5157" : "#c4c4c4",
+    mx: 0.25,
+    flexShrink: 0,
+  };
+
+  const langNames: Record<string, string> = {
+    en: "EN",
+    de: "DE",
+    hu: "HU",
+  };
 
   return (
     <Box
       sx={{
+        display: "flex",
+        alignItems: "center",
         height: 22,
         minHeight: 22,
         maxHeight: 22,
-        display: "flex",
-        alignItems: "center",
-        px: 1,
-        gap: 0,
-        borderTop: `1px solid ${isDark ? "#393b40" : "#d1d1d1"}`,
-        backgroundColor: isDark ? "#3c3f41" : "#f7f8fa",
+        backgroundColor: isDark ? "#2b2d30" : "#e8e8e8",
+        borderTop: `1px solid ${isDark ? "#1e1f22" : "#d1d1d1"}`,
+        color: "text.secondary",
         flexShrink: 0,
+        zIndex: theme.zIndex.drawer + 1,
         overflow: "hidden",
       }}
     >
-      {/* Workspace selector */}
-      <FormControl size="small" sx={{ minWidth: 0 }}>
-        <Select
-          value={currentWorkspaceId ?? ""}
-          onChange={(e) => onSelectWorkspace(e.target.value)}
-          onOpen={() => setWsSearch("")}
-          IconComponent={KeyboardArrowDown}
-          variant="standard"
-          disableUnderline
-          renderValue={() => (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-              <Workspaces sx={{ fontSize: 12, color: theme.palette.primary.main }} />
-              <Typography variant="caption" sx={{ fontSize: "0.68rem", fontWeight: 500 }}>
-                {currentWs?.name ?? t("workspace.select")}
-              </Typography>
-            </Box>
-          )}
-          MenuProps={{ PaperProps: { sx: { maxHeight: 280 } }, autoFocus: false }}
-          sx={{
-            fontSize: "0.68rem",
-            "& .MuiSelect-select": { py: "0px !important", px: "4px !important", display: "flex", alignItems: "center" },
-            "& .MuiSelect-icon": { fontSize: 14 },
-          }}
-        >
-          {workspaces.length >= 6 && (
-            <ListSubheader sx={{ p: 0.5, lineHeight: "unset" }}>
-              <TextField
-                size="small"
-                autoFocus
-                placeholder={t("workspace.search")}
-                fullWidth
-                value={wsSearch}
-                onChange={(e) => setWsSearch(e.target.value)}
-                onKeyDown={(e) => e.stopPropagation()}
-                InputProps={{
-                  startAdornment: <InputAdornment position="start"><Search sx={{ fontSize: 14 }} /></InputAdornment>,
-                  sx: { fontSize: "0.75rem" },
-                }}
-              />
-            </ListSubheader>
-          )}
-          {workspaces
-            .filter((ws) => !wsSearch || ws.name.toLowerCase().includes(wsSearch.toLowerCase()))
-            .map((ws) => (
-              <MenuItem key={ws.id} value={ws.id} sx={{ fontSize: "0.78rem" }}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                  <Workspaces sx={{ fontSize: 13, color: ws.id === currentWorkspaceId ? theme.palette.primary.main : theme.palette.text.secondary }} />
-                  <span style={{ fontWeight: ws.id === currentWorkspaceId ? 600 : 400 }}>{ws.name}</span>
-                </Box>
-              </MenuItem>
-            ))}
-        </Select>
-      </FormControl>
+      {/* Left side */}
+      <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+        {/* Proxy mode */}
+        <Tooltip title={proxyMode === "local" ? t("proxyMode.localDesc") : t("proxyMode.serverDesc")}>
+          <Box sx={segmentSx}>
+            {proxyMode === "local" ? (
+              <Lan sx={{ fontSize: 11, color: localAvailable ? theme.palette.success.main : theme.palette.error.main }} />
+            ) : (
+              <Cloud sx={{ fontSize: 11 }} />
+            )}
+            <Typography sx={textSx}>
+              {t(`proxyMode.${proxyMode}`)}
+            </Typography>
+          </Box>
+        </Tooltip>
 
-      <Divider />
+        <Box sx={dividerSx} />
 
-      {/* Environment selector */}
-      <FormControl size="small" sx={{ minWidth: 0 }}>
-        <Select
-          value={selectedEnvironmentId ?? "__none__"}
-          onChange={(e) => onSelectEnvironment(e.target.value === "__none__" ? null : e.target.value)}
-          variant="standard"
-          disableUnderline
-          IconComponent={KeyboardArrowDown}
-          renderValue={() => {
-            if (!currentEnv) return (
-              <Typography variant="caption" sx={{ fontSize: "0.68rem", opacity: 0.6 }}>
-                {t("environment.select")}
-              </Typography>
-            );
-            const dotColor = ENV_COLORS[currentEnv.env_type] ?? "#888";
-            return (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <FiberManualRecord sx={{ fontSize: 7, color: dotColor }} />
-                <Typography variant="caption" sx={{ fontSize: "0.68rem", fontWeight: 500 }}>
-                  {currentEnv.name}
+        {/* Learning mode */}
+        {learningMode && (
+          <>
+            <Tooltip title={t("learningMode.topBarTooltip")}>
+              <Box sx={{ ...segmentSx, color: theme.palette.info.main }}>
+                <School sx={{ fontSize: 11 }} />
+                <Typography sx={{ ...textSx, fontWeight: 600 }}>
+                  {t("learningMode.title")}
                 </Typography>
               </Box>
-            );
-          }}
-          sx={{
-            fontSize: "0.68rem",
-            "& .MuiSelect-select": { py: "0px !important", px: "4px !important", display: "flex", alignItems: "center" },
-            "& .MuiSelect-icon": { fontSize: 14 },
-          }}
-        >
-          <MenuItem value="__none__" sx={{ fontSize: "0.78rem" }}>
-            <em style={{ opacity: 0.6 }}>{t("environment.select")}</em>
-          </MenuItem>
-          {environments.map((env) => (
-            <MenuItem key={env.id} value={env.id} sx={{ fontSize: "0.78rem" }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                <FiberManualRecord sx={{ fontSize: 7, color: ENV_COLORS[env.env_type] ?? "#888" }} />
-                <span>{env.name}</span>
-                <Typography variant="caption" sx={{ fontSize: "0.6rem", color: "text.secondary", textTransform: "uppercase" }}>
-                  {env.env_type}
-                </Typography>
-              </Box>
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+            </Tooltip>
+            <Box sx={dividerSx} />
+          </>
+        )}
 
-      <Divider />
+        {/* Active request info */}
+        {activeTabMethod && activeTabUrl && (
+          <Box sx={segmentSx}>
+            <Typography sx={{ ...textSx, fontWeight: 700, color: "text.primary" }}>
+              {activeTabMethod}
+            </Typography>
+            <Typography sx={{ ...textSx, maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis" }}>
+              {activeTabUrl}
+            </Typography>
+          </Box>
+        )}
+      </Box>
 
-      {/* Proxy mode */}
-      <Tooltip title={proxyMode === "local" ? t("proxyMode.localDesc") : t("proxyMode.serverDesc")}>
-        <Box
-          onClick={() => {
-            if (proxyMode === "server" && localAvailable) setProxyMode("local");
-            else setProxyMode("server");
-          }}
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: 0.5,
-            px: 0.75,
-            cursor: "pointer",
-            height: "100%",
-            "&:hover": { backgroundColor: isDark ? "#4e5157" : "#e0e0e0" },
-          }}
-        >
-          {proxyMode === "local" ? (
-            <Lan sx={{ fontSize: 12, color: localAvailable ? theme.palette.success.main : theme.palette.error.main }} />
-          ) : (
-            <Cloud sx={{ fontSize: 12, color: theme.palette.text.secondary }} />
-          )}
-          <Typography variant="caption" sx={{ fontSize: "0.68rem", fontWeight: 400 }}>
-            {t(`proxyMode.${proxyMode}`)}
-          </Typography>
-        </Box>
-      </Tooltip>
-
+      {/* Spacer */}
       <Box sx={{ flexGrow: 1 }} />
 
-      {/* Last response info */}
-      {activeResponse && (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 0.75 }}>
-          <Typography
-            variant="caption"
-            sx={{
-              fontSize: "0.68rem",
-              fontWeight: 600,
-              color: activeResponse.status_code < 400 ? theme.palette.success.main : theme.palette.error.main,
-            }}
-          >
-            {activeResponse.status_code}
+      {/* Right side */}
+      <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
+        {/* Tab count */}
+        <Box sx={segmentSx}>
+          <Typography sx={textSx}>
+            {tabCount} {tabCount === 1 ? "tab" : "tabs"}
           </Typography>
-          <Typography variant="caption" sx={{ fontSize: "0.68rem", color: theme.palette.text.secondary }}>
-            {activeResponse.elapsed_ms.toFixed(0)}ms
-          </Typography>
-          {activeResponseTimestamp && (
-            <Typography variant="caption" sx={{ fontSize: "0.68rem", color: theme.palette.text.secondary }}>
-              {new Date(activeResponseTimestamp).toLocaleTimeString()}
-            </Typography>
-          )}
         </Box>
-      )}
 
-      <Divider />
+        <Box sx={dividerSx} />
 
-      {/* Version */}
-      <Typography
-        variant="caption"
-        sx={{ fontSize: "0.62rem", color: theme.palette.text.secondary, px: 0.75 }}
-      >
-        v{__APP_VERSION__}
-      </Typography>
+        {/* Language */}
+        <Box sx={segmentSx}>
+          <Language sx={{ fontSize: 11 }} />
+          <Typography sx={textSx}>
+            {langNames[i18n.language] ?? i18n.language.toUpperCase()}
+          </Typography>
+        </Box>
+
+        <Box sx={dividerSx} />
+
+        {/* Environment */}
+        {environment ? (
+          <>
+            <Tooltip title={`${environment.name} (${environment.env_type})`}>
+              <Box sx={segmentSx}>
+                <FiberManualRecord sx={{ fontSize: 7, color: ENV_COLORS[environment.env_type] ?? "#888" }} />
+                <Typography sx={{ ...textSx, fontWeight: 500 }}>
+                  {environment.name}
+                </Typography>
+              </Box>
+            </Tooltip>
+            <Box sx={dividerSx} />
+          </>
+        ) : null}
+
+        {/* Workspace */}
+        {workspace && (
+          <>
+            <Box sx={segmentSx}>
+              <Workspaces sx={{ fontSize: 11, color: theme.palette.primary.main }} />
+              <Typography sx={{ ...textSx, fontWeight: 500 }}>
+                {workspace.name}
+              </Typography>
+            </Box>
+            <Box sx={dividerSx} />
+          </>
+        )}
+
+        {/* Username */}
+        {username && (
+          <>
+            <Box sx={segmentSx}>
+              <Typography sx={textSx}>
+                {username}
+              </Typography>
+            </Box>
+            <Box sx={dividerSx} />
+          </>
+        )}
+
+        {/* Version */}
+        <Box sx={segmentSx}>
+          <Typography sx={{ ...textSx, fontSize: "0.62rem" }}>
+            v{__APP_VERSION__}
+          </Typography>
+        </Box>
+      </Box>
     </Box>
-  );
-}
-
-function Divider() {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === "dark";
-  return (
-    <Box
-      sx={{
-        width: 1,
-        height: 14,
-        backgroundColor: isDark ? "#4e5157" : "#c4c4c4",
-        mx: 0.25,
-        flexShrink: 0,
-      }}
-    />
   );
 }

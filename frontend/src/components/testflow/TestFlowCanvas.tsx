@@ -474,60 +474,11 @@ export default function TestFlowCanvas({
   }, []);
 
   const handleNodeDragStop = useCallback(
-    (_event: React.MouseEvent, draggedNode: Node) => {
-      // Check if the dragged node was dropped over a group node
-      if (draggedNode.type === "group") {
-        setIsDirty(true);
-        pushHistory();
-        return;
-      }
-
-      setNodes((nds) => {
-        const groupNodes = nds.filter((n) => n.type === "group" && n.id !== draggedNode.id);
-        let updated = nds;
-
-        for (const group of groupNodes) {
-          const gw = group.measured?.width ?? 300;
-          const gh = group.measured?.height ?? 200;
-          const inGroup =
-            draggedNode.position.x >= group.position.x &&
-            draggedNode.position.x <= group.position.x + gw &&
-            draggedNode.position.y >= group.position.y &&
-            draggedNode.position.y <= group.position.y + gh;
-
-          if (inGroup && draggedNode.parentId !== group.id) {
-            // Reparent into group - convert to relative position
-            updated = updated.map((n) =>
-              n.id === draggedNode.id
-                ? {
-                    ...n,
-                    parentId: group.id,
-                    extent: "parent" as const,
-                    position: {
-                      x: draggedNode.position.x - group.position.x,
-                      y: draggedNode.position.y - group.position.y,
-                    },
-                  }
-                : n,
-            );
-            break;
-          }
-        }
-
-        // Update child counts on all group nodes
-        return updated.map((n) => {
-          if (n.type === "group") {
-            const count = updated.filter((c) => c.parentId === n.id).length;
-            return { ...n, data: { ...n.data, _childCount: count } };
-          }
-          return n;
-        });
-      });
-
+    () => {
       setIsDirty(true);
       pushHistory();
     },
-    [pushHistory, setNodes],
+    [pushHistory],
   );
 
   const handleUpdateNode = useCallback(
@@ -1223,6 +1174,28 @@ export default function TestFlowCanvas({
         slotProps={{ paper: { sx: { minWidth: 180 } } }}
       >
         {contextMenu?.type === "node" && [
+          (() => {
+            const ctxNode = nodes.find((n) => n.id === contextMenu.targetId);
+            const ctxData = ctxNode?.data as Record<string, unknown> | undefined;
+            const ctxConfig = (ctxData?.config ?? {}) as Record<string, unknown>;
+            const isRequestNode = ctxNode?.type === "http_request" || ctxNode?.type === "websocket" || ctxNode?.type === "graphql";
+            const hasRequestId = !!ctxConfig.request_id;
+            if (isRequestNode && hasRequestId && onOpenRequest) {
+              return (
+                <MenuItem
+                  key="open-request"
+                  onClick={() => {
+                    onOpenRequest(ctxConfig.request_id as string, ctxConfig.collection_id as string | undefined);
+                    closeContextMenu();
+                  }}
+                >
+                  <ListItemIcon><Edit fontSize="small" color="primary" /></ListItemIcon>
+                  <ListItemText>{t("testFlow.openRequest")}</ListItemText>
+                </MenuItem>
+              );
+            }
+            return null;
+          })(),
           <MenuItem
             key="edit"
             onClick={() => {

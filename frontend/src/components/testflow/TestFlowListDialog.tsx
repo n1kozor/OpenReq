@@ -104,7 +104,7 @@ export default function TestFlowListDialog({
             startIcon={creating ? <CircularProgress size={16} /> : <Add />}
             onClick={handleCreate}
             disabled={!newName.trim() || creating}
-            sx={{ whiteSpace: "nowrap" }}
+            sx={{ whiteSpace: "nowrap", minWidth: "fit-content", flexShrink: 0 }}
           >
             {t("testFlow.newFlow")}
           </Button>

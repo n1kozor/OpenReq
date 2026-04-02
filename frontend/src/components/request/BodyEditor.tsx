@@ -22,12 +22,13 @@ import {
   Snackbar,
   Alert,
 } from "@mui/material";
-import { Delete, AttachFile, Add } from "@mui/icons-material";
+import { Delete, AttachFile, Add, OpenInFull } from "@mui/icons-material";
 import Editor, { type Monaco } from "@monaco-editor/react";
 import { alpha, useTheme } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
 import KeyValueEditor from "@/components/common/KeyValueEditor";
 import { newPair, VariableValueCell } from "@/components/common/KeyValueEditor";
+import ValueEditorDialog, { detectLanguage } from "@/components/common/ValueEditorDialog";
 import { registerVariableProviders, getVariableTheme } from "@/utils/monacoVariables";
 import type { BodyType, KeyValuePair } from "@/types";
 import type { VariableGroup, VariableInfo } from "@/hooks/useVariableGroups";
@@ -100,6 +101,8 @@ export default function BodyEditor({
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [showExplorer, setShowExplorer] = useState(false);
   const [snack, setSnack] = useState<{ msg: string; severity: "success" | "error" | "info" } | null>(null);
+  const [formDataEditorOpen, setFormDataEditorOpen] = useState<string | null>(null);
+  const formDataEditingPair = formDataEditorOpen ? formData.find((p) => p.id === formDataEditorOpen) : null;
   const gqlVariablesError = useMemo(() => {
     if (bodyType !== "graphql") return "";
     if (gqlTab !== 1) return "";
@@ -430,13 +433,51 @@ export default function BodyEditor({
                   </TableCell>
                   <TableCell>
                     {(pair.type || "text") !== "file" ? (
-                      <VariableValueCell
-                        value={pair.value}
-                        onChange={(v) => handleFormDataFieldChange(pair.id, "value", v)}
-                        placeholder={(pair.type || "text") === "list" ? "[\"listaelem1\",\"listaelem2\",\"listaelem3\"]" : t("common.value")}
-                        resolvedVariables={resolvedVariables}
-                        variableGroups={variableGroups}
-                      />
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <VariableValueCell
+                            value={pair.value}
+                            onChange={(v) => handleFormDataFieldChange(pair.id, "value", v)}
+                            placeholder={(pair.type || "text") === "list" ? "[\"listaelem1\",\"listaelem2\",\"listaelem3\"]" : t("common.value")}
+                            resolvedVariables={resolvedVariables}
+                            variableGroups={variableGroups}
+                          />
+                        </Box>
+                        {pair.value && pair.value.length > 60 && (() => {
+                          const lang = detectLanguage(pair.value);
+                          return lang !== "plaintext" ? (
+                            <Chip
+                              label={lang === "json" ? "JSON" : "XML"}
+                              size="small"
+                              variant="outlined"
+                              sx={{
+                                height: 18,
+                                fontSize: 10,
+                                fontWeight: 700,
+                                letterSpacing: 0.3,
+                                "& .MuiChip-label": { px: 0.6 },
+                                borderColor: alpha(theme.palette.info.main, 0.4),
+                                color: theme.palette.info.main,
+                              }}
+                            />
+                          ) : null;
+                        })()}
+                        <Tooltip title={t("valueEditor.expandEditor")}>
+                          <IconButton
+                            size="small"
+                            onClick={() => setFormDataEditorOpen(pair.id)}
+                            sx={{
+                              p: 0.25,
+                              opacity: pair.value && (pair.value.length > 60 || detectLanguage(pair.value) !== "plaintext") ? 1 : 0,
+                              transition: "opacity 0.15s",
+                              "tr:hover &": { opacity: 0.6 },
+                              "&:hover": { opacity: "1 !important" },
+                            }}
+                          >
+                            <OpenInFull sx={{ fontSize: 14 }} />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
                     ) : (
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <Button
@@ -491,6 +532,18 @@ export default function BodyEditor({
           >
             {t("common.add")}
           </Button>
+
+          {/* Value editor modal for form-data */}
+          <ValueEditorDialog
+            open={!!formDataEditorOpen}
+            onClose={() => setFormDataEditorOpen(null)}
+            value={formDataEditingPair?.value ?? ""}
+            onChange={(v) => {
+              if (formDataEditorOpen) handleFormDataFieldChange(formDataEditorOpen, "value", v);
+            }}
+            title={t("valueEditor.title")}
+            fieldKey={formDataEditingPair?.key || undefined}
+          />
         </Box>
       )}
 

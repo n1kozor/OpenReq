@@ -1,10 +1,13 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { Box, Toolbar, Snackbar, Alert, Typography, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from "@mui/material";
+import { Box, Snackbar, Alert, Typography, Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField } from "@mui/material";
+// Toolbar import removed — no longer using fixed AppBar layout
 import { WarningAmber } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
+import MenuBar from "./MenuBar";
 import TopBar from "./TopBar";
-// StatusBar removed — all selectors moved to TopBar
-// NavRail removed — nav items moved to TopBar
+import StatusBar from "./StatusBar";
+import AboutDialog from "./AboutDialog";
+import KeyboardShortcutsDialog from "./KeyboardShortcutsDialog";
 import Sidebar from "./Sidebar";
 import TabBar from "./TabBar";
 import RequestBuilder from "@/components/request/RequestBuilder";
@@ -346,6 +349,9 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     dirtyCount: number;
   } | null>(null);
   const [pendingCloseId, setPendingCloseId] = useState<string | null>(null);
+  const [showAbout, setShowAbout] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
   const didInitCollections = useRef(false);
   const didInitWorkspaces = useRef(false);
   const lastEnvWorkspaceId = useRef<string | null>(null);
@@ -527,6 +533,21 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     loadEnvironments();
     loadGlobals();
   }, [loadEnvironments, loadGlobals, currentWorkspaceId]);
+
+  // Full-screen sync
+  useEffect(() => {
+    const handler = () => setIsFullScreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
+
+  const toggleFullScreen = useCallback(() => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen();
+    }
+  }, []);
 
   // Persist tabs + view to localStorage
   useEffect(() => {
@@ -1294,6 +1315,38 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     }
   }, [tabs, handleCloseAllTabs]);
 
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key === "n" && !e.shiftKey) { e.preventDefault(); handleNewTab(); }
+      if (ctrl && e.key === "s" && !e.shiftKey) {
+        e.preventDefault();
+        const tab = tabs.find((t) => t.id === activeTabId);
+        if (tab?.savedRequestId) saveExistingTab(tab);
+        else if (tab && collections.length > 0) setShowSaveRequest(true);
+      }
+      if (ctrl && e.key === "S" && e.shiftKey) { e.preventDefault(); if (collections.length > 0) setShowSaveRequest(true); }
+      if (ctrl && e.key === "w") { e.preventDefault(); if (activeTabId) requestCloseTab(activeTabId); }
+      if (ctrl && e.key === "b") {
+        e.preventDefault();
+        setShowCollectionsSidebar((prev) => { const next = !prev; localStorage.setItem("openreq-collections-sidebar", String(next)); return next; });
+      }
+      if (ctrl && e.key === "Enter") { e.preventDefault(); handleSendWithLearningMode(); }
+      if (ctrl && e.key === "i") { e.preventDefault(); setShowImport(true); }
+      if (ctrl && e.key === ",") { e.preventDefault(); setView("settings"); }
+      if (ctrl && e.key === "k" && !e.shiftKey) { e.preventDefault(); setShowShortcuts(true); }
+      if (e.key === "F11") { e.preventDefault(); toggleFullScreen(); }
+      if (ctrl && e.key >= "1" && e.key <= "9") {
+        e.preventDefault();
+        const idx = parseInt(e.key, 10) - 1;
+        if (idx < tabs.length) { setActiveTabId(tabs[idx]!.id); setView("request"); }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [tabs, activeTabId, handleNewTab, handleSendWithLearningMode, requestCloseTab, saveExistingTab, collections.length, toggleFullScreen]);
+
   const handleDiscardCloseConfirm = useCallback(() => {
     if (!closeConfirm) return;
     if (closeConfirm.mode === "single" && closeConfirm.targetId) {
@@ -2049,13 +2102,85 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
     }
   }, [loadCollections, t]);
 
+  const toggleSidebar = useCallback(() => {
+    setShowCollectionsSidebar((prev) => {
+      const next = !prev;
+      localStorage.setItem("openreq-collections-sidebar", String(next));
+      return next;
+    });
+  }, []);
+
+  const handleCopyUrl = useCallback(() => {
+    const tab = tabs.find((t) => t.id === activeTabId);
+    if (tab?.url) {
+      navigator.clipboard.writeText(tab.url);
+      setSnack({ msg: t("common.copyUrl"), severity: "success" });
+    }
+  }, [tabs, activeTabId, t]);
+
   return (
     <ProxyModeContext.Provider value={proxyModeValue}>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
+    {/* IDE Menu Bar */}
+    <MenuBar
+      mode={mode}
+      onNewHttp={() => handleNewTab("http")}
+      onNewWebSocket={() => handleNewTab("websocket")}
+      onNewGraphQL={() => handleNewTab("graphql")}
+      onNewCollection={() => setShowCreateCol(true)}
+      onSave={() => {
+        const tab = tabs.find((t) => t.id === activeTabId);
+        if (tab?.savedRequestId) saveExistingTab(tab);
+        else if (tab && collections.length > 0) setShowSaveRequest(true);
+      }}
+      onSaveAs={() => collections.length > 0 && setShowSaveRequest(true)}
+      onImport={() => setShowImport(true)}
+      onExport={() => setShowImport(true)}
+      onSettings={() => setView("settings")}
+      onLogout={onLogout}
+      onCopyUrl={handleCopyUrl}
+      showSidebar={showCollectionsSidebar}
+      onToggleSidebar={toggleSidebar}
+      onToggleTheme={onToggleTheme}
+      isFullScreen={isFullScreen}
+      onToggleFullScreen={toggleFullScreen}
+      onZoomIn={() => { document.body.style.zoom = String(parseFloat(document.body.style.zoom || "1") + 0.1); }}
+      onZoomOut={() => { document.body.style.zoom = String(Math.max(0.5, parseFloat(document.body.style.zoom || "1") - 0.1)); }}
+      onResetZoom={() => { document.body.style.zoom = "1"; }}
+      onSendRequest={handleSendWithLearningMode}
+      onCollectionRunner={() => {
+        if (collections.length > 0) setShowRunner({ id: collections[0]!.id, name: collections[0]!.name });
+      }}
+      onTestBuilder={() => setShowTestFlowList(true)}
+      onAIWizard={() => setShowAIWizard(true)}
+      onAIAgent={() => setShowAIAgent(true)}
+      onSDKGenerator={() => setShowSDK(true)}
+      onEnvironmentManager={() => setShowEnvManager(true)}
+      onWorkspaceManager={() => setShowWorkspaces(true)}
+      workspaces={workspaces}
+      currentWorkspaceId={currentWorkspaceId}
+      onSelectWorkspace={handleSelectWorkspace}
+      environments={environments}
+      selectedEnvironmentId={selectedEnvId}
+      onSelectEnvironment={handleSelectEnvironment}
+      onCloseTab={() => activeTabId && requestCloseTab(activeTabId)}
+      onCloseOtherTabs={() => activeTabId && requestCloseOtherTabs(activeTabId)}
+      onCloseAllTabs={requestCloseAllTabs}
+      onHistory={() => setShowHistory(true)}
+      onKeyboardShortcuts={() => setShowShortcuts(true)}
+      learningMode={learningMode}
+      onToggleLearningMode={() => {
+        const lm = !learningMode;
+        localStorage.setItem("openreq-learning-mode", String(lm));
+        window.dispatchEvent(new Event("storage"));
+      }}
+      onAbout={() => setShowAbout(true)}
+      hasActiveTab={!!activeTab}
+    />
+
+    {/* IDE Toolbar */}
     <TopBar
       mode={mode}
-      onToggleTheme={onToggleTheme}
-      onLogout={onLogout}
-      username={user.username}
       workspaces={workspaces}
       currentWorkspaceId={currentWorkspaceId}
       onSelectWorkspace={handleSelectWorkspace}
@@ -2063,24 +2188,27 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       selectedEnvironmentId={selectedEnvId}
       onSelectEnvironment={handleSelectEnvironment}
       showCollectionsSidebar={showCollectionsSidebar}
-      onToggleCollections={() => {
-        setShowCollectionsSidebar((prev) => {
-          const next = !prev;
-          localStorage.setItem("openreq-collections-sidebar", String(next));
-          return next;
-        });
-      }}
+      onToggleCollections={toggleSidebar}
       onOpenHistory={() => setShowHistory(true)}
       onOpenTestBuilder={() => setShowTestFlowList(true)}
       onOpenImport={() => setShowImport(true)}
       onOpenSDK={() => setShowSDK(true)}
       onOpenAIAgent={() => setShowAIAgent(true)}
       onOpenSettings={() => setView("settings")}
-      onOpenWorkspaceManager={() => setShowWorkspaces(true)}
-      onOpenEnvironmentManager={() => setShowEnvManager(true)}
+      onNewTab={() => handleNewTab()}
+      onSave={() => {
+        const tab = tabs.find((t) => t.id === activeTabId);
+        if (tab?.savedRequestId) saveExistingTab(tab);
+        else if (tab && collections.length > 0) setShowSaveRequest(true);
+      }}
+      onSend={handleSendWithLearningMode}
+      hasActiveTab={!!activeTab}
+      loading={loading}
       activeNavItem={view === "settings" ? "settings" : showAIAgent ? "aiAgent" : null}
     />
-    <Box sx={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+
+    {/* Main content area */}
+    <Box sx={{ display: "flex", flex: 1, overflow: "hidden" }}>
 
       {showCollectionsSidebar && <Sidebar
         collections={collections}
@@ -2167,7 +2295,6 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         transition: "margin-right 225ms cubic-bezier(0, 0, 0.2, 1)",
         marginRight: showAIAgent ? `${DRAWER_WIDTH}px` : 0,
       }}>
-        <Toolbar sx={{ minHeight: "40px !important" }} />
 
         {view === "request" && (
           <>
@@ -2768,6 +2895,12 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         url={activeTab?.url ?? ""}
       />
 
+      {/* About Dialog */}
+      <AboutDialog open={showAbout} onClose={() => setShowAbout(false)} />
+
+      {/* Keyboard Shortcuts Dialog */}
+      <KeyboardShortcutsDialog open={showShortcuts} onClose={() => setShowShortcuts(false)} />
+
       {/* Snackbar */}
       <Snackbar
         open={!!snack}
@@ -2777,6 +2910,18 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       >
         {snack ? <Alert severity={snack.severity} onClose={() => setSnack(null)}>{snack.msg}</Alert> : undefined}
       </Snackbar>
+    </Box>
+
+    {/* IDE Status Bar */}
+    <StatusBar
+      mode={mode}
+      username={user.username}
+      workspace={workspaces.find((w) => w.id === currentWorkspaceId) ?? null}
+      environment={environments.find((e) => e.id === selectedEnvId) ?? null}
+      tabCount={tabs.length}
+      activeTabMethod={activeTab?.tabType !== "collection" && activeTab?.tabType !== "testflow" && activeTab?.tabType !== "folder" ? activeTab?.method : undefined}
+      activeTabUrl={activeTab?.tabType !== "collection" && activeTab?.tabType !== "testflow" && activeTab?.tabType !== "folder" ? activeTab?.url : undefined}
+    />
     </Box>
     </ProxyModeContext.Provider>
   );

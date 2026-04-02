@@ -19,12 +19,14 @@ import {
   ListItemText,
   ListSubheader,
   ClickAwayListener,
+  Chip,
 } from "@mui/material";
-import { Add, Delete } from "@mui/icons-material";
+import { Add, Delete, OpenInFull } from "@mui/icons-material";
 import { alpha, useTheme } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
 import type { KeyValuePair } from "@/types";
 import type { VariableInfo, VariableGroup } from "@/hooks/useVariableGroups";
+import ValueEditorDialog, { detectLanguage } from "./ValueEditorDialog";
 
 interface KeyValueEditorProps {
   pairs: KeyValuePair[];
@@ -388,6 +390,14 @@ function VariableValueCell({
   );
 }
 
+/** Check if a value is "rich" (long or structured data like JSON/XML) */
+function isRichValue(value: string): boolean {
+  if (!value) return false;
+  if (value.length > 60) return true;
+  const lang = detectLanguage(value);
+  return lang === "json" || lang === "xml";
+}
+
 export default function KeyValueEditor({
   pairs,
   onChange,
@@ -398,9 +408,11 @@ export default function KeyValueEditor({
   resolvedVariables,
   variableGroups,
 }: KeyValueEditorProps) {
+  const theme = useTheme();
   const { t } = useTranslation();
   const resolvedKeyLabel = keyLabel ?? t("environment.key");
   const resolvedValueLabel = valueLabel ?? t("common.value");
+  const [editorOpen, setEditorOpen] = useState<string | null>(null);
 
   const update = (id: string, field: keyof KeyValuePair, value: string | boolean) => {
     onChange(pairs.map((p) => (p.id === id ? { ...p, [field]: value } : p)));
@@ -413,6 +425,8 @@ export default function KeyValueEditor({
   const add = () => {
     onChange([...pairs, newPair()]);
   };
+
+  const editingPair = editorOpen ? pairs.find((p) => p.id === editorOpen) : null;
 
   return (
     <Box>
@@ -463,64 +477,103 @@ export default function KeyValueEditor({
             </TableRow>
           </TableHead>
           <TableBody>
-            {pairs.map((pair) => (
-              <TableRow
-                key={pair.id}
-                sx={{
-                  opacity: pair.enabled ? 1 : 0.4,
-                  "&:hover": { bgcolor: "action.hover" },
-                }}
-              >
-                {showEnable && (
-                  <TableCell sx={{ borderRight: 1, borderRightColor: "divider" }}>
-                    <Checkbox
-                      checked={pair.enabled}
-                      onChange={(e) => update(pair.id, "enabled", e.target.checked)}
-                      size="small"
-                      sx={{ p: 0 }}
-                    />
-                  </TableCell>
-                )}
-                <TableCell>
-                  <VariableValueCell
-                    value={pair.key}
-                    onChange={(v) => update(pair.id, "key", v)}
-                    placeholder={resolvedKeyLabel}
-                    resolvedVariables={resolvedVariables}
-                    variableGroups={variableGroups}
-                  />
-                </TableCell>
-                <TableCell>
-                  <VariableValueCell
-                    value={pair.value}
-                    onChange={(v) => update(pair.id, "value", v)}
-                    placeholder={resolvedValueLabel}
-                    resolvedVariables={resolvedVariables}
-                    variableGroups={variableGroups}
-                  />
-                </TableCell>
-                {showDescription && (
+            {pairs.map((pair) => {
+              const rich = isRichValue(pair.value);
+              const lang = pair.value ? detectLanguage(pair.value) : "plaintext";
+              return (
+                <TableRow
+                  key={pair.id}
+                  sx={{
+                    opacity: pair.enabled ? 1 : 0.4,
+                    "&:hover": { bgcolor: "action.hover" },
+                  }}
+                >
+                  {showEnable && (
+                    <TableCell sx={{ borderRight: 1, borderRightColor: "divider" }}>
+                      <Checkbox
+                        checked={pair.enabled}
+                        onChange={(e) => update(pair.id, "enabled", e.target.checked)}
+                        size="small"
+                        sx={{ p: 0 }}
+                      />
+                    </TableCell>
+                  )}
                   <TableCell>
-                    <TextField
-                      fullWidth
-                      size="small"
-                      variant="standard"
-                      placeholder={t("common.description")}
-                      value={pair.description ?? ""}
-                      onChange={(e) => update(pair.id, "description", e.target.value)}
-                      InputProps={{ disableUnderline: true, sx: { fontSize: 13 } }}
+                    <VariableValueCell
+                      value={pair.key}
+                      onChange={(v) => update(pair.id, "key", v)}
+                      placeholder={resolvedKeyLabel}
+                      resolvedVariables={resolvedVariables}
+                      variableGroups={variableGroups}
                     />
                   </TableCell>
-                )}
-                <TableCell>
-                  <Tooltip title={t("common.remove")}>
-                    <IconButton size="small" onClick={() => remove(pair.id)} sx={{ p: 0.25 }}>
-                      <Delete fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </TableCell>
-              </TableRow>
-            ))}
+                  <TableCell>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <VariableValueCell
+                          value={pair.value}
+                          onChange={(v) => update(pair.id, "value", v)}
+                          placeholder={resolvedValueLabel}
+                          resolvedVariables={resolvedVariables}
+                          variableGroups={variableGroups}
+                        />
+                      </Box>
+                      {rich && lang !== "plaintext" && (
+                        <Chip
+                          label={lang === "json" ? "JSON" : "XML"}
+                          size="small"
+                          variant="outlined"
+                          sx={{
+                            height: 18,
+                            fontSize: 10,
+                            fontWeight: 700,
+                            letterSpacing: 0.3,
+                            "& .MuiChip-label": { px: 0.6 },
+                            borderColor: alpha(theme.palette.info.main, 0.4),
+                            color: theme.palette.info.main,
+                          }}
+                        />
+                      )}
+                      <Tooltip title={t("valueEditor.expandEditor")}>
+                        <IconButton
+                          size="small"
+                          onClick={() => setEditorOpen(pair.id)}
+                          sx={{
+                            p: 0.25,
+                            opacity: rich ? 1 : 0,
+                            transition: "opacity 0.15s",
+                            "tr:hover &": { opacity: 0.6 },
+                            "&:hover": { opacity: "1 !important" },
+                          }}
+                        >
+                          <OpenInFull sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </TableCell>
+                  {showDescription && (
+                    <TableCell>
+                      <TextField
+                        fullWidth
+                        size="small"
+                        variant="standard"
+                        placeholder={t("common.description")}
+                        value={pair.description ?? ""}
+                        onChange={(e) => update(pair.id, "description", e.target.value)}
+                        InputProps={{ disableUnderline: true, sx: { fontSize: 13 } }}
+                      />
+                    </TableCell>
+                  )}
+                  <TableCell>
+                    <Tooltip title={t("common.remove")}>
+                      <IconButton size="small" onClick={() => remove(pair.id)} sx={{ p: 0.25 }}>
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {pairs.length === 0 && (
               <TableRow>
                 <TableCell
@@ -541,6 +594,18 @@ export default function KeyValueEditor({
           <Add fontSize="small" />
         </IconButton>
       </Box>
+
+      {/* Value editor modal */}
+      <ValueEditorDialog
+        open={!!editorOpen}
+        onClose={() => setEditorOpen(null)}
+        value={editingPair?.value ?? ""}
+        onChange={(v) => {
+          if (editorOpen) update(editorOpen, "value", v);
+        }}
+        title={t("valueEditor.title")}
+        fieldKey={editingPair?.key || undefined}
+      />
     </Box>
   );
 }
