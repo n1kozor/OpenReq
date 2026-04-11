@@ -33,7 +33,7 @@ spec:
     spec:
       containers:
         - name: openreq
-          image: ghcr.io/felix-scholz/openreq:sha-198fa66
+          image: ghcr.io/felix-scholz/openreq:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

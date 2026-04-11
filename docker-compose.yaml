@@ -1,6 +1,6 @@
 services:
   openreq:
-    image: ghcr.io/felix-scholz/openreq:sha-198fa66
+    image: ghcr.io/felix-scholz/openreq:latest
     ports:
       - "${PORT:-8000}:8000"
     environment:
