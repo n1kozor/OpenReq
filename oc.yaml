@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openreq-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openreq-secrets
+type: Opaque
+stringData:
+  JWT_SECRET_KEY: "change-me-in-production"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openreq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openreq
+  template:
+    metadata:
+      labels:
+        app: openreq
+    spec:
+      containers:
+        - name: openreq
+          image: ghcr.io/felix-scholz/openreq:sha-198fa66
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              value: sqlite:///./data/openreq.db
+            - name: ALLOW_REGISTRATION
+              value: "true"
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openreq-secrets
+                  key: JWT_SECRET_KEY
+            - name: JWT_ALGORITHM
+              value: HS256
+            - name: JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+              value: "0"
+            - name: ENVIRONMENT
+              value: production
+          volumeMounts:
+            - name: openreq-data
+              mountPath: /app/data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: openreq-data
+          persistentVolumeClaim:
+            claimName: openreq-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openreq
+spec:
+  selector:
+    app: openreq
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: openreq
+spec:
+  to:
+    kind: Service
+    name: openreq
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
