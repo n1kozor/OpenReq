@@ -57,6 +57,7 @@ import { useLearningMode } from "@/hooks/useLearningMode";
 import LearningModeConfirmDialog from "@/components/learning/LearningModeConfirmDialog";
 import { ProxyModeContext, useProxyModeProvider } from "@/hooks/useProxyMode";
 import { executeViaExtension, executeViaDesktop } from "@/services/localProxyExecutor";
+import { copyToClipboard } from "@/utils/clipboard";
 import type {
   RequestTab,
   RequestTabSnapshot,
@@ -2113,7 +2114,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const handleCopyUrl = useCallback(() => {
     const tab = tabs.find((t) => t.id === activeTabId);
     if (tab?.url) {
-      navigator.clipboard.writeText(tab.url);
+      copyToClipboard(tab.url);
       setSnack({ msg: t("common.copyUrl"), severity: "success" });
     }
   }, [tabs, activeTabId, t]);

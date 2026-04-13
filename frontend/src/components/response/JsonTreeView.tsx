@@ -1,4 +1,5 @@
 import { memo, useState } from "react";
+import { copyToClipboard } from "@/utils/clipboard";
 import {
   Box,
   IconButton,
@@ -191,7 +192,7 @@ function JsonTreeView({
   rootName,
 }: JsonTreeViewProps) {
   const handleCopy = () => {
-    navigator.clipboard.writeText(JSON.stringify(data, null, 2));
+    copyToClipboard(JSON.stringify(data, null, 2));
   };
 
   return (

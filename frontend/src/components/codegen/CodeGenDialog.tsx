@@ -18,6 +18,7 @@ import Editor from "@monaco-editor/react";
 import { useTheme } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
 import { codegenApi } from "@/api/endpoints";
+import { copyToClipboard } from "@/utils/clipboard";
 
 interface CodeGenDialogProps {
   open: boolean;
@@ -94,7 +95,7 @@ export default function CodeGenDialog({
   }, [open, language, method, url, headers, body, bodyType, queryParams, authType, authConfig]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(code);
+    copyToClipboard(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

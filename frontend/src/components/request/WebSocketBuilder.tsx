@@ -33,6 +33,7 @@ import CodeGenDialog from "@/components/codegen/CodeGenDialog";
 import { useVariableGroups } from "@/hooks/useVariableGroups";
 import type { KeyValuePair, AuthType, OAuthConfig, WebSocketMessage, Environment, EnvironmentVariable } from "@/types";
 import { API_URL } from "@/api/client";
+import { copyToClipboard } from "@/utils/clipboard";
 
 interface WebSocketBuilderProps {
   url: string;
@@ -548,7 +549,7 @@ export default function WebSocketBuilder(props: WebSocketBuilderProps) {
                           {formatTime(msg.timestamp)}
                         </Typography>
                         <Tooltip title={t("codegen.copy")}>
-                          <IconButton size="small" onClick={() => navigator.clipboard.writeText(msg.data)} sx={{ p: 0.25 }}>
+                          <IconButton size="small" onClick={() => copyToClipboard(msg.data)} sx={{ p: 0.25 }}>
                             <ContentCopy sx={{ fontSize: 12 }} />
                           </IconButton>
                         </Tooltip>

@@ -34,6 +34,7 @@ import { useTranslation } from "react-i18next";
 import { alpha, useTheme } from "@mui/material/styles";
 import JsonTreeView from "@/components/response/JsonTreeView";
 import type { ProxyResponse, SentRequestSnapshot } from "@/types";
+import { copyToClipboard } from "@/utils/clipboard";
 
 function statusColor(code: number): "success" | "warning" | "error" | "info" {
   if (code < 300) return "success";
@@ -547,7 +548,7 @@ function ResponsePanel({ response, sentRequest, responseTimestamp, onClearRespon
           <Tooltip title={t("codegen.copy")}>
             <IconButton
               size="small"
-              onClick={() => navigator.clipboard.writeText(response.body)}
+              onClick={() => copyToClipboard(response.body)}
               sx={{
                 width: 28,
                 height: 28,

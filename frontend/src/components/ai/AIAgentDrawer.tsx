@@ -64,6 +64,7 @@ import type {
   OpenAIModel,
   AppSettings,
 } from "@/types";
+import { copyToClipboard } from "@/utils/clipboard";
 
 export const DRAWER_WIDTH = 420;
 
@@ -299,7 +300,7 @@ function CodeBlock({
   const [applyMenuAnchor, setApplyMenuAnchor] = useState<HTMLElement | null>(null);
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(code);
+    copyToClipboard(code);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [code]);

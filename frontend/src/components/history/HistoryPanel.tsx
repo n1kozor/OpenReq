@@ -17,6 +17,7 @@ import {
 import { Close, DeleteSweep, Refresh, ContentCopy, OpenInNew } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { historyApi, type HistoryEntry, type HistoryDetail } from "@/api/endpoints";
+import { copyToClipboard } from "@/utils/clipboard";
 
 const METHOD_COLORS: Record<string, string> = {
   GET: "#34d399",
@@ -67,7 +68,7 @@ export default function HistoryPanel({ open, onClose, onLoadRequest }: HistoryPa
 
   const handleCopyUrl = () => {
     if (contextMenu) {
-      navigator.clipboard.writeText(contextMenu.entry.url);
+      copyToClipboard(contextMenu.entry.url);
     }
     setContextMenu(null);
   };

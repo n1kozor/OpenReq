@@ -33,6 +33,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { sharesApi } from "@/api/endpoints";
 import type { ShareOut } from "@/types";
+import { copyToClipboard } from "@/utils/clipboard";
 
 interface ShareManageDialogProps {
   open: boolean;
@@ -130,7 +131,7 @@ export default function ShareManageDialog({
 
   const copyLink = (share: ShareOut) => {
     const url = `${window.location.origin}${share.share_url}`;
-    navigator.clipboard.writeText(url);
+    copyToClipboard(url);
     setCopiedId(share.id);
     setTimeout(() => setCopiedId(null), 2000);
   };

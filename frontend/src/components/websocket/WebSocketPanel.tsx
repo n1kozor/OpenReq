@@ -22,6 +22,7 @@ import {
 import { useTranslation } from "react-i18next";
 import type { WebSocketMessage } from "@/types";
 import { API_URL } from "@/api/client";
+import { copyToClipboard } from "@/utils/clipboard";
 
 interface WebSocketPanelProps {
   open?: boolean;
@@ -361,7 +362,7 @@ export default function WebSocketPanel(_props: WebSocketPanelProps) {
                     <IconButton
                       size="small"
                       onClick={() =>
-                        navigator.clipboard.writeText(msg.data)
+                        copyToClipboard(msg.data)
                       }
                       sx={{ p: 0.25 }}
                     >

@@ -15,6 +15,7 @@ import { Close, AutoFixHigh, ContentCopy, Done } from "@mui/icons-material";
 import Editor from "@monaco-editor/react";
 import { useTheme } from "@mui/material/styles";
 import { useTranslation } from "react-i18next";
+import { copyToClipboard } from "@/utils/clipboard";
 
 /** Try to detect the language of a string value */
 function detectLanguage(value: string): "json" | "xml" | "plaintext" {
@@ -104,7 +105,7 @@ export default function ValueEditorDialog({
   }, [draft, language]);
 
   const handleCopy = useCallback(() => {
-    navigator.clipboard.writeText(draft);
+    copyToClipboard(draft);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }, [draft]);
