@@ -1036,7 +1036,8 @@
     "serverDesc": "Requests are sent through the OpenReq server",
     "localDesc": "Requests are sent directly from your machine",
     "localNotAvailable": "Install Chrome extension or use the desktop app",
-    "collectionRunnerWarning": "Collection runs always execute through the server."
+    "collectionRunnerWarning": "Collection runs always execute through the server.",
+    "clickToToggle": "Click to toggle"
   },
   "share": {
     "title": "Share Docs",

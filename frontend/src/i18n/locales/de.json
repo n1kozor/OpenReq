@@ -1034,7 +1034,8 @@
     "serverDesc": "Anfragen werden über den OpenReq-Server gesendet",
     "localDesc": "Anfragen werden direkt von Ihrem Gerät gesendet",
     "localNotAvailable": "Chrome-Erweiterung installieren oder Desktop-App verwenden",
-    "collectionRunnerWarning": "Collection-Läufe werden immer über den Server ausgeführt."
+    "collectionRunnerWarning": "Collection-Läufe werden immer über den Server ausgeführt.",
+    "clickToToggle": "Klicken zum Umschalten"
   },
   "share": {
     "title": "Doku teilen",

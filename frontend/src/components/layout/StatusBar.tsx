@@ -43,7 +43,7 @@ export default function StatusBar({
   const { t, i18n } = useTranslation();
   const theme = useTheme();
   const isDark = mode === "dark";
-  const { proxyMode, localAvailable } = useProxyMode();
+  const { proxyMode, setProxyMode, localAvailable } = useProxyMode();
   const { learningMode } = useLearningMode();
 
   const segmentSx = {
@@ -97,8 +97,11 @@ export default function StatusBar({
       {/* Left side */}
       <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
         {/* Proxy mode */}
-        <Tooltip title={proxyMode === "local" ? t("proxyMode.localDesc") : t("proxyMode.serverDesc")}>
-          <Box sx={segmentSx}>
+        <Tooltip title={`${proxyMode === "local" ? t("proxyMode.localDesc") : t("proxyMode.serverDesc")} — ${t("proxyMode.clickToToggle")}`}>
+          <Box
+            sx={{ ...segmentSx, cursor: "pointer" }}
+            onClick={() => setProxyMode(proxyMode === "server" ? "local" : "server")}
+          >
             {proxyMode === "local" ? (
               <Lan sx={{ fontSize: 11, color: localAvailable ? theme.palette.success.main : theme.palette.error.main }} />
             ) : (
