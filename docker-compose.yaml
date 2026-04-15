@@ -1,9 +1,6 @@
 services:
   openreq:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: openreq
+    image: ghcr.io/felix-scholz/openreq:latest
     ports:
       - "${PORT:-8000}:8000"
     environment:
