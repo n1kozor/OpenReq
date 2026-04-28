@@ -2208,6 +2208,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       onOpenImport={() => setShowImport(true)}
       onOpenSDK={() => setShowSDK(true)}
       onOpenAIAgent={() => setShowAIAgent(true)}
+      onOpenEnvironmentManager={() => setShowEnvManager(true)}
       onOpenSettings={() => setView("settings")}
       onNewTab={() => handleNewTab()}
       onSave={() => {

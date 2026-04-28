@@ -27,6 +27,7 @@ import {
   Save,
   Add,
   Public,
+  Tune,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@mui/material/styles";
@@ -48,6 +49,7 @@ interface TopBarProps {
   onOpenImport: () => void;
   onOpenSDK: () => void;
   onOpenAIAgent: () => void;
+  onOpenEnvironmentManager: () => void;
   onOpenSettings: () => void;
   onNewTab: () => void;
   onSave: () => void;
@@ -78,6 +80,7 @@ export default function TopBar({
   onOpenImport,
   onOpenSDK,
   onOpenAIAgent,
+  onOpenEnvironmentManager,
   onOpenSettings,
   onNewTab,
   onSave,
@@ -187,6 +190,11 @@ export default function TopBar({
       <Tooltip title={t("nav.aiAgent")}>
         <IconButton size="small" onClick={onOpenAIAgent} sx={iconBtnSx(activeNavItem === "aiAgent")}>
           <SmartToy sx={{ fontSize: 15 }} />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title={t("menu.environmentManager")}>
+        <IconButton size="small" onClick={onOpenEnvironmentManager} sx={iconBtnSx()}>
+          <Tune sx={{ fontSize: 15 }} />
         </IconButton>
       </Tooltip>
       <Tooltip title={t("nav.settings")}>
