@@ -543,12 +543,19 @@ function ResponsePanel({ response, sentRequest, responseTimestamp, onClearRespon
           </Tooltip>
         )}
 
-        {/* Copy button (disabled for binary) */}
+        {/* Copy button (disabled for binary) — copies what's currently shown:
+            pretty/tree → formatted JSON, raw/preview → raw body. */}
         {!isBinary && (
           <Tooltip title={t("codegen.copy")}>
             <IconButton
               size="small"
-              onClick={() => copyToClipboard(response.body)}
+              onClick={() => {
+                const showFormatted = bodyView === "pretty" || bodyView === "tree";
+                const text = showFormatted
+                  ? (cleanMixed && mixedJson ? mixedJson.pretty : formattedBody)
+                  : response.body;
+                copyToClipboard(text);
+              }}
               sx={{
                 width: 28,
                 height: 28,
