@@ -3,7 +3,7 @@
  * Uses contextBridge to safely expose electronAPI.localProxy to the React app.
  * Communication: React → contextBridge → ipcRenderer.sendToHost → shell.js → main process
  */
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, clipboard } = require('electron');
 
 const pendingRequests = new Map();
 
@@ -36,6 +36,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }
       }, 120000);
     });
+  },
+  // Native clipboard bridge — `navigator.clipboard.writeText` and `execCommand("copy")`
+  // both fail inside an Electron <webview> without explicit permissions/user gesture,
+  // so the renderer falls back to this path when copy buttons don't react.
+  writeClipboard: (text) => {
+    try {
+      clipboard.writeText(String(text ?? ''));
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  readClipboard: () => {
+    try {
+      return clipboard.readText();
+    } catch {
+      return '';
+    }
   },
 });
 

@@ -26,6 +26,7 @@ import {
   Send,
   Save,
   Add,
+  Public,
 } from "@mui/icons-material";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "@mui/material/styles";
@@ -261,14 +262,20 @@ export default function TopBar({
           disableUnderline
           IconComponent={KeyboardArrowDown}
           renderValue={() => {
-            if (!currentEnv) return (
-              <Typography variant="caption" sx={{ fontSize: "0.72rem", opacity: 0.6 }}>
-                {t("environment.select")}
-              </Typography>
-            );
+            if (!currentEnv) {
+              return (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                  <Public sx={{ fontSize: 12, color: theme.palette.text.secondary }} />
+                  <Typography variant="caption" sx={{ fontSize: "0.72rem", opacity: 0.6 }}>
+                    {t("environment.select")}
+                  </Typography>
+                </Box>
+              );
+            }
             const dotColor = ENV_COLORS[currentEnv.env_type] ?? "#888";
             return (
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                <Public sx={{ fontSize: 12, color: dotColor }} />
                 <FiberManualRecord sx={{ fontSize: 7, color: dotColor }} />
                 <Typography variant="caption" sx={{ fontSize: "0.72rem", fontWeight: 500 }}>
                   {currentEnv.name}
