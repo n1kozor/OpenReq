@@ -418,7 +418,11 @@ def _persist_scope_changes(
                     ))
                     changed = True
 
-    # 3. Collection variables (JSON column on Collection)
+    # 3. Collection variables (JSON column on Collection).
+    # pm.collectionVariables.set() always writes to the collection level — even if the
+    # key originated from a folder. Folder vars take precedence in the merge order, so
+    # such writes will be shadowed on the next run. This mirrors Postman: folder-scoped
+    # values can only be edited from the folder's "Variables" tab, not from scripts.
     if script_result.collection_var_updates and collection_id:
         col = db.query(Collection).filter(Collection.id == collection_id).first()
         if col:
@@ -450,24 +454,41 @@ async def _run_prepare_phase(
     RequestSettings | None,  # request_settings
 ]:
     """Phase 1: Merge variables, run pre-scripts, resolve auth. Shared by prepare & execute."""
-    # ── 1. Merge variables: globals < collection < folders (root→leaf) < environment < extra ──
+    # ── 1. Merge variables.
+    #
+    # Precedence (later overrides earlier):
+    #   workspace globals < collection vars < folder chain (root→leaf) < environment < extra
+    #
+    # Two views are produced:
+    #   - merged_vars: flattened dict used for {{var}} substitution in URL/headers/body/auth.
+    #   - pm_kwargs:   per-scope dicts handed to pre/post scripts so pm.globals,
+    #                  pm.environment and pm.collectionVariables resolve correctly.
+    #
+    # Folder variables are part of the collection scope from a script's perspective —
+    # Postman treats folders as children of the collection, so pm.collectionVariables
+    # must see folder vars on top of plain collection vars (deeper folder wins).
     merged_vars: dict[str, str] = {}
     collection: Collection | None = None
 
     ws_globals = _load_workspace_globals(db, proxy_req.collection_id)
-    col_vars: dict[str, str] = {}
+    col_only_vars: dict[str, str] = {}
     env_vars: dict[str, str] = {}
 
     merged_vars.update(ws_globals)
     if proxy_req.collection_id:
         collection = db.query(Collection).filter(Collection.id == proxy_req.collection_id).first()
         if collection and collection.variables:
-            col_vars = {k: str(v) if v is not None else "" for k, v in collection.variables.items()}
-            merged_vars.update(col_vars)
+            col_only_vars = {k: str(v) if v is not None else "" for k, v in collection.variables.items()}
+            merged_vars.update(col_only_vars)
     folder_chain = _resolve_folder_chain(db, proxy_req.collection_item_id)
+    folder_vars: dict[str, str] = {}
     for folder in folder_chain:
         if folder.variables:
-            merged_vars.update({k: str(v) if v is not None else "" for k, v in folder.variables.items()})
+            chunk = {k: str(v) if v is not None else "" for k, v in folder.variables.items()}
+            folder_vars.update(chunk)
+            merged_vars.update(chunk)
+    # Combined collection scope = collection-level vars + folder chain (folder wins).
+    collection_scope_vars = {**col_only_vars, **folder_vars}
     if proxy_req.environment_id:
         env_vars = _load_environment_variables(db, proxy_req.environment_id)
         merged_vars.update(env_vars)
@@ -477,7 +498,11 @@ async def _run_prepare_phase(
     pm_kwargs = dict(
         globals_vars=dict(ws_globals),
         environment_vars=dict(env_vars),
-        collection_vars=dict(col_vars),
+        # Folder vars exposed via pm.collectionVariables for read parity with merged_vars.
+        # pm.collectionVariables.set() always persists to Collection.variables (see
+        # _persist_scope_changes); a key shadowed by a folder will keep being shadowed
+        # on the next run — this matches Postman's collection/folder scoping behavior.
+        collection_vars=dict(collection_scope_vars),
         request_name=proxy_req.request_name,
         iteration=proxy_req.iteration,
         iteration_count=proxy_req.iteration_count,

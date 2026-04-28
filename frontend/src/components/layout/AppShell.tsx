@@ -370,13 +370,61 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
 
-  // Active tab's collection variables for variable highlighting
+  // Active tab's collection-scope variables for variable highlighting & autocomplete.
+  //
+  // Mirrors the backend's `collection_scope_vars` (proxy.py): start with the
+  // collection-level vars, then layer the folder chain root → leaf so a deeper
+  // folder overrides a shallower one — same precedence the backend uses when
+  // resolving {{var}} placeholders, so what the user sees in the editor matches
+  // what gets sent.
   const activeCollectionVars = useMemo(() => {
-    // For folder tabs, use parentCollectionId to find the actual collection
     const colId = activeTab?.tabType === "folder" ? activeTab.parentCollectionId : activeTab?.collectionId;
     if (!colId) return {};
-    return collections.find((c) => c.id === colId)?.variables ?? {};
-  }, [activeTab?.collectionId, activeTab?.parentCollectionId, activeTab?.tabType, collections]);
+    const merged: Record<string, string> = {};
+
+    const collection = collections.find((c) => c.id === colId);
+    if (collection?.variables) {
+      for (const [k, v] of Object.entries(collection.variables)) {
+        merged[k] = v;
+      }
+    }
+
+    // Walk the parent chain (leaf → root) from the active tab's CollectionItem,
+    // then apply variables in root → leaf order so the deepest folder wins.
+    const items = collectionItems[colId];
+    const startId = activeTab?.collectionItemId;
+    if (items && startId) {
+      const byId = new Map(items.map((it) => [it.id, it]));
+      const chain: typeof items = [];
+      const visited = new Set<string>();
+      let cursor: string | null | undefined = startId;
+      while (cursor && !visited.has(cursor)) {
+        visited.add(cursor);
+        const item = byId.get(cursor);
+        if (!item) break;
+        // Folder tabs: include the folder itself; request tabs: only ancestors.
+        const isLeafRequestItem = !item.is_folder;
+        if (!isLeafRequestItem) chain.push(item);
+        cursor = item.parent_id;
+      }
+      for (const folder of chain.reverse()) {
+        if (folder.variables) {
+          for (const [k, v] of Object.entries(folder.variables)) {
+            if (v != null) merged[k] = v;
+          }
+        }
+      }
+    }
+
+    return merged;
+  }, [
+    activeTab?.collectionId,
+    activeTab?.parentCollectionId,
+    activeTab?.tabType,
+    activeTab?.collectionItemId,
+    collections,
+    collectionItems,
+  ]);
 
   // Variable groups for ScriptEditor (RequestBuilder computes its own)
   const activeEnvIdResolved = activeTab?.envOverrideId ?? selectedEnvId;
@@ -918,8 +966,12 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
       })
     );
 
+    // Build the display-side {{var}} resolver in the same precedence order as
+    // the backend's merged_vars (proxy.py): globals < collection (incl. folders)
+    // < environment. The Map.set() calls below intentionally overwrite earlier
+    // entries — later writes win — so the rendered preview matches what the
+    // backend will actually substitute when the request is sent.
     const displayVars = new Map<string, { value: string }>();
-    // Globals -> Collection -> Environment (priority)
     for (const [key, value] of Object.entries(workspaceGlobals)) {
       displayVars.set(key, { value });
     }

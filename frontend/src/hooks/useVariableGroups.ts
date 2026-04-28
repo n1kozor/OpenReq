@@ -24,10 +24,13 @@ export function useVariableGroups(
   globalsVariables?: Record<string, string> | null,
 ): UseVariableGroupsResult {
   return useMemo(() => {
+    // Precedence (later writes win in the resolved Map):
+    //   globals < collection (incl. folder chain, merged upstream) < environment
+    // Matches the backend's merged_vars order in proxy.py.
     const groups: VariableGroup[] = [];
     const resolved = new Map<string, VariableInfo>();
 
-    // Globals first (lowest priority — everything overrides)
+    // 1) Globals — lowest precedence; written first so collection/env can overwrite.
     const globalsItems: VariableInfo[] = [];
     if (globalsVariables) {
       for (const [key, value] of Object.entries(globalsVariables)) {
@@ -40,7 +43,8 @@ export function useVariableGroups(
       groups.push({ source: "globals", label: "variable.globals", items: globalsItems });
     }
 
-    // Collection variables (override globals)
+    // 2) Collection scope — collection vars + folder chain (folder wins) merged
+    //    by the caller; overwrites globals.
     const colItems: VariableInfo[] = [];
     for (const [key, value] of Object.entries(collectionVariables)) {
       const info: VariableInfo = { key, value, source: "collection" };
@@ -51,7 +55,7 @@ export function useVariableGroups(
       groups.push({ source: "collection", label: "variable.collection", items: colItems });
     }
 
-    // Environment variables (highest priority — override everything)
+    // 3) Environment — highest precedence; overwrites globals and collection.
     const envItems: VariableInfo[] = [];
     for (const v of envVariables) {
       const info: VariableInfo = { key: v.key, value: v.is_secret ? "******" : v.value, source: "environment" };

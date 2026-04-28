@@ -91,8 +91,15 @@ class _PmVarScope:
 class _PmCascadedVars:
     """pm.variables — cascaded lookup: local → collection → environment → globals.
 
-    Postman's `pm.variables.get()` searches all scopes in priority order.
-    `pm.variables.set()` only writes to the local (request-scoped) store.
+    Postman's `pm.variables.get()` searches all scopes in priority order; the
+    first scope to contain the key wins. `pm.variables.set()` writes only to
+    the local (request-scoped) store.
+
+    Note: in OpenReq the local store is seeded with the fully merged
+    `merged_vars` from `_run_prepare_phase` (globals < collection < folders <
+    environment < extra), so pm.variables.get() returns the same value the
+    placeholder substitution would — the cascade only matters once a script
+    starts mutating individual scopes.
     """
 
     def __init__(

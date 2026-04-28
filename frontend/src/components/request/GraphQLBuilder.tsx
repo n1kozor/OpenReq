@@ -557,7 +557,7 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
         </Box>
       </Box>
 
-      {/* Floating send */}
+      {/* Floating send — visually identical to the inline Send button, only positioned. */}
       {showFloatingSend && (
         <Portal>
           {props.loading ? (
@@ -565,12 +565,14 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
               variant="contained" onClick={props.onStop}
               startIcon={<Stop sx={{ fontSize: 16 }} />}
               sx={{
-                position: "fixed", right: 24, bottom: 24, zIndex: theme.zIndex.modal + 1, borderRadius: 999,
-                px: 2.25, py: 1, fontWeight: 700, fontSize: "0.9rem",
+                position: "fixed", right: 24, bottom: 24, zIndex: theme.zIndex.modal + 1,
+                minWidth: 100, whiteSpace: "nowrap", height: 36, borderRadius: 2, fontWeight: 600, fontSize: "0.82rem",
                 background: `linear-gradient(135deg, #ef4444 0%, ${alpha("#ef4444", 0.7)} 100%)`,
                 color: "#fff",
-                boxShadow: `0 12px 30px ${alpha("#ef4444", 0.35)}`,
-                "&:hover": { background: `linear-gradient(135deg, #ef4444 0%, ${alpha("#ef4444", 0.85)} 100%)`, boxShadow: `0 14px 36px ${alpha("#ef4444", 0.45)}` },
+                "&:hover": {
+                  background: `linear-gradient(135deg, #ef4444 0%, ${alpha("#ef4444", 0.85)} 100%)`,
+                  boxShadow: `0 4px 16px ${alpha("#ef4444", 0.35)}`,
+                },
               }}
             >
               {t("request.stop")}
@@ -580,12 +582,14 @@ export default function GraphQLBuilder(props: GraphQLBuilderProps) {
               variant="contained" onClick={props.onSend} disabled={!props.url}
               startIcon={<Send sx={{ fontSize: 16 }} />}
               sx={{
-                position: "fixed", right: 24, bottom: 24, zIndex: theme.zIndex.modal + 1, borderRadius: 999,
-                px: 2.25, py: 1, fontWeight: 700, fontSize: "0.9rem",
+                position: "fixed", right: 24, bottom: 24, zIndex: theme.zIndex.modal + 1,
+                minWidth: 100, whiteSpace: "nowrap", height: 36, borderRadius: 2, fontWeight: 600, fontSize: "0.82rem",
                 background: `linear-gradient(135deg, ${GQL_COLOR} 0%, ${alpha(GQL_COLOR, 0.7)} 100%)`,
                 color: isDark ? "#0b0e14" : "#fff",
-                boxShadow: `0 12px 30px ${alpha(GQL_COLOR, 0.35)}`,
-                "&:hover": { background: `linear-gradient(135deg, ${GQL_COLOR} 0%, ${alpha(GQL_COLOR, 0.85)} 100%)`, boxShadow: `0 14px 36px ${alpha(GQL_COLOR, 0.45)}` },
+                "&:hover": {
+                  background: `linear-gradient(135deg, ${GQL_COLOR} 0%, ${alpha(GQL_COLOR, 0.85)} 100%)`,
+                  boxShadow: `0 4px 16px ${alpha(GQL_COLOR, 0.35)}`,
+                },
               }}
             >
               {t("graphql.send")}
