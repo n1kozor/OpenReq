@@ -295,6 +295,16 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
   const abortControllerRef = useRef<AbortController | null>(null);
   const [snack, setSnack] = useState<{ msg: string; severity: "success" | "error" } | null>(null);
 
+  // If the user toggles between Server/Local while a request is in flight,
+  // the prepare token / channel selected for the in-flight request no longer
+  // matches the new mode — abort it so we don't /complete with a stale context.
+  useEffect(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, [proxyMode]);
+
   // Data state
   const [collections, setCollections] = useState<Collection[]>([]);
   const [collectionItems, setCollectionItems] = useState<Record<string, CollectionItem[]>>({});
@@ -1041,7 +1051,10 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
         if (prepared.pre_request_result) {
           updateTab(activeTabId, { preRequestResult: prepared.pre_request_result });
         }
-        // Execute request locally — auto-select channel (desktop > extension)
+        // Execute request locally — auto-select channel (desktop > extension).
+        // Pass the AbortSignal so the Stop button cancels the local-side wait
+        // (the desktop IPC call cannot be interrupted mid-flight, but its result
+        // is discarded if abort fires first).
         const localExecute = localChannel === "desktop" ? executeViaDesktop : executeViaExtension;
         const localResult = await localExecute({
           url: prepared.url,
@@ -1051,7 +1064,7 @@ export default function AppShell({ mode, onToggleTheme, onLogout, user }: AppShe
           body_type: prepared.body_type,
           form_data: prepared.form_data as any,
           query_params: prepared.query_params,
-        });
+        }, signal);
         // Complete on server (post-scripts, history, pm.* persist)
         const { data } = await proxyApi.complete({
           ...localResult,

@@ -43,8 +43,16 @@ export default function StatusBar({
   const { t, i18n } = useTranslation();
   const theme = useTheme();
   const isDark = mode === "dark";
-  const { proxyMode, setProxyMode, localAvailable } = useProxyMode();
+  const { proxyMode, setProxyMode, localAvailable, detectionComplete } = useProxyMode();
   const { learningMode } = useLearningMode();
+
+  // Toggling INTO local mode is only valid when a local channel is detected.
+  // Toggling FROM local back to server is always allowed.
+  const canToggleToLocal = localAvailable;
+  const canToggle = proxyMode === "local" || canToggleToLocal;
+  const toggleTooltip = !canToggle && detectionComplete
+    ? t("proxyMode.localNotAvailable")
+    : `${proxyMode === "local" ? t("proxyMode.localDesc") : t("proxyMode.serverDesc")} — ${t("proxyMode.clickToToggle")}`;
 
   const segmentSx = {
     display: "flex",
@@ -97,10 +105,17 @@ export default function StatusBar({
       {/* Left side */}
       <Box sx={{ display: "flex", alignItems: "center", height: "100%" }}>
         {/* Proxy mode */}
-        <Tooltip title={`${proxyMode === "local" ? t("proxyMode.localDesc") : t("proxyMode.serverDesc")} — ${t("proxyMode.clickToToggle")}`}>
+        <Tooltip title={toggleTooltip}>
           <Box
-            sx={{ ...segmentSx, cursor: "pointer" }}
-            onClick={() => setProxyMode(proxyMode === "server" ? "local" : "server")}
+            sx={{
+              ...segmentSx,
+              cursor: canToggle ? "pointer" : "not-allowed",
+              opacity: canToggle ? 1 : 0.6,
+            }}
+            onClick={() => {
+              if (!canToggle) return;
+              setProxyMode(proxyMode === "server" ? "local" : "server");
+            }}
           >
             {proxyMode === "local" ? (
               <Lan sx={{ fontSize: 11, color: localAvailable ? theme.palette.success.main : theme.palette.error.main }} />

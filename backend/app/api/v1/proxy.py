@@ -10,6 +10,7 @@ from app.models.history import RequestHistory
 from app.models.user import User
 from app.schemas.proxy import LocalProxyResponse, PreparedRequest, ProxyRequest, ProxyResponse
 from app.services.collection_runner import run_collection_stream
+from app.services.prepare_token import PrepareTokenExpired, PrepareTokenInvalid
 from app.services.proxy import execute_proxy_request, prepare_proxy_request, complete_proxy_request
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,12 @@ async def complete_request(
     )
     try:
         return await complete_proxy_request(db, payload, current_user.id)
+    except PrepareTokenExpired as exc:
+        # 410 Gone communicates "the resource that backed this request is gone" — the
+        # client should resubmit the original request rather than retrying /complete.
+        raise HTTPException(status_code=410, detail=str(exc))
+    except PrepareTokenInvalid as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

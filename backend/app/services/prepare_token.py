@@ -16,7 +16,19 @@ import zlib
 from app.config import settings
 
 _SECRET = settings.JWT_SECRET_KEY.encode()
-_TTL_SECONDS = 300  # 5 minutes
+# TTL covers the full prepare → local execute → complete round-trip. The previous
+# 5 minute window expired during long pre-request scripts or slow local responses,
+# producing confusing "Token expired" errors at /complete. 30 minutes is generous
+# enough to cover legitimate long requests while still bounding token replay risk.
+_TTL_SECONDS = 1800
+
+
+class PrepareTokenExpired(ValueError):
+    """Raised when the prepare token's TTL has elapsed."""
+
+
+class PrepareTokenInvalid(ValueError):
+    """Raised when the prepare token is malformed or signature mismatch."""
 
 
 def encode_prepare_token(context: dict) -> str:
@@ -31,14 +43,23 @@ def encode_prepare_token(context: dict) -> str:
 def decode_prepare_token(token: str) -> dict:
     parts = token.rsplit(".", 1)
     if len(parts) != 2:
-        raise ValueError("Invalid token format")
+        raise PrepareTokenInvalid("Invalid prepare token format")
     b64, sig = parts
-    compressed = base64.urlsafe_b64decode(b64)
+    try:
+        compressed = base64.urlsafe_b64decode(b64)
+    except (ValueError, TypeError) as exc:
+        raise PrepareTokenInvalid("Invalid prepare token encoding") from exc
     expected = hmac.new(_SECRET, compressed, hashlib.sha256).hexdigest()
     if not hmac.compare_digest(sig, expected):
-        raise ValueError("Token signature mismatch")
-    payload = zlib.decompress(compressed)
-    ctx = json.loads(payload)
-    if time.time() - ctx.get("_ts", 0) > _TTL_SECONDS:
-        raise ValueError("Token expired")
+        raise PrepareTokenInvalid("Prepare token signature mismatch")
+    try:
+        payload = zlib.decompress(compressed)
+        ctx = json.loads(payload)
+    except (zlib.error, ValueError) as exc:
+        raise PrepareTokenInvalid("Prepare token payload corrupt") from exc
+    age = time.time() - ctx.get("_ts", 0)
+    if age > _TTL_SECONDS:
+        raise PrepareTokenExpired(
+            f"Prepare token expired after {int(age)}s (TTL {_TTL_SECONDS}s) — please resend the request"
+        )
     return ctx
