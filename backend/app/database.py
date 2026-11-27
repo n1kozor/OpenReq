@@ -4,6 +4,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.engine import make_url
 
 from app.config import settings
 
@@ -13,9 +14,15 @@ logger = logging.getLogger(__name__)
 db_path = settings.DATABASE_URL.replace("sqlite:///", "")
 Path(db_path).parent.mkdir(parents=True, exist_ok=True)
 
+database_url = make_url(settings.DATABASE_URL)
+
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False},  # SQLite-specific
+    connect_args=(
+        {"check_same_thread": False}
+        if database_url.get_backend_name() == "sqlite"
+        else {}
+    ),
     echo=settings.ENVIRONMENT == "development",
 )
 
